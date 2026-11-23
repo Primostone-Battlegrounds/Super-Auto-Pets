@@ -42,7 +42,10 @@
   },
   "work": {
     "actors": {
-      "@FurinyaDev": "FurinyaDev"
+      "@FurinyaDev": "FurinyaDev",
+      "@codex-native": "FurinyaDev",
+      "@rules-core": "FurinyaDev",
+      "@run-flow": "FurinyaDev"
     },
     "directories": [
       "backlog/tasks",
