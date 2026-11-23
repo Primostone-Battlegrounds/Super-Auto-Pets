@@ -67,11 +67,17 @@ const signals = {
   ],
 };
 const variables = ['AP_readyRound', 'AP_continueRound'];
+const buttons = [
+  { name: 'AP_NativeRefresh', placeholder: '1073741901', position: [-285, -185], key: 1 },
+  { name: 'AP_NativeReady1', placeholder: '1073741902', position: [-95, -185], key: 2 },
+  { name: 'AP_NativeNext1', placeholder: '1073741903', position: [95, -185], key: 3 },
+  { name: 'AP_NativeReady2', placeholder: '1073741904', position: [285, -185], key: 4 },
+];
 const ui = {
   name: 'AP_DuelProbe',
   script,
   showCursor: true,
-  blockCursor: true,
+  blockCursor: false,
   controls: [
     { name: 'Background', kind: 'image', position: [0, 0], size: [640, 250], image: 100001, colour: '#193931' },
     {
@@ -90,6 +96,10 @@ const ui = {
         { name, kind: 'cursorArea', position, size },
       ];
     }),
+    ...['1 刷新', '2 第一轮准备', '3 确认下一轮', '4 第二轮准备'].map((content, index) => ({
+      name: `NativeLegend${index + 1}`, kind: 'text', position: [buttons[index].position[0], -238], size: [180, 34],
+      text: { content, fontSize: 22, colour: '#fff3d7', align: 'centre', valign: 'middle' },
+    })),
   ],
 };
 
@@ -107,10 +117,26 @@ try {
   for (const [name, parameters] of Object.entries(signals)) {
     await stage('scene_add_signal', { name, parameters: parameters.map(([name, type]) => ({ name, type })) });
   }
+  const registeredButtons = [];
+  for (const { name, position, key } of buttons) {
+    const button = await stage('scene_add_button', { name, position, key, size: [72, 72] });
+    assert.equal(button.controlId, button.controlGroupIndex);
+    registeredButtons.push({ name, key, id: button.controlGroupIndex });
+  }
+  assert.equal(new Set(registeredButtons.map(({ id }) => id)).size, buttons.length);
   const graph = await stage('scene_add_graph', { name: 'AP_DuelProbe', attachTo: 'stage' });
+  const buttonGraph = await stage('scene_add_graph', { name: 'AP_DuelButtons', attachToPrefab: 'player' });
   const graphSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
     .replace('id: 1073741825,', `id: ${graph.graphId},`);
-  const compiled = await stage('write_graphs', { graphs: [{ graphId: graph.graphId, code: graphSource }] });
+  let buttonSource = fs.readFileSync(new URL('../../platform/m2_probe_buttons.ts', import.meta.url), 'utf8')
+    .replace('id: 1073741826,', `id: ${buttonGraph.graphId},`);
+  for (const [index, { placeholder }] of buttons.entries()) {
+    buttonSource = buttonSource.replace(`${placeholder}n`, `${registeredButtons[index].id}n`);
+  }
+  const compiled = await stage('write_graphs', { graphs: [
+    { graphId: graph.graphId, code: graphSource },
+    { graphId: buttonGraph.graphId, code: buttonSource },
+  ] });
   assert.equal(compiled.failed, undefined, JSON.stringify(compiled));
   await stage('scene_set_client_script', { name: script, file: `${script}.lua`, source });
   await stage('scene_add_client_ui', { ...ui, outputName: 'm2-duel-probe' });
@@ -123,7 +149,26 @@ try {
   }
   const inspected = await call('inspect_map', { mapPath });
   const readGraph = inspected.graphs.find(entry => entry.id === graph.graphId || entry.graphId === graph.graphId);
+  const readButtonGraph = inspected.graphs.find(entry => entry.id === buttonGraph.graphId || entry.graphId === buttonGraph.graphId);
   assert.ok(readGraph?.nodeCount > 0);
+  assert.ok(readButtonGraph?.nodeCount > 0);
+  assert.ok(readGraph.signalReferences.some(ref => ref.name === 'AP_DuelRequest' && ref.role === 'monitor'));
+  assert.ok(readButtonGraph.signalReferences.some(ref => ref.name === 'AP_DuelRequest' && ref.role === 'send'));
+  const [playerComponents, stageComponents, interfaceLayout] = await Promise.all([
+    call('scene_list_components', { mapPath, prefab: 'player' }),
+    call('scene_list_components', { mapPath, entity: 'stage' }),
+    call('scene_list_interface', { mapPath }),
+  ]);
+  const playerTemplate = playerComponents.found.find(component => component.where === 'prefab');
+  assert.ok(playerTemplate?.graphs.includes(buttonGraph.graphId));
+  assert.ok(!playerTemplate.graphs.includes(graph.graphId));
+  const stageEntity = stageComponents.found.find(component => component.where === 'placed');
+  assert.ok(stageEntity?.graphs.includes(graph.graphId));
+  assert.ok(!stageEntity.graphs.includes(buttonGraph.graphId));
+  const layoutControls = interfaceLayout.layouts.flatMap(layout => layout.controls);
+  for (const { name, id } of registeredButtons) {
+    assert.deepEqual(layoutControls.filter(control => control.name === name), [{ id, name, kind: 'button' }]);
+  }
   const scripts = await call('scene_list_client_scripts', { mapPath, includeSource: true });
   const readSource = scripts.scripts.find(entry => entry.name === script)?.source;
   assert.equal(readSource, source);
@@ -136,7 +181,7 @@ try {
   assert.ok(readUi.interface.controls.every(control => control.active !== false && control.visible !== false));
   const checked = await call('scene_check_client', { mapPath, scripts: [script] });
   assert.deepEqual(checked.problems, []);
-  const graphSimulation = verifyGraph(graphSource, toolRequire('typescript'));
+  const graphSimulation = verifyGraph(graphSource, buttonSource, registeredButtons, toolRequire('typescript'));
   const extracted = path.join(workspace, `${script}.lua`);
   fs.writeFileSync(extracted, readSource);
   const clientSimulation = execFileSync(lua, [
@@ -153,8 +198,10 @@ try {
   fs.copyFileSync(new URL('../../platform/M2.md', import.meta.url), path.join(candidate, 'README.md'));
   fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(candidate, 'MCP-FIXTURE-LICENSE.txt'));
   fs.writeFileSync(path.join(candidate, 'evidence.json'), JSON.stringify({
-    revision, fixtureHash, players, graph: readGraph, signals: registered.parameters,
-    clientScriptSha256: sha256(readSource), graphSourceSha256: sha256(graphSource),
+    revision, fixtureHash, players, graph: readGraph, buttonGraph: readButtonGraph,
+    buttons: registeredButtons, signals: registered.parameters,
+    attachments: { stageGraph: graph.graphId, playerPrefab: playerTemplate.prefabId, playerGraph: buttonGraph.graphId },
+    clientScriptSha256: sha256(readSource), graphSourceSha256: sha256(graphSource), buttonSourceSha256: sha256(buttonSource),
     clientDiagnostics: checked.problems, graphSimulation, clientSimulation: clientSimulation.trimEnd().split('\n'),
     luaVersion, sha256: hash, officialTwoDeviceTest: 'pending',
   }, null, 2) + '\n');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 
-export function verifyGraph(graphSource, ts) {
+export function verifyGraph(graphSource, buttonSource, buttons, ts) {
   const players = ['A'];
   const playerState = { A: {}, B: {} };
   const logs = [];
@@ -31,10 +31,13 @@ export function verifyGraph(graphSource, ts) {
       },
     },
   };
-  const transpiled = ts.transpileModule(graphSource, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  vm.runInNewContext(transpiled, { exports: {}, require: () => runtime });
+  function load(source, graphRuntime) {
+    const transpiled = ts.transpileModule(source, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText;
+    vm.runInNewContext(transpiled, { exports: {}, require: () => graphRuntime });
+  }
+  load(graphSource, runtime);
   const request = (source, action, round) => {
     updates = [];
     handler({ signalSourceEntity: source, params: { action, round } }, flow);
@@ -77,5 +80,60 @@ export function verifyGraph(graphSource, ts) {
     'AUTO_PETS_M2 settled', '1',
     'AUTO_PETS_M2 settled', '2',
   ]);
-  return '两名玩家分别准备、重复请求、过期轮次、两轮各结算一次';
+
+  players.splice(1);
+  playerState.A = {};
+  playerState.B = {};
+  logs.length = 0;
+  load(graphSource, runtime);
+  const nativeLogs = [];
+  const playerIds = { A: 1n, B: 2n };
+  let onPress;
+  load(buttonSource, {
+    defineSignal: name => name,
+    g: { server() { return { on(event, handler) {
+      assert.equal(event, 'whenUiControlGroupIsTriggered');
+      onPress = handler;
+    } }; } },
+  });
+  function press(source, index) {
+    let messages = [];
+    onPress({ eventSourceGuid: source, uiControlGroupIndex: index }, {
+      getPlayerIdByPlayerGuid: guid => playerIds[guid],
+      dataTypeConversion: value => String(value),
+      printString: message => nativeLogs.push(message),
+      sendSignal: (signal, action, round) => {
+        assert.equal(signal, 'AP_DuelRequest');
+        messages = request(source, action, round);
+      },
+    });
+    return messages;
+  }
+  const [refresh, readyFirstRound, continueFirstRound, readySecondRound] = buttons.map(({ id }) => BigInt(id));
+  assert.deepEqual(press('A', 0n), []);
+  assert.deepEqual(nativeLogs, []);
+  assert.deepEqual(press('A', refresh), [view('A', 1n, 1n, 1n, 0n, false, false, 0n, 1n)]);
+  players.push('B');
+  press('A', readySecondRound);
+  assert.equal(playerState.A.AP_readyRound, undefined);
+  press('A', readyFirstRound);
+  press('A', readyFirstRound);
+  assert.deepEqual(press('B', readyFirstRound), [
+    view('A', 2n, 1n, 1n, 1n, true, false, 1n, 5n),
+    view('B', 2n, 2n, 1n, 1n, true, false, 1n, 5n),
+  ]);
+  press('B', continueFirstRound);
+  press('B', continueFirstRound);
+  press('A', continueFirstRound);
+  press('A', readyFirstRound);
+  assert.equal(playerState.A.AP_readyRound, 1n);
+  press('B', readySecondRound);
+  press('A', readySecondRound);
+  press('A', readySecondRound);
+  assert.equal(variables.round, 2n);
+  assert.equal(variables.phase, 2n);
+  assert.equal(variables.settlements, 2n);
+  assert.deepEqual(logs, ['AUTO_PETS_M2 settled', '1', 'AUTO_PETS_M2 settled', '2']);
+  assert.ok(nativeLogs.some((line, i) => line === 'AUTO_PETS_M2 native_input' && nativeLogs[i + 1] === '2'));
+  return 'Lua 信号与原生按钮分别模拟双人准备、重复和过期请求、两轮各结算一次';
 }
