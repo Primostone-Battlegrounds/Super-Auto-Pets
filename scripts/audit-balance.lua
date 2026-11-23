@@ -289,16 +289,28 @@ local function random_purchases(store, random)
     end
 end
 
-local function audit_against_random(sample_size)
+local reverse_outcome = {win = "loss", loss = "win", draw = "draw"}
+
+local function count_both_sides(outcomes, player, opponent, seed)
+    local first = battle.resolve(player, opponent, seed)
+    local second = battle.resolve(opponent, player, seed)
+    assert(first.status == "resolved" and second.status == "resolved")
+    outcomes[first.outcome] = outcomes[first.outcome] + 1
+    local mirrored = reverse_outcome[second.outcome]
+    outcomes[mirrored] = outcomes[mirrored] + 1
+    return first
+end
+
+local function audit_against_random(sample_size, difficulty)
     local rounds = 12
-    local reverse_outcome = {win = "loss", loss = "win", draw = "draw"}
     local compositions = {}
+    if difficulty then print(difficulty .. " versus random purchases") end
     print(string.format("Paired shop seeds 1–%d; %d rounds; both seat orders", sample_size, rounds))
     for _, style in ipairs({"guardian", "striker", "swarm"}) do
         local outcomes = {win = 0, loss = 0, draw = 0}
         local style_compositions = {}
         for seed = 1, sample_size do
-            local pool = bot.new_pool(seed, style)
+            local pool = bot.new_pool(seed, style, difficulty)
             while not bot.advance_to_round(pool, 1, 32) do end
             local trace = assert(bot.trace(pool))
             local baseline = shop.new(trace.sessions[trace.selected].shop_seed)
@@ -309,13 +321,7 @@ local function audit_against_random(sample_size)
                 local strategic = assert(bot.snapshot(pool)).team
                 random_purchases(baseline, choice_random)
                 local random_team = assert(baseline:finish_turn())
-                local fight_seed = battle_random:next()
-                local first = battle.resolve(strategic, random_team, fight_seed)
-                local second = battle.resolve(random_team, strategic, fight_seed)
-                assert(first.status == "resolved" and second.status == "resolved")
-                outcomes[first.outcome] = outcomes[first.outcome] + 1
-                local mirrored = reverse_outcome[second.outcome]
-                outcomes[mirrored] = outcomes[mirrored] + 1
+                local first = count_both_sides(outcomes, strategic, random_team, battle_random:next())
                 assert(baseline:record_battle(first, "enemy"))
                 assert(baseline:advance_round())
                 if round == rounds then
@@ -336,6 +342,28 @@ local function audit_against_random(sample_size)
     for _, count in pairs(compositions) do top_count = math.max(top_count, count) end
     print(string.format("Final compositions across styles: %d, most common %d/%d (%.1f%%)",
         size(compositions), top_count, 3 * sample_size, 100 * top_count / (3 * sample_size)))
+end
+
+local function audit_difficulties(sample_size)
+    local rounds = 12
+    print(string.format("Standard versus beginner; paired shop seeds 1–%d; %d rounds; both seat orders",
+        sample_size, rounds))
+    for _, style in ipairs({"guardian", "striker", "swarm"}) do
+        local outcomes = {win = 0, loss = 0, draw = 0}
+        for seed = 1, sample_size do
+            local standard = bot.new_pool(seed, style, "standard")
+            local beginner = bot.new_pool(seed, style, "beginner")
+            local battle_random = rng.new(seed ~ 0x424154544c45) -- BATTLE
+            for round = 1, rounds do
+                while not bot.advance_to_round(standard, round, 32) do end
+                while not bot.advance_to_round(beginner, round, 32) do end
+                count_both_sides(outcomes, bot.snapshot(standard).team, bot.snapshot(beginner).team, battle_random:next())
+            end
+        end
+        print(string.format("%-8s %d wins / %d draws / %d losses, %.1f%% standard points",
+            style, outcomes.win, outcomes.draw, outcomes.loss,
+            100 * (outcomes.win + outcomes.draw / 2) / (2 * sample_size * rounds)))
+    end
 end
 
 local function audit_pool(sample_size)
@@ -397,6 +425,14 @@ if #arg > 0 then
         audit_against_random(seed or 64)
         return
     end
+    if arg[1] == "versus-random" and #arg == 3 and seed and seed > 0 and arg[3] == "beginner" then
+        audit_against_random(seed, arg[3])
+        return
+    end
+    if arg[1] == "difficulty" and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
+        audit_difficulties(seed or 64)
+        return
+    end
     if arg[1] == "trace" and seed and round and round >= 1 and (#arg == 3 or #arg == 4) then
         print(json(prepare_pool(seed, round, arg[4])))
         return
@@ -409,7 +445,8 @@ if #arg > 0 then
     end
     io.stderr:write("Usage  lua scripts/audit-balance.lua [spread|funded-spread|carry|merge|role INTEGER_SEED]\n",
         "       lua scripts/audit-balance.lua trace INTEGER_SEED ROUND [guardian|striker|swarm]\n",
-        "       lua scripts/audit-balance.lua versus-random [SEED_COUNT]\n")
+        "       lua scripts/audit-balance.lua versus-random [SEED_COUNT [beginner]]\n",
+        "       lua scripts/audit-balance.lua difficulty [SEED_COUNT]\n")
     os.exit(1)
 end
 
