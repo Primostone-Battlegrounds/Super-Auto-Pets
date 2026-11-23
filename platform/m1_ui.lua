@@ -26,6 +26,7 @@ local listeners, controls, portraits = {}, {}, {}
 local playing, elapsed = false, 0
 local replay_complete = false
 local preparing_layout
+local lunging
 local accents = {win = 0x286452, loss = 0x984434, draw = 0x89591e}
 local drop_labels = {buy = "购买", combine = "购买并合并", feed = "喂食", move = "换位", merge = "合并"}
 local effects = {
@@ -90,6 +91,7 @@ local function card(path, title, detail, selected, id, face, rim, mirrored)
     control(path .. "/Face").imageColor = colour(face)
     control(path .. "/Rim").imageColor = colour(rim)
     text(path .. "/Name", title)
+    show(path .. "/StatsPaper", detail ~= "")
     text(path .. "/Detail", detail)
     portrait(path, id, mirrored)
     if selected ~= nil then show(path .. "/Selected", selected) end
@@ -105,9 +107,11 @@ local function team_card(path, unit, index, selected, effect)
     show(path .. "/HealthTrack", unit ~= nil and not preparing)
     show(health_path, unit ~= nil and unit.health > 0 and not preparing)
     if not mirrored then
+        show(path .. "/XPPaper", preparing and unit ~= nil)
         if preparing and unit then
             local threshold = rules.level_xp[unit.level + 1]
-            text(path .. "/XP", threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满")
+            local progress = threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满"
+            text(path .. "/XP", "L" .. unit.level .. "  " .. progress)
         else
             show(path .. "/XP", false)
         end
@@ -118,9 +122,10 @@ local function team_card(path, unit, index, selected, effect)
         return
     end
     local pet = rules_data.pet_by_id[unit.id] or rules_data.token_by_id[unit.id]
-    card(path, pet.name, string.format("%d攻 %d命 Lv%d", unit.attack, unit.health, unit.level),
+    card(path, pet.name, string.format("%d攻  %d命", unit.attack, unit.health),
         selected, unit.id, background, rim, mirrored)
-    local tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield or "")
+    local tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield
+        or (not preparing and "L" .. unit.level or ""))
     text(path .. "/Tag", tag, effect and effect.ink or 0x315a6d)
 
     local maximum = unit.max_health or unit.health
@@ -205,23 +210,22 @@ end
 
 local function pet_ability(pet, level)
     local skill = pet.ability
-    local prefix = pet.name .. " · " .. skill.name .. " · " .. (skill.trigger == "start" and "开场" or "退场")
+    local heading = pet.name .. " · " .. skill.name
+    local trigger = skill.trigger == "start" and "开场" or "退场"
     local power = skill.power * level
     if skill.effect == "shield_front" then
-        return string.format("%s，前排 %d 名队员各获得 %d 盾", prefix, skill.targets, power)
+        return heading, string.format("%s · 前排 %d 名队员各获得 %d 盾", trigger, skill.targets, power)
     elseif skill.effect == "hit_random" then
-        return string.format("%s，随机 %d 名对手各受 %d 伤", prefix, skill.targets, power)
+        return heading, string.format("%s · 随机 %d 名对手各受 %d 伤", trigger, skill.targets, power)
     elseif skill.effect == "buff_front" then
-        return string.format("%s，前排队员获得 %d 命", prefix, power)
+        return heading, string.format("%s · 前排队员获得 %d 命", trigger, power)
     elseif skill.effect == "summon" then
-        return string.format("%s，召唤 %d 只%s", prefix, skill.power, rules_data.token_by_id[skill.token].name)
+        return heading, string.format("%s · 召唤 %d 只%s", trigger, skill.power, rules_data.token_by_id[skill.token].name)
     end
-    return prefix
+    return heading, trigger
 end
 
-local function selected_info()
-    local picked = drag or selection
-    if not picked then return "" end
+local function selected_info(picked)
     local kind, index = picked.kind, picked.index
     if kind == "team" then
         local unit = state.shop.team[index]
@@ -233,9 +237,29 @@ local function selected_info()
         local stats = {}
         if food.attack > 0 then stats[#stats + 1] = string.format("攻击 +%d", food.attack) end
         if food.health > 0 then stats[#stats + 1] = string.format("生命 +%d", food.health) end
-        return food.name .. " · 一名队员获得 " .. table.concat(stats, "，")
+        return food.name .. " · 食物", "一名队员获得 " .. table.concat(stats, "，")
     end
     return pet_ability(rules_data.pet_by_id[item.id], 1)
+end
+
+local function draw_tooltip(preparing)
+    local picked = preparing and not confirming_restart and (drag or selection)
+    show("Tooltip", not not picked)
+    local caption = control("Shop/Caption")
+    if not picked then
+        caption:SetAnchoredPosition(-465, 106)
+        return
+    end
+    local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
+    local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
+    local card_x = control(path):GetAnchoredPosition()
+    local x = math.max(-394, math.min(394, card_x))
+    caption:SetAnchoredPosition(x < -185 and 452 or -465, 106)
+    control("Tooltip"):SetAnchoredPosition(x, -17)
+    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, picked.kind == "team" and 26 or -26)
+    local heading, body = selected_info(picked)
+    text("Tooltip/Heading", heading)
+    text("Tooltip/Body", body)
 end
 
 local function battle_event(event)
@@ -268,6 +292,41 @@ local function arrange(preparing)
     end
 end
 
+local function unit_path(side, slot)
+    return (side == "player" and "Team" or "Enemy") .. slot
+end
+
+local function draw_battle_cue(event, passed)
+    local strike = event and event.type == "attack"
+    local impact = event and event.type == "damage"
+    local actor = strike and unit_path(event.side, event.slot)
+    if lunging and lunging ~= actor then control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
+    lunging = actor
+    local intensity = playing and math.max(0, 1 - (passed or 0) / 0.28) or 1
+    show("BattleFX", impact == true or (strike == true and intensity > 0))
+    show("BattleFX/Strike", strike == true and intensity > 0)
+    show("BattleFX/Impact", impact == true)
+    if strike then
+        local direction = event.side == "player" and 1 or -1
+        local lunge = direction * 12 * intensity
+        control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
+        local x, y = control(actor):GetAnchoredPosition()
+        local target_x, target_y = control(unit_path(event.target_side, event.target_slot)):GetAnchoredPosition()
+        control("BattleFX/Strike"):SetAnchoredPosition((x + lunge + target_x) / 2, (y + target_y) / 2 + 27 - 118)
+    elseif impact then
+        local x, y = control(unit_path(event.side, event.slot)):GetAnchoredPosition()
+        local centreward = event.side == "player" and 1 or -1
+        local lateral = event.slot == 1 and centreward * 59 or 0
+        local above = event.slot == 1 and 52 or 70
+        control("BattleFX/Impact"):SetAnchoredPosition(x + lateral, y + above - 118)
+        local burst = control("BattleFX/Impact/Burst")
+        burst:SetSizeDelta(52 + 12 * intensity, 34 + 7 * intensity)
+        burst.imageColor = colour(event.amount == 0 and 0xaac9d2 or 0xf3c58a)
+        text("BattleFX/Impact/Value", event.amount == 0 and "格挡" or ("-" .. event.amount),
+            event.amount == 0 and 0x315a6d or 0x8f3c30)
+    end
+end
+
 local function draw(refresh)
     if refresh ~= false then state = session:snapshot() end
     local preparing = state.phase == "preparation"
@@ -286,7 +345,7 @@ local function draw(refresh)
     local effect = event and effects[event.type]
     if event and event.type == "damage" then
         local paint = event.amount == 0 and effects.shield or effects.damage
-        effect = { label = event.amount == 0 and "格挡" or ("-" .. event.amount), face = paint.face, ink = paint.ink }
+        effect = { label = "", face = paint.face, ink = paint.ink }
     end
     local drag_hint, drop_label = drag_feedback()
     arrange(preparing)
@@ -313,6 +372,7 @@ local function draw(refresh)
     show("Battle", not preparing)
     show("Reset", preparing)
     show("Restart", confirming_restart)
+    draw_battle_cue(event)
     local title = primary[state.phase]
     local hint = "拖动商品或队员到阵容，也可点击选择"
     if preparing then
@@ -322,7 +382,6 @@ local function draw(refresh)
         end
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
         text("Shop/Caption", string.format("河岸市集 · T%d", state.shop.tier))
-        text("Shop/Info", selected_info())
         text("Shop/Buy/Title", string.format("购买 · %d 金", rules.pet_cost))
         text("Shop/Reroll/Title", string.format("刷新 · %d 金", rules.reroll_cost))
         local picked = drag or selection
@@ -353,6 +412,7 @@ local function draw(refresh)
             hint = "可以单步重看战斗事件，或继续本局"
         end
     end
+    draw_tooltip(preparing)
     text("Primary/Title", title)
     text("Hint", drag_hint or message or hint)
 end
@@ -581,7 +641,10 @@ function OnUpdate(dt)
     local event = battle.events[event_index]
     local delay = event.type == "damage" and 0.55 or 0.4
     elapsed = elapsed + dt
-    if elapsed < delay then return end
+    if elapsed < delay then
+        if event.type == "attack" or event.type == "damage" then draw_battle_cue(event, elapsed) end
+        return
+    end
     event_index, elapsed = event_index + 1, 0
     if event_index == #battle.events then
         replay_complete = true
@@ -658,6 +721,9 @@ function OnStart()
         show(path, true)
     end
     for _, name in ipairs({"Shade", "Rim", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
+    for _, path in ipairs({"Tooltip/Border", "Tooltip/Paper", "Tooltip/Pointer",
+        "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper", "BattleFX/Strike/Lower",
+        "BattleFX/Impact/Burst", "BattleFX/Impact/Flash", "BattleFX/Impact/Spark"}) do show(path, true) end
     for _, path in ipairs({"Round", "Money", "Wins", "Lives"}) do
         show(path, true)
         show(path .. "/Surface", true)

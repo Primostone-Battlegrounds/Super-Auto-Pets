@@ -123,6 +123,24 @@ local function click(path)
     target.callbacks.CursorClick(event)
 end
 
+local function assert_tooltip(card, above_card)
+    local popup = nodes.Tooltip
+    local pointer = nodes["Tooltip/Pointer"]
+    local card_x, card_y = hit_centre(card)
+    local popup_y = popup.y + canvas[2] / 2
+    assert(popup.active and popup.visible and popup.width <= 360 and popup.height <= 58)
+    assert(popup.x + pointer.x + canvas[1] / 2 == card_x)
+    assert(math.abs(popup.x) + popup.width / 2 < canvas[1] / 2)
+    assert(not nodes["Tooltip/Hit"])
+    local caption = nodes["Shop/Caption"]
+    assert(caption.visible and math.abs(caption.x - popup.x) > (caption.width + popup.width) / 2)
+    if above_card then
+        assert(pointer.y < 0 and popup_y - popup.height / 2 > card_y + nodes[card .. "/Hit"].height / 2)
+    else
+        assert(pointer.y > 0 and popup_y + popup.height / 2 < card_y - nodes[card .. "/Hit"].height / 2)
+    end
+end
+
 local function start_drag(path, touch)
     local target = hit_area(path)
     local press = cursor_event(touch, hit_centre(path))
@@ -244,17 +262,41 @@ local function finish(outcome, terminal, inspect_playback)
         for _ = 1, 160 do
             sandbox.OnUpdate(0.6)
             if not ticking then break end
-            local hit = event_card("^%-%d+$")
-            if hit and not saw_damage then
+            local impact = nodes["BattleFX/Impact"]
+            local value = impact.active and label("BattleFX/Impact/Value")
+            if value and value ~= "格挡" and not saw_damage then
+                local hit
+                for _, side in ipairs({"Team", "Enemy"}) do
+                    for slot = 1, 5 do
+                        local path = side .. slot
+                        if nodes[path .. "/Rim"].imageColor == "#8f3c30" then hit = path end
+                    end
+                end
+                assert(hit and nodes.BattleFX.active)
                 local bar = nodes[hit .. "/Health"]
                 assert(not bar.visible or bar.width < nodes[hit .. "/HealthTrack"].width)
                 local damage = assert(label("Battle/Event"):match("受到伤害 (%d+)"))
-                assert(label(hit .. "/Tag") == "-" .. damage)
+                local front = hit:sub(-1) == "1"
+                local toward_centre = hit:find("^Team") and 1 or -1
+                assert(value == "-" .. damage)
+                assert(impact.x == nodes[hit].x + (front and 59 * toward_centre or 0))
+                assert(impact.y + nodes.BattleFX.y == nodes[hit].y + (front and 52 or 70))
                 capture("battle_damage")
                 saw_damage = true
             end
-            if event_card("^出击$") then saw_attack = true end
-            if event_card("^格挡$") then
+            local actor = event_card("^出击$")
+            if actor and not saw_attack then
+                local portrait = nodes[actor .. "/Portrait"]
+                local target = actor:find("^Team") and nodes.Enemy1 or nodes.Team1
+                local strike = nodes["BattleFX/Strike"]
+                assert(strike.active and math.abs(portrait.x) == 12 and portrait.x * nodes[actor].x < 0)
+                assert(strike.x == (nodes[actor].x + portrait.x + target.x) / 2)
+                capture("battle_attack")
+                sandbox.OnUpdate(0.14)
+                assert(math.abs(portrait.x) == 6 and strike.active)
+                saw_attack = true
+            end
+            if value == "格挡" then
                 assert(label("Battle/Event"):find("护盾抵消", 1, true))
                 saw_block = true
             end
@@ -310,7 +352,7 @@ click("Primary")
 assert(label("Hint") == "先购买至少一只动物")
 drag_to("Shop/Pet1", "Team3", -1)
 assert(label("Team1/Name") == "棉尾兔")
-assert(label("Team1/XP") == "经验 0/2")
+assert(label("Team1/XP") == "L1  经验 0/2")
 assert(label("Money/Value") == "7" and label("Shop/Pet1/Name") == "空商品")
 canvas = {1280, 720}
 drag_to("Shop/Pet2", "Team1", 4, nodes["Team1/Hit"].width / 2 + 1)
@@ -320,7 +362,8 @@ assert(label("Team1/Name") == "芦纹龟")
 drag_to("Team2", "Team1", 4)
 assert(label("Team1/Name") == "棉尾兔")
 click("Shop/Food1")
-assert(label("Shop/Info"):find("一名队员获得", 1, true))
+assert(label("Tooltip/Body"):find("一名队员获得", 1, true))
+assert_tooltip("Shop/Food1", true)
 local detail_before_food = label("Team2/Detail")
 drag_to("Shop/Food1", "Team5", 4)
 assert(label("Team2/Detail") == detail_before_food and label("Money/Value") == "4")
@@ -332,8 +375,12 @@ assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].activ
 shop("reroll")
 click("Shop/Pet3")
 assert(nodes["Shop/Pet3/Selected"].active and nodes["Team1/Portrait/Layer1"].active)
-assert(label("Shop/Info"):find("兔窝接力", 1, true))
+assert(label("Tooltip/Heading"):find("兔窝接力", 1, true))
+assert_tooltip("Shop/Pet3", true)
 capture("populated")
+click("Shop/Pet1")
+assert_tooltip("Shop/Pet1", true)
+capture("shop_tooltip")
 finish("win", false, true)
 assert(label("Shop/Pet3/Tag") == "已冻结")
 for offer = 1, 3 do shop("buy", offer) end
@@ -379,14 +426,14 @@ shop("buy", 1)
 shop("buy", 3)
 click("Team2")
 click("Team1")
-assert(label("Team2/Name") == "棉尾兔" and label("Team1/XP") == "经验 0/2")
+assert(label("Team2/Name") == "棉尾兔" and label("Team1/XP") == "L1  经验 0/2")
 click("Team2")
 click("Shop/Merge")
 click("Team1")
 assert(label("Team2/Name") == "空位 2")
 shop("reroll")
 shop("combine", 1, 1)
-assert(label("Team1/Detail"):find("Lv2", 1, true))
+assert(label("Team1/XP") == "L2  经验 2/5")
 assert(label("Shop/Reward/Tag") == "1/1")
 click("Shop/RewardNext")
 click("Shop/Reward")
@@ -394,7 +441,8 @@ click("Shop/Buy")
 assert(label("Hint") == "金币不足")
 click("Shop/Reward")
 click("Team1")
-assert(label("Team1/XP") == "经验 2/5" and label("Shop/Sell/Title") == "出售 · +2 金")
+assert_tooltip("Team1", false)
+assert(label("Team1/XP") == "L2  经验 2/5" and label("Shop/Sell/Title") == "出售 · +2 金")
 click("Shop/Sell")
 assert(label("Team1/Name") == "空位 1")
 
@@ -416,10 +464,10 @@ assert(not nodes["Team1/DropTarget"].active and label("Team2/Name") == "棉尾�
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 merge_drag.CursorEndDrag(cursor_event(11, hit_centre("Team1")))
 assert(label("Team2/Name") == "空位 2" and not nodes["Team2/Selected"].active)
-assert(label("Team1/XP") == "经验 1/2" and not nodes["Team1/DropTarget"].active)
+assert(label("Team1/XP") == "L1  经验 1/2" and not nodes["Team1/DropTarget"].active)
 finish("loss")
 drag_to("Shop/Pet1", "Team1", 4)
-assert(label("Team1/Detail"):find("Lv2", 1, true) and label("Money/Value") == "7")
+assert(label("Team1/XP") == "L2  经验 2/5" and label("Money/Value") == "7")
 local reward_name = label("Shop/Reward/Name")
 assert(reward_name ~= "升级奖励")
 drag_to("Shop/Reward", "Team2", 4)
