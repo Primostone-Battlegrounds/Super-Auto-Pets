@@ -126,7 +126,7 @@ function run:advance()
 end
 
 function run:restart(seed)
-    if self.phase ~= "ended" then
+    if self.phase ~= "ended" and self.phase ~= "preparation" then
         return nil, "wrong_phase"
     end
     if seed ~= nil and math.type(seed) ~= "integer" then

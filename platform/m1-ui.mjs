@@ -41,8 +41,9 @@ function card(name, position, width, type, interactive = true, visible = true) {
     ellipse('Face', [0, -3], [88, 24], pigment[type]),
     portrait(),
     label('Name', [0, -24], [width - 4, 24], '', market ? 19 : 17),
-    label('Detail', [0, -47], [width - 4, 20], '', 15, pigment.muted),
-    label('Tag', [0, market ? -64 : 69], [width - 4, market ? 15 : 16], '', 12, market ? pigment.ice : pigment.gold),
+    image('StatsPaper', [0, -47], [width - 8, 23], market ? '#f6ecd0' : '#edf0d9'),
+    label('Detail', [0, -47], [width - 8, 23], '', 18),
+    label('Tag', [0, market ? -64 : 68], [width - 4, market ? 15 : 18], '', 14, market ? pigment.ice : pigment.gold),
   ];
   if (market) {
     children.push(image('Frozen', [0, 71], [86, 3], pigment.ice, { visible: false }));
@@ -50,6 +51,14 @@ function card(name, position, width, type, interactive = true, visible = true) {
     children.push(
       image('HealthTrack', [0, -61], [88, 4], '#d5dfc4', { visible: false }),
       image('Health', [0, -61], [88, 4], '#448269', { visible: false }),
+    );
+  }
+  if (type === 'player') {
+    children.push(
+      image('XPPaper', [0, -64], [width - 8, 16], '#dbe9cf'),
+      label('XP', [0, -64], [width - 8, 16], '', 16),
+      image('DropTarget', [0, -74], [86, 4], pigment.primary, { visible: false }),
+      label('DropLabel', [0, 68], [width - 4, 18], '', 14, pigment.primary),
     );
   }
   if (interactive) {
@@ -90,12 +99,14 @@ export const nativeRun = {
   script: 'auto_pets_run',
   showCursor: true,
   blockCursor: true,
+  blockKeys: true,
   controls: [
     image('Border', [0, 0], [1202, 684], pigment.edge),
     image('Panel', [0, 0], [1194, 676], pigment.canvas),
     image('Header', [0, 280], [1172, 98], pigment.cream),
     label('Heading', [-373, 291], [374, 46], '小动物自走棋', 35, pigment.ink, 'left'),
     label('Seed', [-373, 257], [374, 24], '', 16, pigment.muted, 'left'),
+    button('Reset', [-266, 250], [142, 42], '重开本局'),
     stat('Round', -105, '回合'),
     stat('Money', 69, '金币'),
     stat('Wins', 243, '胜场'),
@@ -120,27 +131,56 @@ export const nativeRun = {
     label('OpponentCaption', [309, 208], [521, 25], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
     ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
-    group('Shop', [0, -117], [1164, 254], [
-      image('Paper', [0, 0], [1164, 254], pigment.cream),
-      image('Rail', [0, -7], [1128, 164], pigment.sand),
-      image('Rule', [0, 76], [1128, 2], pigment.sandLine),
-      label('Caption', [-305, 99], [518, 28], '', 24, pigment.ink, 'left'),
-      label('Info', [155, 99], [800, 25], '', 17, pigment.muted, 'right'),
-      ...offers.map((name, index) => card(name, [-465 + index * 186, -7], 174, 'market')),
-      ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -105], [172, 40], title)),
+    group('Shop', [0, -124], [1164, 268], [
+      image('Paper', [0, 0], [1164, 268], pigment.cream),
+      image('Rail', [0, 0], [1128, 164], pigment.sand),
+      image('Rule', [0, 83], [1128, 2], pigment.sandLine),
+      label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
+      ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
+      ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -104], [172, 52], title)),
     ]),
-    group('Battle', [0, -143], [1164, 204], [
-      image('Border', [0, 0], [1164, 204], pigment.edge),
-      image('Surface', [0, 0], [1156, 196], pigment.cream),
-      image('Rule', [-520, 51], [5, 47], pigment.gold),
-      label('Outcome', [11, 52], [1004, 49], '', 32, pigment.ink, 'left'),
-      label('Event', [11, -1], [1004, 39], '', 21, pigment.ink, 'left'),
-      button('Replay', [-401, -60], [233, 44], '下一条战斗事件'),
-      button('Auto', [-143, -60], [233, 44], '暂停回放'),
-      button('NewSeed', [115, -60], [233, 44], '新一局'),
+    group('Tooltip', [0, -17], [360, 58], [
+      image('Border', [0, 0], [360, 50], '#78a090'),
+      image('Paper', [0, 0], [354, 44], '#fff5df'),
+      ellipse('Pointer', [0, -26], [12, 6], pigment.primary),
+      label('Heading', [0, 11], [326, 20], '', 18, pigment.ink, 'left'),
+      label('Body', [0, -10], [326, 19], '', 15, pigment.ink, 'left'),
     ], false),
-    image('FooterLine', [0, -254], [1152, 2], pigment.edge),
+    group('BattleFX', [0, 118], [1184, 208], [
+      group('Strike', [0, 0], [66, 38], [
+        ellipse('Wake', [0, 0], [64, 8], '#c68b43'),
+        ellipse('Glint', [0, 0], [52, 4], '#ffe7a4'),
+        ellipse('Upper', [-9, 11], [29, 5], '#f8e1a1'),
+        ellipse('Lower', [10, -10], [30, 4], '#f8e1a1'),
+      ], false),
+      group('Impact', [0, 0], [66, 50], [
+        ellipse('Burst', [0, 0], [64, 41], '#f3c58a'),
+        ellipse('Flash', [0, 0], [52, 33], '#fff2d6'),
+        ellipse('Spark', [30, 16], [5, 8], '#ad623c'),
+        label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
+      ], false),
+    ], false),
+    group('Battle', [0, -165], [1152, 143], [
+      image('Border', [0, 0], [1152, 143], pigment.edge),
+      image('Surface', [0, 0], [1148, 139], '#eaf0d7'),
+      image('Rule', [-540, 37], [4, 35], pigment.gold),
+      label('Outcome', [0, 43], [1038, 30], '', 25, pigment.ink, 'left'),
+      label('Event', [0, 12], [1038, 25], '', 18, pigment.ink, 'left'),
+      button('Replay', [-401, -37], [233, 45], '下一条战斗事件'),
+      button('Auto', [-143, -37], [233, 45], '暂停回放'),
+      button('NewSeed', [115, -37], [233, 45], '新一局'),
+    ], false),
+    image('FooterLine', [0, -262], [1152, 2], pigment.edge),
     button('Primary', [411, -293], [329, 58], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
+    { ...group('Restart', [0, 0], [1202, 684], [
+      image('Shade', [0, 0], [1202, 684], pigment.ink, { opacity: 0.65 }),
+      image('Rim', [0, 5], [620, 234], pigment.edge),
+      image('Paper', [0, 5], [610, 224], pigment.cream),
+      label('Heading', [0, 68], [560, 44], '重开本局？', 31),
+      label('Body', [0, 15], [560, 39], '清空本局阵容与战绩，用同一种子开始。', 20),
+      button('Cancel', [-135, -56], [230, 50], '继续本局'),
+      button('Confirm', [135, -56], [230, 50], '确认重开', true),
+    ], false), blockCursor: true },
   ],
 };

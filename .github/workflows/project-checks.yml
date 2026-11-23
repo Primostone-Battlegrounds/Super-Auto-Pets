@@ -42,4 +42,16 @@ jobs:
         if: hashFiles('tests/native/verify-m1.mjs') != ''
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
-        run: node tests/native/verify-m1.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" lua5.3
+        run: |
+          node tests/native/verify-m1.mjs "$RUNNER_TEMP/miliastra-mcp" \
+            "$RUNNER_TEMP/native-validation" lua5.3 "$RUNNER_TEMP/m1-device-candidate"
+          cd "$RUNNER_TEMP/m1-device-candidate"
+          sha256sum -c SHA256SUMS
+      - name: Upload verified device candidate
+        if: hashFiles('tests/native/verify-m1.mjs') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m1-device-candidate-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/m1-device-candidate
+          if-no-files-found: error
+          retention-days: 30

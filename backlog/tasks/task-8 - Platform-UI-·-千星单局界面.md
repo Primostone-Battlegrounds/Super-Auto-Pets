@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 00:51'
-updated_date: '2026-11-23 01:09'
+updated_date: '2026-11-23 03:29'
 labels: []
 milestone: m-1
 dependencies:
@@ -52,4 +52,6 @@ ordinal: 8000
 - `node tests/native/verify-m1.mjs <MCP目录> <临时目录> <Lua 5.3>` 退出 0。GIL SHA-256 `434fa17557ece39d1615758101a89e46406f873cd8617c573ab543aca12725a0`，157,331 字节。读回唯一自定义界面、129 个控件、种子 7、39,246 字节内嵌 Lua、空诊断，并校验移动画布与父容器边界。
 - Lua 5.3.6 通过实际 GIL 回读源码与控件路径模拟点击。第 11 轮达 10 胜 5 命，第 5 轮达 0 胜 0 命，两路均重开，第 7 轮平局走通。复验目录 `/workspace/work/native-validation/m1-run-Ze7QlD`。
 - PC 官方鼠标、布局、日志和终局待验。手机官方触屏、布局、日志和终局独立待验。
+
+成品复核候选从 PR #10 的 GitHub Actions Artifacts 下载。检查人数、操作、确认重开、两种终局与回放，并记录同一候选的 PC 与手机证据。
 <!-- SECTION:NOTES:END -->

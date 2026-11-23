@@ -12,10 +12,17 @@ const revision = '59c576e41632a6bf6781bbca83a676d0da0374ec';
 const fixtureName = 'editor-2026-10-26-shapes.gil';
 const fixtureHash = 'b8aa63c8e6c5c24964784842329a37adeb60d50c2f56272f6cc512907baf3706';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const [checkoutArg, scratch, lua] = process.argv.slice(2);
+const [checkoutArg, scratch, lua, packageDir] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua,
-  'Usage: node tests/native/verify-m1.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable>');
+  'Usage: node tests/native/verify-m1.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable> [new package directory]');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0', 'Set MILIASTRA_ALLOW_LIVE_WRITE=0');
+const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
+let sourceRevision;
+if (packageDir) {
+  sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, encoding: 'utf8' }).trim();
+  execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'src', 'platform', 'tests/native'], { cwd: projectRoot });
+  assert.ok(!fs.existsSync(packageDir), 'Use a new package directory');
+}
 const luaVersion = execFileSync(lua, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim();
 assert.match(luaVersion, /^Lua 5\.3\./);
 
@@ -97,7 +104,8 @@ function readFrames(file, records) {
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
   assert.deepEqual([...frames.keys()].sort(), [
-    'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'populated', 'preparation', 'victory',
+    'battle_attack', 'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'merge_preview', 'populated',
+    'preparation', 'restart_confirm', 'shop_tooltip', 'victory',
   ]);
   return {
     canvas: canvases.mobile,
@@ -146,8 +154,13 @@ try {
   assert.deepEqual(baseline.clientTemplates, []);
   assert.deepEqual((await call('scene_list_client_scripts', { mapPath: input })).scripts, []);
 
+  const cleaned = await call('scene_remove_entities', { mapPath: input, names: ['积木样本'], outputName: 'm1-clean-scene' });
+  const singlePlayer = await call('scene_set_player_count', {
+    mapPath: cleaned.mapPath, min: 1, max: 1, outputName: 'm1-single-player',
+  });
   const scripted = await call('scene_set_client_script', {
-    mapPath: input, name: nativeRun.script, source, variables: [{ name: 'seed', type: 'integer', value: seed, public: true }],
+    mapPath: singlePlayer.mapPath, name: nativeRun.script, source,
+    variables: [{ name: 'seed', type: 'integer', value: seed, public: true }],
     outputName: 'm1-run-script',
   });
   assert.deepEqual(scripted.callbacks, ['OnStart', 'OnUpdate', 'OnDestroy']);
@@ -162,6 +175,10 @@ try {
   const inspected = await call('inspect_map', { mapPath });
   assert.equal(inspected.sha256, sha256(fs.readFileSync(mapPath)));
   assert.deepEqual(inspected.graphs, []);
+  const { players } = await call('scene_list_respawn_points', { mapPath });
+  assert.deepEqual(players, { min: 1, max: 1 });
+  const { entities } = await call('scene_list_entities', { mapPath });
+  assert.ok(entities.every(({ name }) => ['关卡实体', '默认模版', '默认模版(角色编辑)'].includes(name)));
 
   const decoded = await call('scene_get_client_ui', { mapPath, ui: nativeRun.name });
   assert.deepEqual(decoded.interface.scripts, [mounted]);
@@ -169,6 +186,7 @@ try {
   assert.equal(decoded.interface.hidden, undefined);
   assert.equal(decoded.interface.showCursor, true);
   assert.equal(decoded.interface.blockCursor, true);
+  assert.equal(decoded.interface.blockKeys, true);
   assert.equal(decoded.containerId, built.containerId);
   assert.equal(decoded.rootId, built.rootId);
   const records = [];
@@ -220,6 +238,7 @@ try {
   report = {
     toolRevision: toolHead, fixture: { file: fixtureName, sha256: fixtureHash, originalsUnchanged: true },
     gil: { mapPath, sha256: inspected.sha256, bytes: inspected.bytes, schema: inspected.schema },
+    players,
     binding: { layoutId: layouts.layouts[0].layoutId, containerId: decoded.containerId, rootId: decoded.rootId,
       scriptId: embedded.scriptId, sourceSha256: sha256(source), sourceBytes: Buffer.byteLength(source), controls: records.length },
     offline: { status: 'passed', checkProblems: checked.problems },
@@ -233,3 +252,37 @@ try {
 const evidence = path.join(workspace, 'evidence.json');
 fs.writeFileSync(evidence, JSON.stringify(report, null, 2) + '\n');
 console.log(`Evidence: ${evidence}`);
+
+if (packageDir) {
+  const mapFile = 'm1-auto-pets.gil';
+  const manifest = {
+    sourceRevision,
+    toolRevision: report.toolRevision,
+    fixture: { file: report.fixture.file, sha256: report.fixture.sha256 },
+    gil: { file: mapFile, sha256: report.gil.sha256, bytes: report.gil.bytes, schema: report.gil.schema },
+    players: report.players,
+    offline: report.offline.status,
+    simulation: { status: report.simulation.status, seed: report.simulation.seed },
+    officialClient: report.officialClient,
+  };
+  fs.mkdirSync(packageDir);
+  try {
+    const mapPath = path.join(packageDir, mapFile);
+    fs.copyFileSync(report.gil.mapPath, mapPath, fs.constants.COPYFILE_EXCL);
+    assert.equal(sha256(fs.readFileSync(mapPath)), manifest.gil.sha256);
+    fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+    fs.writeFileSync(path.join(packageDir, 'SHA256SUMS'), `${manifest.gil.sha256}  ${mapFile}\n`);
+    fs.writeFileSync(path.join(packageDir, 'simulated-run.log'), report.simulation.logs.join('\n') + '\n');
+    fs.copyFileSync(report.simulation.framesPath, path.join(packageDir, 'frames.json'));
+    fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(packageDir, 'MCP-FIXTURE-LICENSE.txt'));
+    const guide = `# 小动物自走棋 M1 真机验收候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
+      `先在本目录运行 \`sha256sum -c SHA256SUMS\`。使用获授权的官方隔离关卡导入 \`${mapFile}\`。\n` +
+      `在 PC 与手机分别核对画面、操作和完整单局，留存客户端版本与 AUTO_PETS_M1 日志。\n\n` +
+      `[同一提交的 M1 验收步骤](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/blob/${sourceRevision}/platform/M1.md#官方客户端待验)\n`;
+    fs.writeFileSync(path.join(packageDir, 'README.md'), guide);
+  } catch (error) {
+    fs.rmSync(packageDir, { recursive: true, force: true });
+    throw error;
+  }
+  console.log(`Device candidate: ${packageDir}`);
+}

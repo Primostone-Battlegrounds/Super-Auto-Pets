@@ -45,6 +45,7 @@ local function finish_round(game, outcome)
     assert_same(replay.opponent, before.opponent)
     reject(game, "wrong_phase", "submit")
     reject(game, "wrong_phase", "advance")
+    reject(game, "wrong_phase", "restart", 7)
     reject(game, "wrong_phase", "shop_action", "reroll")
 
     assert(game:settle())
@@ -55,6 +56,7 @@ local function finish_round(game, outcome)
     assert_same(settled.battle, replay.battle)
     reject(game, "wrong_phase", "settle")
     if settled.phase == "settlement" then
+        reject(game, "wrong_phase", "restart", 7)
         assert(game:advance())
         local prepared = game:snapshot()
         assert(prepared.phase == "preparation" and prepared.round == settled.round + 1)
@@ -92,7 +94,10 @@ local playbook = {
     combine_and_feed(3),
     feed_all,
     feed_all,
+    feed_all,
+    feed_all,
 }
+local loss_rounds = {[7] = true, [8] = true, [10] = true}
 
 local function play_shop(game, actions)
     for _, action in ipairs(actions) do
@@ -105,12 +110,12 @@ local function win_game()
     reject(game, "empty_team", "submit")
     reject(game, "wrong_phase", "settle")
     reject(game, "wrong_phase", "advance")
-    reject(game, "wrong_phase", "restart")
+    reject(game, "invalid_seed", "restart", "7")
     reject(game, "unknown_action", "shop_action", "advance_round")
     local rounds = {}
     for round, actions in ipairs(playbook) do
         play_shop(game, actions)
-        rounds[round] = finish_round(game, round == 7 and "draw" or "win")
+        rounds[round] = finish_round(game, loss_rounds[round] and "loss" or "win")
         if round == 1 then
             local held = game:snapshot().shop.pets[3]
             assert(held.frozen and held.id == opening.shop.pets[3].id)
@@ -118,7 +123,7 @@ local function win_game()
     end
     local finished = game:snapshot()
     assert(finished.phase == "ended" and finished.final == "win")
-    assert(finished.wins == rules.wins_to_win and finished.lives == rules.start_lives)
+    assert(finished.wins == rules.wins_to_win and finished.lives == rules.start_lives - 3)
     reject(game, "invalid_seed", "restart", "7")
     assert(game:restart())
     assert_same(game:snapshot(), opening)
@@ -130,6 +135,10 @@ end
 
 local won_rounds = win_game()
 assert_same(won_rounds, win_game(), "same-seed full-game replay")
+
+local drawn = run.new(seed)
+play_shop(drawn, {{"buy", 2}, {"buy", 1}, {"buy", 3}})
+finish_round(drawn, "draw")
 
 local lost = run.new(seed)
 assert(lost:shop_action("buy", 1))
@@ -162,4 +171,28 @@ assert(first:settle() and second:settle())
 assert(first:advance() and second:advance())
 assert_same(first:snapshot().opponent, second:snapshot().opponent, "bot independent of shop RNG draws")
 
-print("run tests passed (10 wins, 0 lives, draw, local AI, restart, deterministic replay)")
+local empty_shop = run.new(seed)
+for _ = 1, 8 do
+    assert(empty_shop:shop_action("reroll"))
+end
+assert(empty_shop:snapshot().shop.gold == 2)
+reject(empty_shop, "insufficient_gold", "shop_action", "buy", 1)
+reject(empty_shop, "empty_team", "submit")
+assert(empty_shop:restart(-19))
+assert_same(empty_shop:snapshot(), run.new(-19):snapshot(), "new attempt after rerolling away buying gold")
+assert(empty_shop:shop_action("buy", 1))
+
+local sold_last = run.new(seed)
+assert(sold_last:shop_action("buy", 1))
+for _ = 1, 6 do
+    assert(sold_last:shop_action("reroll"))
+end
+assert(sold_last:shop_action("sell", 1))
+assert(sold_last:snapshot().shop.gold == 2)
+reject(sold_last, "insufficient_gold", "shop_action", "buy", 1)
+reject(sold_last, "empty_team", "submit")
+assert(sold_last:restart())
+assert_same(sold_last:snapshot(), opening, "new attempt after selling the last pet")
+assert(sold_last:shop_action("buy", 1))
+
+print("run tests passed (10 wins, 0 lives, draw, local AI, restart, stalled prep recovery, deterministic replay)")

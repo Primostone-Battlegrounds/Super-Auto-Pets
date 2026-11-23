@@ -187,7 +187,7 @@ battle  开始战斗
 replay  回放战斗事件
 settle  结算战斗
 next  继续下一轮
-restart [种子]  重开终局（默认沿用当前种子）
+restart [种子]  在准备或终局重开（默认沿用当前种子）
 help  显示指令
 quit  退出]]
 

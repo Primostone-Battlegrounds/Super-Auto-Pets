@@ -3,6 +3,7 @@ local rng = require("autopets.rng")
 
 local bot = {}
 local styles = {"guardian", "striker", "swarm"}
+local support_style = {guardian = "striker", striker = "guardian", swarm = "striker"}
 
 local function style_pool(pool, style)
     local matches = {}
@@ -52,6 +53,8 @@ function bot.generate(round, seed, requested_style)
         local pool = preferred
         if index == 1 then
             pool = signature
+        elseif index == 2 and tier > 1 then
+            pool = style_pool(available, support_style[style])
         elseif random:int(1, 4) == 1 then
             pool = available
         end
@@ -71,12 +74,20 @@ function bot.generate(round, seed, requested_style)
         return a > b
     end)
 
-    -- Spread the round's stat budget evenly, assigning any extra points to the front.
-    local bonus_budget = math.min(12, round - 1)
+    -- Early rounds mostly recruit. Higher shop tiers let complete teams invest in more permanent stats.
+    local high_tier_round = rules.tier_unlock_rounds[rules.max_tier]
+    local early_growth = math.max(0, math.min(round, high_tier_round) - 2) * 3 + math.min(1, round - 1)
+    local late_growth = math.min(8, math.max(0, round - high_tier_round)) * 7
+    local bonus_budget = early_growth + late_growth
+    local front_bonus = style ~= "swarm" and bonus_budget // 3 or 0
+    local shared_budget = bonus_budget - front_bonus
     local team = {}
     for index, slot in ipairs(lineup) do
         local pet = slot.pet
-        local bonus = (bonus_budget + size - index) // size
+        local bonus = (shared_budget + size - index) // size
+        if index == 1 then
+            bonus = bonus + front_bonus
+        end
         local attack = attack_bonus(bonus, style)
         local level = 1
         if round >= 10 + (index - 1) * 3 then
