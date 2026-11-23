@@ -53,6 +53,19 @@ assert_events(opening, "start", "skill", "damage", "damage", "faint", "faint", "
 assert(opening.events[2].ability == "霞羽")
 assert(opening.events[3].slot == 2 and opening.events[4].slot == 1)
 assert(opening.events[5].slot == 1 and opening.events[6].slot == 2)
+local initial = opening.events[1].board
+assert(equal(initial.player[1], {id = "aurora_tern", attack = 5, health = 4, max_health = 4, level = 1, shield = 0}))
+assert(initial.enemy[1].health == 1 and initial.enemy[2].health == 1)
+assert(not opening.events[2].board)
+local first_damage, second_damage = opening.events[3].board, opening.events[4].board
+assert(first_damage.enemy[1].health == 1 and first_damage.enemy[2].health == 0)
+assert(second_damage.enemy[1].health == 0 and second_damage.enemy[2].health == 0)
+assert(second_damage.enemy[1].max_health == 1 and second_damage.enemy[2].max_health == 1)
+assert(not opening.events[5].board and #opening.events[6].board.enemy == 0)
+local victory = opening.events[7].board
+assert(#victory.enemy == 0 and equal(victory.player, initial.player))
+initial.player[1].health = 99
+assert(attacker[1].health == 4 and first_damage.player[1].health == 4 and victory.player[1].health == 4)
 
 -- Positions tie on the seeded priority. Shield absorption can change the outcome.
 local turtle = {pet("reed_turtle", 1, 1)}
@@ -64,6 +77,9 @@ assert(damage_first.events[1].first_side == "enemy" and damage_first.outcome == 
 assert(shield_first.events[4].type == "skill" and shield_first.events[4].side == "enemy")
 assert(shield_first.events[5].type == "damage" and shield_first.events[5].absorbed == 1)
 assert(shield_first.events[5].amount == 0 and shield_first.events[5].health == 1)
+local shield = events_of(shield_first, "shield")[1]
+assert(shield.board.player[1].shield == 1)
+assert(shield_first.events[5].board.player[1].shield == 0 and shield_first.events[5].board.player[1].health == 1)
 assert_events(damage_first, "start", "skill", "damage", "faint", "result")
 
 -- Both attacks and both deaths precede either queued faint ability.
@@ -80,6 +96,17 @@ assert(simultaneous.events[6].side == "player" and simultaneous.events[7].side =
 assert(simultaneous.events[9].id == "mothling" and simultaneous.events[9].slot == 1)
 assert(simultaneous.events[11].id == "crayling" and simultaneous.events[11].slot == 1)
 assert(moth_team[1] == moth and moth.health == 1 and moth.xp == 1)
+assert(not simultaneous.events[2].board and not simultaneous.events[3].board)
+local before_faints = simultaneous.events[5].board
+assert(before_faints.player[1].health == 0 and before_faints.enemy[1].health == 0)
+assert(not simultaneous.events[6].board)
+local after_faints = simultaneous.events[7].board
+assert(#after_faints.player == 0 and #after_faints.enemy == 0)
+local first_replacement, second_replacement = simultaneous.events[9].board, simultaneous.events[11].board
+assert(first_replacement.player[1].id == "mothling" and #first_replacement.enemy == 0)
+assert(second_replacement.player[1].id == "mothling" and second_replacement.enemy[1].id == "crayling")
+local draw_board = simultaneous.events[18].board
+assert(#draw_board.player == 0 and #draw_board.enemy == 0)
 
 local defeated = {pet("alder_marmot", 3, 2)}
 local cloud = pet("cloud_ostrich", 3, 1, 3)
@@ -92,6 +119,9 @@ local spacious = battle.resolve({cloud}, defeated, 1)
 local spacious_summons = events_of(spacious, "summon")
 assert(#spacious_summons == 2)
 assert(spacious_summons[1].slot == 1 and spacious_summons[2].slot == 2)
+local cloud_chick = {id = "cloud_chick", attack = 3, health = 2, max_health = 2, level = 1, shield = 0}
+assert(equal(spacious_summons[1].board.player, {cloud_chick}))
+assert(equal(spacious_summons[2].board.player, {cloud_chick, cloud_chick}))
 
 -- Death during the opening frees the slot before the opening sequence resumes.
 local born_opening = battle.resolve({pet("copper_kestrel", 2, 3)}, {pet("lantern_moth", 1, 1)}, 1)
@@ -110,6 +140,9 @@ assert(opening_skills[2].id == "lantern_moth" and opening_skills[2].slot == 2)
 local replacements = events_of(double_faint, "summon", 0)
 assert(#replacements == 1 and replacements[1].slot == 1)
 assert(events_of(double_faint, "attack", 1)[1].target_id == "mothling")
+assert(#opening_faints[2].board.enemy == 1 and opening_faints[2].board.enemy[1].id == ally.id)
+assert(#replacements[1].board.enemy == 2 and replacements[1].board.enemy[1].id == "mothling")
+assert(replacements[1].board.enemy[2].id == ally.id)
 
 local two_summoners = battle.resolve(attacker, {
     pet("cloud_ostrich", 4, 1), pet("lantern_moth", 2, 1), ally,
@@ -119,12 +152,27 @@ assert(#ordered_summons == 3)
 assert(ordered_summons[1].id == "cloud_chick" and ordered_summons[1].slot == 1)
 assert(ordered_summons[2].id == "cloud_chick" and ordered_summons[2].slot == 2)
 assert(ordered_summons[3].id == "mothling" and ordered_summons[3].slot == 3)
+for index, event in ipairs(ordered_summons) do
+    assert(#event.board.enemy == index + 1 and event.board.enemy[index].id == event.id)
+    assert(event.board.enemy[index + 1].id == ally.id)
+end
 
 local support = battle.resolve({pet("alder_marmot", 3, 1, 2), ally}, defeated, 1)
 local buffs = events_of(support, "buff")
 assert(support.outcome == "win")
 assert(#buffs == 1 and buffs[1].slot == 1 and buffs[1].health == 7)
+local shifted = events_of(support, "faint", 1)[2].board.player[1]
+assert(shifted.id == "alder_marmot" and shifted.health == 3 and shifted.max_health == 3)
+assert(buffs[1].board.player[1].health == 7 and buffs[1].board.player[1].max_health == 7)
 assert(ally.health == 3)
+
+local saturated = battle.resolve({pet("alder_marmot", 3, 1, 2), pet("alder_marmot", 2, math.maxinteger - 1)},
+    {pet("aurora_tern", 1, 3)}, 1)
+local saturated_buff = events_of(saturated, "buff", 0)[1]
+assert(saturated_buff.amount == 3 and saturated_buff.board.player[1].health == math.maxinteger)
+assert(saturated_buff.board.player[1].max_health == math.maxinteger)
+local saturated_result = saturated.events[#saturated.events].board.player[1]
+assert(saturated_result.health == math.maxinteger - 2 and saturated_result.max_health == math.maxinteger)
 
 assert(battle.resolve({}, {}, 42).outcome == "draw")
 assert(battle.resolve({ally}, {}, 42).outcome == "win")
@@ -133,10 +181,21 @@ assert(not pcall(battle.resolve, {ally, ally, ally, ally, ally, ally}, defeated,
 assert(not pcall(battle.resolve, {[2] = ally}, defeated, 1))
 assert(not pcall(battle.resolve, {pet("unknown", 2, 3)}, defeated, 1))
 
-local sturdy = {pet("alder_marmot", 1, math.maxinteger)}
+local sturdy_pet = pet("alder_marmot", 1, math.maxinteger)
+local sturdy = {sturdy_pet, sturdy_pet, sturdy_pet, sturdy_pet, sturdy_pet}
 local exhausted = battle.resolve(sturdy, sturdy, 1)
 local last = exhausted.events[#exhausted.events]
 assert(last.type == "result" and last.outcome == "draw" and last.reason == "strike_limit")
 assert(last.strike == 256)
+assert(#last.board.player == 5 and #last.board.enemy == 5)
+assert(last.board.player[1].health == math.maxinteger - 256 and last.board.enemy[1].health == math.maxinteger - 256)
+assert(last.board.player[1].max_health == math.maxinteger and last.board.enemy[1].max_health == math.maxinteger)
+local frames = 0
+for _, event in ipairs(exhausted.events) do
+    if event.board then
+        frames = frames + 1
+    end
+end
+assert(frames == 2 * last.strike + 2, "only start, damage and result need frames in this battle")
 
 print("battle tests passed")

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const names = ['data', 'rng', 'shop', 'bot', 'battle', 'run'];
+const names = ['data', 'rng', 'shop', 'bot', 'battle', 'run', 'art'];
 const validModules = new Set(names.map(name => `autopets.${name}`));
 
 export function bundleRun(parse) {

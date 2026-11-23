@@ -51,7 +51,18 @@ async function call(name, args = {}) {
   return result;
 }
 
-function verifyControls(expected, decoded, controlPaths, prefix = '', parentSize = [1280, 720]) {
+const canvases = { mobile: { width: 1280, height: 720 }, pc: { width: 1600, height: 900 } };
+const screens = Object.fromEntries(Object.entries(canvases).map(([device, { width, height }]) => [device, [width, height]]));
+
+function assertBounds(key, position, size, bounds) {
+  for (const [name, parentSize] of Object.entries(bounds)) {
+    for (const [axis, extent] of parentSize.entries()) {
+      assert.ok(Math.abs(position[axis]) + size[axis] / 2 <= extent / 2 + 0.0001, `${key} outside ${name}`);
+    }
+  }
+}
+
+function verifyControls(expected, decoded, records, prefix = '', parentSize) {
   assert.equal(decoded.length, expected.length, `${prefix} children`);
   for (const [index, control] of expected.entries()) {
     const observed = decoded[index];
@@ -68,13 +79,54 @@ function verifyControls(expected, decoded, controlPaths, prefix = '', parentSize
       assert.equal(observed.text.fontSize, control.text.fontSize);
     }
     assert.equal(observed.devices, undefined, `${key} must use shared coordinates`);
-    for (const [axis, extent] of parentSize.entries()) {
-      assert.ok(Math.abs(observed.position[axis]) + observed.size[axis] / 2 <= extent / 2,
-        `${key} outside ${prefix || 'mobile canvas'}`);
-    }
-    controlPaths.push([key, observed.kind]);
-    verifyControls(control.children ?? [], observed.children ?? [], controlPaths, key, observed.size);
+    assertBounds(key, observed.position, observed.size, parentSize ? { [prefix]: parentSize } : screens);
+    const { kind, position, size, image, colour, opacity, text } = observed;
+    records.push({ path: key, parent: prefix || null, kind, position, size, image, colour, opacity, text,
+      active: observed.active !== false, visible: observed.visible !== false });
+    verifyControls(control.children ?? [], observed.children ?? [], records, key, observed.size);
   }
+}
+
+function readFrames(file, records) {
+  const frames = new Map();
+  for (const line of fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)) {
+    const [name, key, active, visible, x, y, width, height, image, colour, textColour, content] = line.split('\t');
+    if (!frames.has(name)) frames.set(name, new Map());
+    const frame = frames.get(name);
+    assert.ok(!frame.has(key), `Duplicate frame control: ${name} ${key}`);
+    frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
+  }
+  assert.deepEqual([...frames.keys()], ['preparation', 'populated', 'battle_damage', 'battle_full', 'victory', 'defeat']);
+  return {
+    canvas: canvases.mobile,
+    canvases,
+    frames: Object.fromEntries([...frames].map(([name, dynamic]) => {
+      assert.equal(dynamic.size, records.length);
+      const sizes = new Map();
+      const items = records.map(base => {
+        const patch = dynamic.get(base.path);
+        const item = {
+          ...base,
+          active: patch.active === '' ? base.active : patch.active === '1',
+          visible: patch.visible === '' ? base.visible : patch.visible === '1',
+          position: patch.x === '' ? base.position : [Number(patch.x), Number(patch.y)],
+          size: patch.width === '' ? base.size : [Number(patch.width), Number(patch.height)],
+          image: patch.image === '' ? base.image : Number(patch.image),
+          colour: patch.colour || base.colour,
+          text: base.text ? {
+            ...base.text,
+            colour: patch.textColour || base.text.colour,
+            content: patch.content === '~' ? base.text.content : decodeURIComponent(patch.content),
+          } : undefined,
+        };
+        assertBounds(`${name}/${item.path}`, item.position, item.size,
+          item.parent ? { [item.parent]: sizes.get(item.parent) } : screens);
+        sizes.set(item.path, item.size);
+        return item;
+      });
+      return [name, items];
+    })),
+  };
 }
 
 const seed = 7;
@@ -96,7 +148,7 @@ try {
     mapPath: input, name: nativeRun.script, source, variables: [{ name: 'seed', type: 'integer', value: seed, public: true }],
     outputName: 'm1-run-script',
   });
-  assert.deepEqual(scripted.callbacks, ['OnStart', 'OnDestroy']);
+  assert.deepEqual(scripted.callbacks, ['OnStart', 'OnUpdate', 'OnDestroy']);
   assert.ok(fs.realpathSync(scripted.mapPath).startsWith(workspace + path.sep));
   const mounted = { name: nativeRun.script, values: { seed } };
   const built = await call('scene_add_client_ui', {
@@ -117,9 +169,20 @@ try {
   assert.equal(decoded.interface.blockCursor, true);
   assert.equal(decoded.containerId, built.containerId);
   assert.equal(decoded.rootId, built.rootId);
-  const controlPaths = [];
-  verifyControls(nativeRun.controls, decoded.interface.controls, controlPaths);
-  assert.equal(new Set(Object.values(decoded.ids)).size, controlPaths.length + 2);
+  const records = [];
+  verifyControls(nativeRun.controls, decoded.interface.controls, records);
+  assert.equal(new Set(Object.values(decoded.ids)).size, records.length + 2);
+  const byPath = new Map(records.map(item => [item.path, item]));
+  const battlePanel = byPath.get('Battle');
+  for (const card of records.filter(item => /^Team[1-5]$/.test(item.path))) {
+    assert.ok(battlePanel.position[1] + battlePanel.size[1] / 2 < card.position[1] - card.size[1] / 2,
+      'Battle panel overlaps the roster');
+  }
+  for (const underline of records.filter(item => item.path.endsWith('/Selected'))) {
+    const tag = byPath.get(`${underline.parent}/Tag`);
+    assert.ok(underline.position[1] + underline.size[1] / 2 < tag.position[1] - tag.size[1] / 2,
+      `${tag.path} overlaps its selected underline`);
+  }
   const layouts = await call('scene_list_interface', { mapPath });
   assert.deepEqual(layouts.layouts[0].controls.filter(entry => entry.kind !== 'builtIn'), [
     { id: decoded.containerId, name: nativeRun.name, kind: 'clientContainer' },
@@ -142,18 +205,24 @@ try {
   const extracted = path.join(workspace, embedded.file);
   fs.writeFileSync(extracted, embedded.source);
   const bindings = path.join(workspace, 'control-paths.tsv');
-  fs.writeFileSync(bindings, controlPaths.map(control => control.join('\t')).join('\n') + '\n');
-  const log = execFileSync(lua, ['-E', fileURLToPath(new URL('./m1-input.lua', import.meta.url)), extracted, bindings, String(decodedSeed)],
+  fs.writeFileSync(bindings, records.map(record =>
+    [record.path, record.kind, ...record.position, ...record.size].join('\t')).join('\n') + '\n');
+  const framesRaw = path.join(workspace, 'frames-runtime.tsv');
+  const log = execFileSync(lua, ['-E', fileURLToPath(new URL('./m1-input.lua', import.meta.url)),
+    extracted, bindings, String(decodedSeed), framesRaw],
     { encoding: 'utf8', timeout: 10_000 });
+  const framesPath = path.join(workspace, 'frames.json');
+  fs.writeFileSync(framesPath, JSON.stringify(readFrames(framesRaw, records)) + '\n');
   fs.writeFileSync(path.join(workspace, 'simulated-run.log'), log);
   console.log(log.trimEnd());
   report = {
     toolRevision: toolHead, fixture: { file: fixtureName, sha256: fixtureHash, originalsUnchanged: true },
     gil: { mapPath, sha256: inspected.sha256, bytes: inspected.bytes, schema: inspected.schema },
     binding: { layoutId: layouts.layouts[0].layoutId, containerId: decoded.containerId, rootId: decoded.rootId,
-      scriptId: embedded.scriptId, sourceSha256: sha256(source), sourceBytes: Buffer.byteLength(source), controls: controlPaths.length },
+      scriptId: embedded.scriptId, sourceSha256: sha256(source), sourceBytes: Buffer.byteLength(source), controls: records.length },
     offline: { status: 'passed', checkProblems: checked.problems },
-    simulation: { status: 'passed', runtime: luaVersion, input: 'mocked cursor events', seed: decodedSeed, logs: log.trimEnd().split('\n') },
+    simulation: { status: 'passed', runtime: luaVersion, input: 'mocked cursor events and update ticks', seed: decodedSeed,
+      framesPath, logs: log.trimEnd().split('\n') },
     officialClient: { pc: 'pending', mobile: 'pending' },
   };
 } finally {

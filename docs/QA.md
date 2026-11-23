@@ -7,6 +7,7 @@
 | 源码测试 | 精确分支 SHA、命令、退出状态和确定性回放。 |
 | 模拟器 | 隔离会话或终端中实际执行的输入路径与结算结果。 |
 | 原生 GIL | 工具版本、隔离样本、构建结果和读回的 Lua/布局绑定。 |
+| 离线画面 | 用 GIL 回读后的控件树和模拟输入绘制实际状态，对照小尺寸动物轮廓、商店与阵容区分、战斗反馈和结算。 |
 | PC 实机 | 官方客户端记录输入、显示、日志与结果。 |
 | 移动实机 | 官方移动客户端独立记录触控、显示、日志与结果。 |
 
@@ -19,3 +20,30 @@ OpenHarness 固定到 `aebb0c2255a5df275491009285c1a23d03f90771`，使用 cooper
 项目接受上述子 Agent 评审证据。另一个 GitHub 账号的 `Approve` 仅在仓库服务端保护要求时才需要。OpenHarness cooperative 沿用本项目的评审与 CI 流程。
 
 GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub 连接器核对 PR、当前 SHA 和 CI，通过同一 GitHub PR 完成集成。
+
+## 原生画面复验
+
+[目录图鉴](media/m1-animal-art.webp) 从同一份 Lua 图元数据绘制。动物、召唤物与食物图标均由项目原创几何构成。千星使用原生实色色块和圆点，图鉴分别以 66 和 44 像素检查造型。
+
+运行 [M1 验证](../platform/M1.md) 生成 `frames.json`。可用 Python 3、Pillow 和已安装的中文字体将游戏从 GIL 读回后的模拟帧输出为 PNG。
+
+```sh
+python3 scripts/render-native-previews.py /path/to/frames.json /tmp/auto-pets-mobile
+python3 scripts/render-native-previews.py /path/to/frames.json /tmp/auto-pets-pc --desktop
+```
+
+### 画面对照与独立评审
+
+以 Team Wood Games 公布的商店画面和双方交战画面为固定参照，逐项检查信息层级、动物朝向和战斗反馈。项目的场景、角色图元与控件样式保持原创。[参照商店](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1714040/ss_f61be4caff97d77b7df02bcdadee2687232e991f.1920x1080.jpg) · [参照战斗](https://cdn.cloudflare.steamstatic.com/steam/apps/1714040/ss_75e2d405204fa963fc6d5cb99c272c15f0f6dcc3.1920x1080.jpg)
+
+| 场景 | 通过条件 |
+| --- | --- |
+| 动物图鉴 | 商店和己方都使用右向姿态。同种资产在头像尺寸仍有清楚的头、眼和重心。逐一看完 9 种动物、3 种召唤物与 6 种食物，在小尺寸依旧能凭轮廓区分。 |
+| 商店 | 先看到己方五格和动物，再看到下方货架。动物头像约 64 像素或更大，攻、命、等级、价格和冻结状态易读，选中动物可看到技能。金币、胜场、生命、轮次固定在顶部。 |
+| 战斗 | 双方分区，前排靠近交战中心，左右动物朝向对手。受击、格挡、退场和召唤由战斗状态驱动，实际扣血同时体现在数字和血条上。自动、暂停、逐条和跳过控件保持可用。 |
+| 结算 | 胜利与落败各有清楚的结算，大字可读。保留同种子重开以及更换种子开新局，回到准备阶段的状态正确。 |
+| 画布 | 在 1600×900 和 1280×720 的回读模拟帧分别检查文字、图标和命中区域，无跨区遮挡或出界。 |
+
+独立评审者用同一候选的图鉴、商店、有效伤害、胜利和落败画面逐项给出结论，并附对应帧、提交 SHA 与完整单局日志。官方设备的输入和实际渲染另行验收。
+
+[移动画布六个实跑状态](media/m1-visual-proof.webp) · [PC 画布五对五](media/m1-desktop-battle.webp)。两组画面均由 GIL 回读和模拟输入生成。
