@@ -1,11 +1,11 @@
 ---
 id: TASK-2
 title: Engineering · 工程初始化与复验入口
-status: In Progress
+status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 00:51'
-updated_date: '2026-11-23 00:57'
+updated_date: '2026-11-23 01:17'
 labels: []
 milestone: m-0
 dependencies: []
@@ -31,7 +31,7 @@ ordinal: 2000
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 运行 backlog doctor、openharness entry 和 doctor 并记录状态。
-- [ ] #2 CI 在 PR 当前 SHA 运行项目验收，独立评审后进入 develop。
+- [x] #2 CI 在 PR 当前 SHA 运行项目验收，独立评审后进入 develop。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -46,4 +46,12 @@ ordinal: 2000
 Backlog doctor 与工程脚本通过。OpenHarness entry 成功，live doctor 因 GitHub CLI API 403 留下权限与门禁缺口。当前 SHA 的远程 CI 和评审仍待验证。
 
 PR #1 的 4632194 已通过 GitHub Project checks。自动审批要求另一个 GitHub 身份提交独立评审，develop 保持原状。
+
+Owner 确认项目采用独立子 Agent 评审，仓库原生保护与 CI 维持有效配置。评审者 Rules/Core 核对完整 head 740d50e4b718d547a3993f851418cebde5743f29，当前 SHA Project checks 通过，GitHub PR #1 正常合入 develop，合并提交 62da2abf85a53d3e818b40227be3998d8f613400。
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+工程初始化、Backlog 与 OpenHarness cooperative 复验均完成。GitHub CI 和独立子 Agent 评审通过后合入 develop。Doctor 的 GitHub CLI 观察权限缺口已记录。
+<!-- SECTION:FINAL_SUMMARY:END -->
