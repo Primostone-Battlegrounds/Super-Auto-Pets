@@ -22,13 +22,14 @@ local session, state, selection, message
 local reward_index, event_index = 1, 1
 local listeners, controls, portraits = {}, {}, {}
 local playing, elapsed = false, 0
-local accents = {win = 0xaad3aa, loss = 0xe49381, draw = 0xefbd73}
+local preparing_layout
+local accents = {win = 0x286452, loss = 0x984434, draw = 0x89591e}
 local effects = {
-    attack = {label = "出击", face = 0x605336, ink = 0xefbd73},
-    damage = {label = "失血", face = 0x603f3e, ink = 0xe49381},
-    summon = {label = "入场", face = 0x39594b, ink = 0xaad3aa},
-    shield = {label = "护盾", face = 0x355464, ink = 0xadd2cf},
-    buff = {label = "强化", face = 0x39594b, ink = 0xaad3aa},
+    attack = {label = "出击", face = 0xe6c881, ink = 0x80521d},
+    damage = {face = 0xe1a18a, ink = 0x8f3c30},
+    summon = {label = "入场", face = 0x94c2a8, ink = 0x286452},
+    shield = {label = "护盾", face = 0x9ebec5, ink = 0x315a6d},
+    buff = {label = "强化", face = 0x94c2a8, ink = 0x286452},
 }
 
 local function control(path)
@@ -55,14 +56,13 @@ local function text(path, content, rgb)
     if rgb then node.fontColor = colour(rgb) end
 end
 
-local function portrait(path, id)
-    local key = id or false
+local function portrait(path, id, mirrored)
+    local key = id and (id .. (mirrored and ":left" or ":right")) or false
     if portraits[path] == key then return end
     portraits[path] = key
     local base = path .. "/Portrait"
     local layers = id and assert(art[id], id) or {}
     show(base, true)
-    show(base .. "/Medallion", true)
     for index = 1, 16 do
         local layer_path = base .. "/Layer" .. index
         local layer = layers[index]
@@ -72,14 +72,14 @@ local function portrait(path, id)
             local node = control(layer_path)
             node:SetImage(Enum.ImageSource.StaticReference, image)
             node.imageType = Enum.ImageType.Stretch
-            node:SetAnchoredPosition(x * 1.15, y * 1.15)
-            node:SetSizeDelta(width * 1.15, height * 1.15)
+            node:SetAnchoredPosition((mirrored and -x or x) * 1.56, y * 1.56)
+            node:SetSizeDelta(width * 1.56, height * 1.56)
             node.imageColor = Color(r, g, b, 255)
         end
     end
 end
 
-local function card(path, title, detail, selected, id, face, rim)
+local function card(path, title, detail, selected, id, face, rim, mirrored)
     show(path, true)
     show(path .. "/Rim", true)
     show(path .. "/Face", true)
@@ -87,13 +87,14 @@ local function card(path, title, detail, selected, id, face, rim)
     control(path .. "/Rim").imageColor = colour(rim)
     text(path .. "/Name", title)
     text(path .. "/Detail", detail)
-    portrait(path, id)
+    portrait(path, id, mirrored)
     if selected ~= nil then show(path .. "/Selected", selected) end
 end
 
 local function team_card(path, unit, index, selected, effect)
-    local background = selected == nil and 0x344143 or 0x203a3e
-    local rim = selected and 0xefbd73 or 0x3b5553
+    local mirrored = selected == nil
+    local background = mirrored and 0xb2a584 or 0x8da982
+    local rim = selected and 0xa66c27 or 0x90aa91
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
     show(path .. "/HealthTrack", unit ~= nil)
@@ -104,20 +105,20 @@ local function team_card(path, unit, index, selected, effect)
         return
     end
     local pet = rules_data.pet_by_id[unit.id] or rules_data.token_by_id[unit.id]
-    card(path, pet.name, string.format("%d 攻  %d 命  Lv%d", unit.attack, unit.health, unit.level),
-        selected, unit.id, background, rim)
+    card(path, pet.name, string.format("%d攻 %d命 Lv%d", unit.attack, unit.health, unit.level),
+        selected, unit.id, background, rim, mirrored)
     local tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield or "")
-    text(path .. "/Tag", tag, effect and effect.ink or 0xefbd73)
+    text(path .. "/Tag", tag, effect and effect.ink or 0x315a6d)
 
     local maximum = unit.max_health or unit.health
     local ratio = maximum > 0 and math.max(0, unit.health / maximum) or 0
-    local width = 130 * ratio
+    local width = 88 * ratio
     local bar = control(health_path)
     if width > 0 then
         bar:SetSizeDelta(width, 4)
-        bar:SetAnchoredPosition(27 + (width - 130) / 2, -32)
+        bar:SetAnchoredPosition((width - 88) / 2, -61)
     end
-    bar.imageColor = colour(ratio <= 0.35 and 0xe49381 or 0xaad3aa)
+    bar.imageColor = colour(ratio <= 0.35 and 0x984434 or 0x448269)
 end
 
 local function is_selected(kind, index)
@@ -133,8 +134,8 @@ end
 local function offer_card(path, kind, index)
     local item = offer(kind, index)
     local selected = is_selected(kind, index)
-    local face = selected and 0xf8eac1 or 0xeedcaa
-    local rim = selected and 0xf4b768 or (item and item.frozen and 0x458c99 or 0xb99153)
+    local face = selected and 0xf8efd7 or 0xe7d4a5
+    local rim = selected and 0xa66c27 or (item and item.frozen and 0x406f82 or 0xd2ba86)
     show(path .. "/Frozen", item and item.frozen == true or false)
     text(path .. "/Tag", item and item.frozen and "已冻结" or "")
     if not item then
@@ -147,6 +148,40 @@ local function offer_card(path, kind, index)
     local detail = string.format("%d金  %d攻 %d命", cost, definition.attack, definition.health)
     if kind == "reward" then text(path .. "/Tag", string.format("%d/%d", index, #state.shop.rewards)) end
     card(path, definition.name, detail, selected, item.id, face, rim)
+end
+
+local function pet_ability(pet, level)
+    local skill = pet.ability
+    local prefix = pet.name .. " · " .. skill.name .. " · " .. (skill.trigger == "start" and "开场" or "退场")
+    local power = skill.power * level
+    if skill.effect == "shield_front" then
+        return string.format("%s，前排 %d 名队员各获得 %d 盾", prefix, skill.targets, power)
+    elseif skill.effect == "hit_random" then
+        return string.format("%s，随机 %d 名对手各受 %d 伤", prefix, skill.targets, power)
+    elseif skill.effect == "buff_front" then
+        return string.format("%s，前排队员获得 %d 命", prefix, power)
+    elseif skill.effect == "summon" then
+        return string.format("%s，召唤 %d 只%s", prefix, skill.power, rules_data.token_by_id[skill.token].name)
+    end
+    return prefix
+end
+
+local function selected_info()
+    if not selection then return "" end
+    local kind, index = selection.kind, selection.index
+    if kind == "team" then
+        local unit = state.shop.team[index]
+        return pet_ability(rules_data.pet_by_id[unit.id], unit.level)
+    end
+    local item = offer(kind, index)
+    if kind == "food" then
+        local food = rules_data.food_by_id[item.id]
+        local stats = {}
+        if food.attack > 0 then stats[#stats + 1] = string.format("攻击 +%d", food.attack) end
+        if food.health > 0 then stats[#stats + 1] = string.format("生命 +%d", food.health) end
+        return food.name .. " · 一名队员获得 " .. table.concat(stats, "，")
+    end
+    return pet_ability(rules_data.pet_by_id[item.id], 1)
 end
 
 local function battle_event(event)
@@ -165,6 +200,20 @@ local function battle_event(event)
     return summary
 end
 
+local function arrange(preparing)
+    if preparing_layout == preparing then return end
+    preparing_layout = preparing
+    show("Field/PrepRail", preparing)
+    show("Field/Clash", not preparing)
+    for index = 1, rules.team_size do
+        local x, y = 91 + (index - 1) * 112, 115 - (index - 1) * 9
+        local team_path = "Team" .. index
+        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 104 or y)
+        show(team_path .. "/Hit", preparing)
+        if preparing then show("Enemy" .. index, false) end
+    end
+end
+
 local function draw(refresh)
     if refresh ~= false then state = session:snapshot() end
     local preparing = state.phase == "preparation"
@@ -181,15 +230,23 @@ local function draw(refresh)
         end
     end
     local effect = event and effects[event.type]
-    if event and event.type == "damage" and event.amount == 0 then effect = effects.shield end
+    if event and event.type == "damage" then
+        local paint = event.amount == 0 and effects.shield or effects.damage
+        effect = { label = event.amount == 0 and "格挡" or ("-" .. event.amount), face = paint.face, ink = paint.ink }
+    end
+    arrange(preparing)
     text("Round/Value", string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
+    text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
-    text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0xe49381 or 0xaad3aa)
+    text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x984434 or 0x286452)
     text("Seed", "种子 " .. state.seed)
-    text("OpponentCaption", "对手营地 · " .. styles[state.opponent.style])
+    text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
+    text("OpponentCaption", (preparing and "下一位对手 · " or "对手 · ") .. styles[state.opponent.style])
     for index = 1, rules.team_size do
         local hit = effect and event.slot == index
-        team_card("Enemy" .. index, enemy[index], index, nil, hit and event.side == "enemy" and effect)
+        if not preparing then
+            team_card("Enemy" .. index, enemy[index], index, nil, hit and event.side == "enemy" and effect)
+        end
         team_card("Team" .. index, player[index], index, is_selected("team", index),
             hit and event.side == "player" and effect)
     end
@@ -199,17 +256,18 @@ local function draw(refresh)
     local hint = "选中商品或队员后，再点目标格或操作按钮"
     if preparing then
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
-        text("Shop/Caption", string.format("商店 T%d · %d 金币", state.shop.tier, state.shop.gold))
+        text("Shop/Caption", string.format("河岸市集 · T%d", state.shop.tier))
+        text("Shop/Info", selected_info())
         for index = 1, rules.pet_shop_slots do offer_card("Shop/Pet" .. index, "pet", index) end
         for index = 1, rules.food_shop_slots do offer_card("Shop/Food" .. index, "food", index) end
         offer_card("Shop/Reward", "reward", reward_index)
     else
         local replaying = state.phase == "battle" and event_index < #battle.events
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
-        local accent = replaying and 0xefbd73 or accents[battle.outcome]
+        local accent = replaying and 0x286452 or accents[battle.outcome]
         text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
         control("Battle/Rule").imageColor = colour(accent)
-        control("Battle/Border").imageColor = colour(state.final and accent or 0x46605c)
+        control("Battle/Border").imageColor = colour(state.final and accent or 0x90aa91)
         text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events, battle_event(event)))
         show("Battle/Auto", replaying)
         show("Battle/NewSeed", state.phase == "ended")
@@ -413,11 +471,13 @@ function OnStart()
         if state.phase == "ended" then advance(state.seed % 2147483646 + 1) end
     end)
     bind_button("Primary", function() advance() end)
-    for _, path in ipairs({"Border", "Panel", "Header", "Moon", "MoonShade", "MoonSpark", "Heading", "Seed",
-        "Divider", "TeamCaption", "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule"}) do
+    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Seed", "Field", "Field/Meadow", "Field/Bank",
+        "Field/Water", "Field/Current", "Field/Ripple1", "Field/Ripple2", "Field/Ripple3", "Field/Reed-1A", "Field/Reed-1B",
+        "Field/Reed-1C", "Field/Reed1A", "Field/Reed1B", "Field/Reed1C", "Shop/Paper", "Shop/Rail", "Shop/Rule",
+        "TeamCaption", "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule"}) do
         show(path, true)
     end
-    for _, path in ipairs({"Round", "Wins", "Lives"}) do
+    for _, path in ipairs({"Round", "Money", "Wins", "Lives"}) do
         show(path, true)
         show(path .. "/Surface", true)
         show(path .. "/Label", true)

@@ -96,7 +96,7 @@ function readFrames(file, records) {
     assert.ok(!frame.has(key), `Duplicate frame control: ${name} ${key}`);
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
-  assert.deepEqual([...frames.keys()], ['preparation', 'populated', 'battle_damage', 'victory', 'defeat']);
+  assert.deepEqual([...frames.keys()], ['preparation', 'populated', 'battle_damage', 'battle_full', 'victory', 'defeat']);
   return {
     canvas: canvases.mobile,
     canvases,
@@ -205,7 +205,8 @@ try {
   const extracted = path.join(workspace, embedded.file);
   fs.writeFileSync(extracted, embedded.source);
   const bindings = path.join(workspace, 'control-paths.tsv');
-  fs.writeFileSync(bindings, records.map(({ path: key, kind }) => `${key}\t${kind}`).join('\n') + '\n');
+  fs.writeFileSync(bindings, records.map(record =>
+    [record.path, record.kind, ...record.position, ...record.size].join('\t')).join('\n') + '\n');
   const framesRaw = path.join(workspace, 'frames-runtime.tsv');
   const log = execFileSync(lua, ['-E', fileURLToPath(new URL('./m1-input.lua', import.meta.url)),
     extracted, bindings, String(decodedSeed), framesRaw],

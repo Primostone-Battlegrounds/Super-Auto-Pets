@@ -1,83 +1,84 @@
 const plane = 100001;
 const disc = 106025;
 const portraitLayers = 16;
-const palette = {
-  frame: '#46605c', ink: '#15292d', inset: '#1b3337', line: '#3b5553',
-  night: '#203a3e', opponent: '#344143', parchment: '#eedcaa', paperEdge: '#b99153',
-  light: '#f8e9c9', muted: '#c4d2bd', paperInk: '#392e24', paperMuted: '#5d4b37',
-  gold: '#efbd73', mint: '#aad3aa', action: '#345455', primary: '#507754',
+const pigment = {
+  edge: '#90aa91', canvas: '#e3ead3', ink: '#203c34', muted: '#476354', cream: '#f8efd7',
+  land: '#b8c9a6', water: '#a4c8b7', river: '#8bb9ae', whiteWater: '#d9ebd7',
+  sand: '#eee1bc', sandLine: '#d2ba86', chip: '#f4f0db', primary: '#286452',
+  player: '#8da982', enemy: '#b2a584', market: '#e7d4a5', gold: '#a66c27', ice: '#406f82',
 };
 
 function image(name, position, size, colour, options = {}) {
   return { name, kind: 'image', position, size, image: plane, colour, ...options };
 }
 
-function label(name, position, size, content = '', fontSize = 20, colour = palette.light, align = 'centre') {
+function ellipse(name, position, size, colour, options = {}) {
+  return image(name, position, size, colour, { image: disc, ...options });
+}
+
+function label(name, position, size, content = '', fontSize = 20, colour = pigment.ink, align = 'centre') {
   return {
     name, kind: 'text', position, size,
     text: { content, fontSize, colour, align, valign: 'middle', outline: false },
   };
 }
 
-function group(name, position, size, children) {
-  return { name, kind: 'container', position, size, children };
+function group(name, position, size, children, visible = true) {
+  return { name, kind: 'container', position, size, children, visible };
 }
 
-function portrait(x, paper) {
-  return group('Portrait', [x, 5], [56, 56], [
-    image('Medallion', [0, 0], [53, 53], paper ? '#d5b77c' : '#355254', { image: disc }),
-    ...Array.from({ length: portraitLayers }, (_, index) =>
-      image(`Layer${index + 1}`, [0, 0], [1, 1], palette.light, { visible: false })),
-  ]);
+function portrait() {
+  const layers = Array.from({ length: portraitLayers }, (_, index) =>
+    image(`Layer${index + 1}`, [0, 0], [1, 1], pigment.cream, { visible: false }));
+  return group('Portrait', [0, 27], [78, 78], layers);
 }
 
-function card(name, position, width, type, interactive = true) {
-  const size = [width, 86];
-  const paper = type === 'parchment';
-  const portraitX = -width / 2 + 34;
+function card(name, position, width, type, interactive = true, visible = true) {
+  const size = [width, 154];
+  const market = type === 'market';
   const children = [
-    image('Rim', [0, 0], size, paper ? palette.paperEdge : palette.line),
-    image('Face', [0, 0], [width - 4, 82], palette[type]),
-    portrait(portraitX, paper),
-    label('Name', [27, 15], [width - 66, 27], '', paper ? 17 : 20, paper ? palette.paperInk : palette.light),
-    label('Detail', [27, -11], [width - 66, 23], '', 15, paper ? palette.paperMuted : palette.muted),
-    label('Tag', [portraitX, -30], [58, 17], '', 12, paper ? palette.paperInk : palette.gold),
+    ellipse('Rim', [0, -6], [94, 32], pigment.edge),
+    ellipse('Face', [0, -3], [88, 24], pigment[type]),
+    portrait(),
+    label('Name', [0, -24], [width - 4, 24], '', market ? 19 : 17),
+    label('Detail', [0, -47], [width - 4, 20], '', 15, pigment.muted),
+    label('Tag', [0, market ? -64 : 69], [width - 4, market ? 15 : 16], '', 12, market ? pigment.ice : pigment.gold),
   ];
-  if (paper) {
-    children.push(image('Frozen', [27, -32], [width - 76, 4], '#458c99', { visible: false }));
+  if (market) {
+    children.push(image('Frozen', [0, 71], [86, 3], pigment.ice, { visible: false }));
   } else {
     children.push(
-      image('HealthTrack', [27, -32], [width - 76, 4], '#101e22', { visible: false }),
-      image('Health', [27, -32], [width - 76, 4], palette.mint, { visible: false }),
+      image('HealthTrack', [0, -61], [88, 4], '#d5dfc4', { visible: false }),
+      image('Health', [0, -61], [88, 4], '#448269', { visible: false }),
     );
   }
   if (interactive) {
     children.push(
-      image('Selected', [0, -41], [width - 4, 4], paper ? '#bc7936' : palette.gold, { visible: false }),
+      image('Selected', [0, -74], [86, 3], pigment.gold, { visible: false }),
       { name: 'Hit', kind: 'cursorArea', size },
     );
   }
-  return group(name, position, size, children);
+  return group(name, position, size, children, visible);
 }
 
-function button(name, position, size, title, tint = palette.action) {
+function button(name, position, size, title, primary = false) {
   return group(name, position, size, [
-    image('Rim', [0, 0], size, palette.frame),
-    image('Face', [0, 0], [size[0] - 4, size[1] - 4], tint),
-    label('Title', [0, 0], size, title, tint === palette.primary ? 24 : 17),
+    ellipse('Rim', [0, 0], size, primary ? '#1e4f43' : pigment.edge),
+    ellipse('Face', [0, 0], [size[0] - 5, size[1] - 5], primary ? pigment.primary : pigment.chip),
+    label('Title', [0, 0], [size[0] - 20, size[1] - 12], title, primary ? 23 : 17, primary ? pigment.cream : pigment.ink),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
 }
 
-function stat(name, x, title, tint) {
-  return group(name, [x, 274], [144, 64], [
-    image('Surface', [0, 0], [144, 64], palette.inset),
-    label('Label', [0, 15], [140, 22], title, 15, palette.muted),
-    label('Value', [0, -11], [140, 30], '', 22, tint),
+function stat(name, x, title) {
+  return group(name, [x, 281], [152, 65], [
+    image('Surface', [0, 0], [152, 65], pigment.chip),
+    label('Label', [0, 14], [148, 22], title, 15, pigment.muted),
+    label('Value', [0, -11], [148, 28], '', 21),
   ]);
 }
 
-const positions = [-440, -220, 0, 220, 440];
+const slots = [1, 2, 3, 4, 5];
 const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
 const actions = [
   ['Buy', '购买'], ['Freeze', '冻结 / 解冻'], ['Sell', '出售'], ['Merge', '合并队员'],
@@ -90,39 +91,56 @@ export const nativeRun = {
   showCursor: true,
   blockCursor: true,
   controls: [
-    image('Border', [0, 0], [1146, 668], palette.frame),
-    image('Panel', [0, 0], [1138, 660], palette.ink),
-    image('Header', [0, 268], [1116, 106], '#213a3b'),
-    image('Moon', [-503, 274], [57, 57], palette.gold, { image: disc }),
-    image('MoonShade', [-489, 283], [46, 46], '#213a3b', { image: disc }),
-    image('MoonSpark', [-476, 252], [7, 7], palette.gold, { image: disc }),
-    label('Heading', [-246, 283], [426, 57], '小动物自走棋', 38, palette.light, 'left'),
-    label('Seed', [-246, 245], [426, 25], '', 17, palette.muted, 'left'),
-    stat('Round', 133, '行程', palette.light),
-    stat('Wins', 289, '胜场', palette.gold),
-    stat('Lives', 445, '生命', palette.mint),
-    image('Divider', [0, 217], [1078, 2], palette.line),
-    label('OpponentCaption', [-260, 198], [552, 25], '', 19, palette.muted, 'left'),
-    ...positions.map((x, index) => card(`Enemy${index + 1}`, [x, 140], 206, 'opponent', false)),
-    label('TeamCaption', [-260, 78], [552, 25], '营地小队 · 左侧为前排', 19, palette.muted, 'left'),
-    ...positions.map((x, index) => card(`Team${index + 1}`, [x, 20], 206, 'night')),
-    group('Shop', [0, -112], [1090, 220], [
-      label('Caption', [-260, 61], [552, 28], '', 22, palette.gold, 'left'),
-      ...offers.map((name, index) => card(name, [-450 + index * 180, 0], 166, 'parchment')),
-      ...actions.map(([name, title], index) => button(name, [-450 + index * 180, -85], [166, 48], title)),
+    image('Border', [0, 0], [1202, 684], pigment.edge),
+    image('Panel', [0, 0], [1194, 676], pigment.canvas),
+    image('Header', [0, 280], [1172, 98], pigment.cream),
+    label('Heading', [-373, 291], [374, 46], '小动物自走棋', 35, pigment.ink, 'left'),
+    label('Seed', [-373, 257], [374, 24], '', 16, pigment.muted, 'left'),
+    stat('Round', -105, '回合'),
+    stat('Money', 69, '金币'),
+    stat('Wins', 243, '胜场'),
+    stat('Lives', 417, '生命'),
+    group('Field', [0, 119], [1172, 218], [
+      image('Meadow', [0, 0], [1172, 218], pigment.land),
+      ellipse('Bank', [0, -11], [1072, 172], '#cdd8b4'),
+      ellipse('Water', [11, -54], [1114, 93], pigment.water),
+      ellipse('Current', [74, -72], [902, 54], pigment.river),
+      ellipse('Ripple1', [-384, -80], [157, 5], pigment.whiteWater),
+      ellipse('Ripple2', [401, -78], [127, 6], pigment.whiteWater),
+      ellipse('Ripple3', [91, -92], [198, 4], pigment.whiteWater),
+      ellipse('PrepRail', [0, -49], [878, 45], '#e5e5bf'),
+      ellipse('Clash', [0, 4], [48, 12], pigment.whiteWater, { visible: false }),
+      ...[-1, 1].flatMap(sign => [
+        ellipse(`Reed${sign}A`, [sign * 548, -27], [7, 30], '#637e62'),
+        ellipse(`Reed${sign}B`, [sign * 533, -38], [9, 44], '#829c6c'),
+        ellipse(`Reed${sign}C`, [sign * 564, -41], [8, 42], '#718e65'),
+      ]),
     ]),
-    { ...group('Battle', [0, -131], [1090, 196], [
-      image('Border', [0, 0], [1090, 196], palette.frame),
-      image('Surface', [0, 0], [1082, 188], palette.inset),
-      image('Rule', [-448, 51], [4, 51], palette.gold),
-      label('Outcome', [33, 50], [930, 51], '', 32, palette.gold, 'left'),
-      label('Event', [33, -4], [930, 42], '', 21, palette.light, 'left'),
-      button('Replay', [-308, -62], [224, 47], '下一条战斗事件'),
-      button('Auto', [-64, -62], [224, 47], '暂停回放'),
-      button('NewSeed', [180, -62], [224, 47], '新一局'),
-    ]), visible: false },
-    image('FooterLine', [0, -237], [1078, 2], palette.line),
-    button('Primary', [379, -281], [320, 60], '开战', palette.primary),
-    label('Hint', [-191, -281], [670, 53], '', 19, palette.muted, 'left'),
+    label('TeamCaption', [-309, 208], [521, 25], '', 19, pigment.ink, 'left'),
+    label('OpponentCaption', [309, 208], [521, 25], '', 19, pigment.ink, 'right'),
+    ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
+    ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
+    group('Shop', [0, -117], [1164, 254], [
+      image('Paper', [0, 0], [1164, 254], pigment.cream),
+      image('Rail', [0, -7], [1128, 164], pigment.sand),
+      image('Rule', [0, 76], [1128, 2], pigment.sandLine),
+      label('Caption', [-305, 99], [518, 28], '', 24, pigment.ink, 'left'),
+      label('Info', [155, 99], [800, 25], '', 17, pigment.muted, 'right'),
+      ...offers.map((name, index) => card(name, [-465 + index * 186, -7], 174, 'market')),
+      ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -105], [172, 40], title)),
+    ]),
+    group('Battle', [0, -143], [1164, 204], [
+      image('Border', [0, 0], [1164, 204], pigment.edge),
+      image('Surface', [0, 0], [1156, 196], pigment.cream),
+      image('Rule', [-520, 51], [5, 47], pigment.gold),
+      label('Outcome', [11, 52], [1004, 49], '', 32, pigment.ink, 'left'),
+      label('Event', [11, -1], [1004, 39], '', 21, pigment.ink, 'left'),
+      button('Replay', [-401, -60], [233, 44], '下一条战斗事件'),
+      button('Auto', [-143, -60], [233, 44], '暂停回放'),
+      button('NewSeed', [115, -60], [233, 44], '新一局'),
+    ], false),
+    image('FooterLine', [0, -254], [1152, 2], pigment.edge),
+    button('Primary', [411, -293], [329, 58], '开战', true),
+    label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
   ],
 };

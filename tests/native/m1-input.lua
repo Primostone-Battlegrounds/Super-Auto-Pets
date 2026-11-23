@@ -4,6 +4,7 @@ local nodes, logs = {}, {}
 local cursor_click = "CursorClick"
 local capture_file = assert(io.open(arg[4], "w"))
 local ticking, image_writes = false, 0
+local full_formation_captured = false
 
 local node_methods = {}
 function node_methods:SetActive(value) self.active = value end
@@ -26,10 +27,11 @@ function node_methods:RemoveCursorEventListener(event, callback)
 end
 
 for line in io.lines(bindings_path) do
-    local path, kind = line:match("^([^\t]+)\t(%S+)$")
+    local path, kind, x, y, width, height = line:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)$")
     assert(path and not nodes[path], "invalid control path " .. line)
     local parent = path:match("^(.*)/[^/]+$")
-    nodes[path] = setmetatable({ kind = kind, alive = true, parent = parent and assert(nodes[parent]) },
+    nodes[path] = setmetatable({ kind = kind, alive = true, parent = parent and assert(nodes[parent]),
+        x = assert(tonumber(x)), y = assert(tonumber(y)), width = assert(tonumber(width)), height = assert(tonumber(height)) },
         { __index = node_methods })
 end
 
@@ -115,13 +117,47 @@ local function shop(action, first, second)
 end
 
 local outcomes = { win = "胜利", draw = "平局", loss = "落败" }
-local function event_card(tag)
+local function event_card(pattern)
     for _, team in ipairs({"Team", "Enemy"}) do
         for slot = 1, 5 do
             local path = team .. slot
-            if label(path .. "/Tag") == tag then return path end
+            if label(path .. "/Tag"):match(pattern) then return path end
         end
     end
+end
+
+local function inward_formation()
+    assert(nodes.Team1.x + nodes.Team1.width / 2 < nodes.Enemy1.x - nodes.Enemy1.width / 2)
+    for slot = 2, 5 do
+        local ally, front_ally = nodes["Team" .. slot], nodes["Team" .. (slot - 1)]
+        local enemy, front_enemy = nodes["Enemy" .. slot], nodes["Enemy" .. (slot - 1)]
+        assert(ally.x + ally.width / 2 < front_ally.x - front_ally.width / 2)
+        assert(enemy.x - enemy.width / 2 > front_enemy.x + front_enemy.width / 2)
+    end
+end
+
+local function mirrored_portrait()
+    for ally = 1, 5 do
+        for enemy = 1, 5 do
+            local left, right = "Team" .. ally, "Enemy" .. enemy
+            if label(left .. "/Name") == label(right .. "/Name") and nodes[left .. "/Portrait/Layer1"].visible then
+                assert(nodes[left .. "/Name"].x == nodes[right .. "/Name"].x)
+                local asymmetry = false
+                for layer = 1, 16 do
+                    local key = "/Portrait/Layer" .. layer
+                    local a, b = nodes[left .. key], nodes[right .. key]
+                    assert(a.visible == b.visible)
+                    if a.visible then
+                        assert(a.image == b.image and a.imageColor == b.imageColor and a.width == b.width and a.height == b.height)
+                        assert(a.x == -b.x and a.y == b.y)
+                        if a.x ~= 0 then asymmetry = true end
+                    end
+                end
+                if asymmetry then return end
+            end
+        end
+    end
+    error("no matching opposing portraits to verify mirror")
 end
 
 local function finish(outcome, terminal, inspect_playback)
@@ -129,8 +165,14 @@ local function finish(outcome, terminal, inspect_playback)
     assert(label("Primary/Title") == "跳过回放" and ticking)
     assert(not nodes.Shop.active and nodes.Battle.active)
     assert(label("Battle/Outcome") == "战斗回放")
+    inward_formation()
+    if not full_formation_captured and nodes["Team5/Portrait/Layer1"].visible and nodes["Enemy5/Portrait/Layer1"].visible then
+        full_formation_captured = true
+        capture("battle_full")
+    end
     local first_event = label("Battle/Event")
     if inspect_playback then
+        mirrored_portrait()
         click("Battle/Auto")
         assert(not ticking)
         local stable_writes = image_writes
@@ -140,26 +182,31 @@ local function finish(outcome, terminal, inspect_playback)
         assert(label("Battle/Event") ~= first_event and not ticking)
         click("Battle/Auto")
         assert(ticking)
-        local saw_damage, saw_attack, saw_summon
+        local saw_damage, saw_attack, saw_block, saw_summon
         for _ = 1, 160 do
             sandbox.OnUpdate(0.6)
             if not ticking then break end
-            local hit = event_card("失血")
+            local hit = event_card("^%-%d+$")
             if hit and not saw_damage then
                 local bar = nodes[hit .. "/Health"]
-                assert(not bar.visible or bar.width < 130)
-                assert(label("Battle/Event"):find("受到伤害", 1, true))
+                assert(not bar.visible or bar.width < nodes[hit .. "/HealthTrack"].width)
+                local damage = assert(label("Battle/Event"):match("受到伤害 (%d+)"))
+                assert(label(hit .. "/Tag") == "-" .. damage)
                 capture("battle_damage")
                 saw_damage = true
             end
-            if event_card("出击") then saw_attack = true end
-            local summoned = event_card("入场")
+            if event_card("^出击$") then saw_attack = true end
+            if event_card("^格挡$") then
+                assert(label("Battle/Event"):find("护盾抵消", 1, true))
+                saw_block = true
+            end
+            local summoned = event_card("^入场$")
             if summoned then
                 assert(nodes[summoned .. "/Portrait/Layer1"].visible)
                 saw_summon = true
             end
         end
-        assert(saw_damage and saw_attack and saw_summon and not ticking)
+        assert(saw_damage and saw_attack and saw_block and saw_summon and not ticking)
     else
         click("Battle/Replay")
         assert(label("Battle/Event") ~= first_event and not ticking)
@@ -182,7 +229,10 @@ end
 local function opening(expected_seed)
     assert(label("Round/Value") == "第 1 轮 · 准备")
     assert(label("Seed"):find("种子 " .. expected_seed, 1, true))
-    assert(label("Shop/Caption"):find("10 金币", 1, true))
+    assert(label("Money/Value") == "10")
+    assert(label("TeamCaption"):find("右侧为前排", 1, true))
+    assert(nodes.Team1.x > nodes.Team5.x and nodes.Team5.y == nodes.Team1.y)
+    for index = 1, 5 do assert(nodes["Enemy" .. index].active == false) end
     assert(label("Team1/Name") == "空位 1")
     assert(label("Primary/Title") == "开战")
 end
@@ -197,12 +247,15 @@ shop("buy", 2, 1)
 assert(label("Team1/Name") == "芦纹龟")
 shop("move", 2, 1)
 assert(label("Team1/Name") == "灯囊蛾")
-shop("feed", 1, 2)
+click("Shop/Food1")
+assert(label("Shop/Info"):find("一名队员获得", 1, true))
+click("Team2")
 shop("freeze", 3)
 assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].active)
 shop("reroll")
 click("Shop/Pet3")
 assert(nodes["Shop/Pet3/Selected"].active and nodes["Team1/Portrait/Layer1"].active)
+assert(label("Shop/Info"):find("幼蛾破茧", 1, true))
 capture("populated")
 finish("win", false, true)
 assert(label("Shop/Pet3/Tag") == "已冻结")
@@ -222,6 +275,7 @@ for round = 3, 11 do
     finish(round == 7 and "draw" or "win", round == 11)
 end
 assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=11 wins=10 lives=5 final=win seed=7")
+assert(full_formation_captured)
 capture("victory")
 click("Primary")
 opening(seed)

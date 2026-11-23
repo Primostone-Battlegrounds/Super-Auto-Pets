@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 01:32'
-updated_date: '2026-11-23 01:44'
+updated_date: '2026-11-23 01:52'
 labels: []
 milestone: m-1
 dependencies:
@@ -49,7 +49,8 @@ M1。回读 GIL 并模拟点击跑通 10 胜、0 命及重开，核对实际界�
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-- 当前检查点已接入 18 幅分层原创图标、角色生命上限、攻击与受击及召唤事件、自动/单步/跳过回放，以及同种子和新种子重开。
-- 隔离原生 GIL 回读和 Lua 5.3.6 模拟通过。种子 7 第 11 轮十胜、第 5 轮零命，第 7 轮平局，重开种子 7 和新开种子 8 均通过。测试覆盖 PC 与移动画布边界，输出 5 帧 `/workspace/work/native-validation/m1-run-bpgJRA/frames.json`。
-- 用户评审提出构图朝向与整体视觉需迭代，验收保持未完成。
+- 按用户反馈调整为浅色河岸场景。准备阶段将五格阵容放在独立市集上方，右侧为前排。交战时双方沿两岸面对中心，镜像只作用于对方肖像，攻命标签保持正常。顶部集中金币、回合、胜场与生命，选中时可查实际技能与食物效果。
+- 以固定 MCP 和隔离夹具完成 GIL 回读。候选 SHA-256 `65fa887438988fe71e38e3c0fecf5f90cf508b20a0459f8edcf0bf7c7b23004e`，474,313 字节，519 个控件，零诊断。`verify-m1.mjs` 校验 1600×900 与 1280×720、全五对五站位、镜像、遮挡与受伤数值。
+- Lua 5.3.6 模拟通过自动与单步回放、跳过、护盾格挡与召唤、第 11 轮十胜、第 5 轮零命、第 7 轮平局、原种子 7 重开及新种子 8。`sh scripts/check.sh` 也通过。
+- 六阶段离线渲染数据位于 `/workspace/work/native-validation/m1-run-xlJyjb/frames.json`。独立图像审阅结果待主代理记录，PC 与移动官方客户端仍分别由 TASK-3 / TASK-8 跟进。
 <!-- SECTION:NOTES:END -->
