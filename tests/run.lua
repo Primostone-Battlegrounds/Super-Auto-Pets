@@ -41,7 +41,10 @@ local function finish_round(game, outcome)
     assert(replay.battle.outcome == expected.outcome)
     assert_same(replay.battle.events, expected.events, "submitted battle against the prepared local opponent")
     assert(replay.wins == before.wins and replay.lives == before.lives)
+    assert(before.shop.phase == "preparation" and replay.shop.phase == "battle")
+    before.shop.phase = "battle"
     assert_same(replay.shop, before.shop)
+    before.shop.phase = "preparation"
     assert_same(replay.opponent, before.opponent)
     reject(game, "wrong_phase", "submit")
     reject(game, "wrong_phase", "advance")
@@ -54,6 +57,8 @@ local function finish_round(game, outcome)
     assert(settled.lives == before.lives - (outcome == "loss" and 1 or 0))
     assert(settled.round == before.round)
     assert_same(settled.battle, replay.battle)
+    assert(settled.shop.phase == "settlement" and settled.shop.last_outcome == outcome)
+    assert_same(settled.shop.team, before.shop.team, "settlement retains persistent stats")
     reject(game, "wrong_phase", "settle")
     if settled.phase == "settlement" then
         reject(game, "wrong_phase", "restart", 7)
@@ -61,6 +66,7 @@ local function finish_round(game, outcome)
         local prepared = game:snapshot()
         assert(prepared.phase == "preparation" and prepared.round == settled.round + 1)
         assert(prepared.shop.gold == rules.gold_per_round)
+        assert(prepared.shop.phase == "preparation" and prepared.shop.last_outcome == outcome)
         assert(prepared.wins == settled.wins and prepared.lives == settled.lives and not prepared.battle)
         assert_same(prepared.shop.team, settled.shop.team)
     else
@@ -194,5 +200,14 @@ reject(sold_last, "empty_team", "submit")
 assert(sold_last:restart())
 assert_same(sold_last:snapshot(), opening, "new attempt after selling the last pet")
 assert(sold_last:shop_action("buy", 1))
+
+local exhausted = run.new(seed)
+assert(exhausted:shop_action("buy", 1))
+exhausted.shop.team[1].health = math.maxinteger
+exhausted.opponent.team[1].health = math.maxinteger
+local prior_rng = exhausted.battle_random.state
+reject(exhausted, "strike_limit", "submit")
+assert(exhausted.battle_random.state == prior_rng)
+assert(exhausted:shop_action("reroll"), "an exhausted battle must reopen the shop without scoring")
 
 print("run tests passed (10 wins, 0 lives, draw, local AI, restart, stalled prep recovery, deterministic replay)")

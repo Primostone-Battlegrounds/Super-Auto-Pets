@@ -8,17 +8,6 @@ local rules = data.rules
 local run = {}
 run.__index = run
 
-local shop_actions = {
-    buy = shop.buy,
-    combine = shop.combine,
-    sell = shop.sell,
-    move = shop.move,
-    merge = shop.merge,
-    feed = shop.feed,
-    freeze = shop.freeze,
-    reroll = shop.reroll,
-}
-
 local function copy(value)
     if type(value) ~= "table" then
         return value
@@ -73,24 +62,25 @@ function run:shop_action(name, ...)
     if self.phase ~= "preparation" then
         return nil, "wrong_phase"
     end
-    local action = shop_actions[name]
-    if not action then
-        return nil, "unknown_action"
-    end
-    return action(self.shop, ...)
+    return self.shop:apply_action(name, ...)
 end
 
 function run:submit()
     if self.phase ~= "preparation" then
         return nil, "wrong_phase"
     end
-    local player = self.shop:snapshot().team
-    if #player == 0 then
+    if #self.shop:snapshot().team == 0 then
         return nil, "empty_team"
     end
+    local player = assert(self.shop:finish_turn())
+    local prior_rng = self.battle_random.state
     local seed = self.battle_random:next()
     local result = battle.resolve(player, self.opponent.team, seed)
-    result.seed = seed
+    if result.status == "strike_limit" then
+        assert(self.shop:abort_turn(result, "player"))
+        self.battle_random.state = prior_rng
+        return nil, result.status
+    end
     result.round = self.shop.round
     self.battle = result
     self.phase = "battle"
@@ -100,6 +90,10 @@ end
 function run:settle()
     if self.phase ~= "battle" then
         return nil, "wrong_phase"
+    end
+    local ok, error_code = self.shop:record_battle(self.battle, "player")
+    if not ok then
+        return nil, error_code
     end
     local outcome = self.battle.outcome
     if outcome == "win" then
@@ -120,7 +114,10 @@ function run:advance()
     if self.phase ~= "settlement" then
         return nil, "wrong_phase"
     end
-    self.shop:advance_round()
+    local ok, error_code = self.shop:advance_round()
+    if not ok then
+        return nil, error_code
+    end
     prepare(self)
     return true
 end

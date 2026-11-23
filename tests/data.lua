@@ -82,4 +82,6 @@ assert(first:int(3, 3) == 3)
 assert(not pcall(first.int, first, 2, 1))
 assert(not pcall(first.int, first, -2147483646, 2147483646))
 
+assert(data.rules_hash:match("^sha256:%x+$") and #data.rules_hash == 71)
+
 print("data tests passed")

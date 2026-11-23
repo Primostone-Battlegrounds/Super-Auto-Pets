@@ -1,3 +1,4 @@
+local battle_receipt = require("autopets.battle_receipt")
 local data = require("autopets.data")
 local rng = require("autopets.rng")
 
@@ -42,9 +43,20 @@ local function refresh_shop(self)
     refresh(self.foods, rules.food_shop_slots, data.foods_for_tier(self.tier), self.random)
 end
 
+local function open_round(self)
+    self.round = self.round + 1
+    self.tier = data.tier_for_round(self.round)
+    self.gold = rules.gold_per_round
+    self.rewards = {}
+    refresh_shop(self)
+    self.phase = "preparation"
+end
+
 function shop.new(seed)
-    local self = setmetatable({round = 0, team = {}, pets = {}, foods = {}, random = rng.new(seed)}, shop)
-    self:advance_round()
+    local self = setmetatable({
+        round = 0, team = {}, pets = {}, foods = {}, random = rng.new(seed), next_uid = 1,
+    }, shop)
+    open_round(self)
     return self
 end
 
@@ -57,15 +69,66 @@ function shop:snapshot()
         pets = copy_items(self.pets),
         foods = copy_items(self.foods),
         rewards = copy_items(self.rewards),
+        phase = self.phase,
+        last_outcome = self.last_outcome,
+        rng_state = self.random.state,
+        next_uid = self.next_uid,
     }
 end
 
+function shop:finish_turn()
+    if self.phase ~= "preparation" then
+        return nil, "wrong_phase"
+    end
+    self.closed_team = copy_items(self.team)
+    self.phase = "battle"
+    return self.closed_team
+end
+
+local function check_battle(self, result, side)
+    if self.phase ~= "battle" then
+        return nil, "wrong_phase"
+    end
+    return battle_receipt.check(result, side, self.closed_team, self.team)
+end
+
+function shop:record_battle(result, side)
+    local receipt, error_code = check_battle(self, result, side)
+    if not receipt then
+        return nil, error_code
+    end
+    if receipt.status ~= "resolved" then
+        return nil, receipt.status
+    end
+    local outcome = receipt.outcome
+    if side == "enemy" and outcome ~= "draw" then
+        outcome = outcome == "win" and "loss" or "win"
+    end
+    self.last_outcome = outcome
+    self.closed_team = nil
+    self.phase = "settlement"
+    return true
+end
+
+function shop:abort_turn(result, side)
+    local receipt, error_code = check_battle(self, result, side)
+    if not receipt then
+        return nil, error_code
+    end
+    if receipt.status ~= "strike_limit" then
+        return nil, "resolved_battle"
+    end
+    self.closed_team = nil
+    self.phase = "preparation"
+    return true
+end
+
 function shop:advance_round()
-    self.round = self.round + 1
-    self.tier = data.tier_for_round(self.round)
-    self.gold = rules.gold_per_round
-    self.rewards = {}
-    refresh_shop(self)
+    if self.phase ~= "settlement" then
+        return nil, "wrong_phase"
+    end
+    open_round(self)
+    return true
 end
 
 local function has_open_slot(shelf)
@@ -77,7 +140,7 @@ local function has_open_slot(shelf)
     return false
 end
 
-function shop:reroll()
+local function reroll(self)
     if self.gold < rules.reroll_cost then
         return nil, "insufficient_gold"
     end
@@ -89,7 +152,7 @@ function shop:reroll()
     return true
 end
 
-function shop:freeze(kind, position)
+local function freeze(self, kind, position, frozen)
     local shelves = {pet = self.pets, food = self.foods}
     local shelf = shelves[kind]
     if not shelf then
@@ -98,7 +161,10 @@ function shop:freeze(kind, position)
     if not valid_position(position, #shelf) or not shelf[position] then
         return nil, "missing_offer"
     end
-    shelf[position].frozen = not shelf[position].frozen
+    if frozen == nil then
+        frozen = not shelf[position].frozen
+    end
+    shelf[position].frozen = frozen
     return true
 end
 
@@ -110,7 +176,7 @@ local function remove_offer(shelf, position, reward)
     end
 end
 
-function shop:buy(offer_position, team_position, reward)
+local function buy(self, offer_position, team_position, reward)
     local shelf = reward and self.rewards or self.pets
     if not valid_position(offer_position, #shelf) or not shelf[offer_position] then
         return nil, "missing_offer"
@@ -130,14 +196,16 @@ function shop:buy(offer_position, team_position, reward)
     end
     local definition = data.pet_by_id[shelf[offer_position].id]
     table.insert(self.team, position, {
-        id = definition.id, attack = definition.attack, health = definition.health, level = 1, xp = 0,
+        id = definition.id, uid = self.next_uid,
+        attack = definition.attack, health = definition.health, level = 1, xp = 0,
     })
+    self.next_uid = self.next_uid + 1
     remove_offer(shelf, offer_position, reward)
     self.gold = self.gold - rules.pet_cost
     return true
 end
 
-function shop:sell(position)
+local function sell(self, position)
     if not valid_position(position, #self.team) then
         return nil, "invalid_position"
     end
@@ -146,7 +214,7 @@ function shop:sell(position)
     return true
 end
 
-function shop:move(from, to)
+local function move(self, from, to)
     if not valid_position(from, #self.team) or not valid_position(to, #self.team) then
         return nil, "invalid_position"
     end
@@ -176,7 +244,7 @@ local function grow(self, source, target)
     end
 end
 
-function shop:merge(from, to)
+local function merge(self, from, to)
     if not valid_position(from, #self.team) or not valid_position(to, #self.team) then
         return nil, "invalid_position"
     end
@@ -193,7 +261,7 @@ function shop:merge(from, to)
     return true
 end
 
-function shop:combine(offer_position, target_position, reward)
+local function combine(self, offer_position, target_position, reward)
     local shelf = reward and self.rewards or self.pets
     if not valid_position(offer_position, #shelf) or not shelf[offer_position] then
         return nil, "missing_offer"
@@ -216,7 +284,7 @@ function shop:combine(offer_position, target_position, reward)
     return true
 end
 
-function shop:feed(offer_position, target_position)
+local function feed(self, offer_position, target_position)
     if not valid_position(offer_position, #self.foods) or not self.foods[offer_position] then
         return nil, "missing_offer"
     end
@@ -233,6 +301,59 @@ function shop:feed(offer_position, target_position)
     self.foods[offer_position] = false
     self.gold = self.gold - rules.food_cost
     return true
+end
+
+local commands = {
+    buy = {execute = buy, fields = {"offer", "target", "reward"}},
+    combine = {execute = combine, fields = {"offer", "target", "reward"}},
+    sell = {execute = sell, fields = {"target"}},
+    move = {execute = move, fields = {"from", "to"}},
+    merge = {execute = merge, fields = {"from", "to"}},
+    feed = {execute = feed, fields = {"offer", "target"}},
+    freeze = {execute = freeze, fields = {"kind", "offer", "frozen"}},
+    reroll = {execute = reroll, fields = {}},
+}
+
+function shop:apply(command)
+    if self.phase ~= "preparation" then
+        return nil, "wrong_phase"
+    end
+    if type(command) ~= "table" then
+        return nil, "invalid_command"
+    end
+    local spec = commands[command.action]
+    if not spec then
+        return nil, "unknown_action"
+    end
+    if command.reward ~= nil and type(command.reward) ~= "boolean"
+        or command.frozen ~= nil and type(command.frozen) ~= "boolean" then
+        return nil, "invalid_command"
+    end
+
+    local args = {}
+    for index, field in ipairs(spec.fields) do
+        args[index] = command[field]
+    end
+    return spec.execute(self, table.unpack(args, 1, #spec.fields))
+end
+
+function shop:apply_action(action, ...)
+    local spec = commands[action]
+    if not spec then
+        return nil, "unknown_action"
+    end
+    local values = {...}
+    local command = {action = action}
+    for index, field in ipairs(spec.fields) do
+        command[field] = values[index]
+    end
+    return self:apply(command)
+end
+
+for action in pairs(commands) do
+    shop[action] = function(self, ...)
+        return self:apply_action(action, ...)
+    end
 end
 
 return shop

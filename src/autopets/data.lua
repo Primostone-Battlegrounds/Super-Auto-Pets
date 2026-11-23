@@ -1,4 +1,5 @@
 local data = {}
+data.rules_hash = "sha256:4dfd7f4e40c4ec02412a6aea86e571646cc99ff0d02fddc2228e1230f8c68317"
 
 data.rules = {
     team_size = 5,
