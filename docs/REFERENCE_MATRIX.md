@@ -18,3 +18,15 @@
 | 里程碑版本 | G0 临时开发标识为 0.0.1-alpha.0；项目权威表的正式版本待读取 | 以项目权威表为准，访问仍受阻。[项目产品定义](PRODUCT.md) |
 
 随机模块接受任意 Lua 5.4 有符号整数种子。零以及模数的倍数映射到状态 1。`next()` 返回 1 至 2147483646。`int(low, high)` 在含两端的整数范围内采样，范围内最多容纳 2147483646 个值，两端须落在 -2147483646 至 2147483646 之间。
+
+## 玩法源码核对
+
+| 候选 | 授权与移植评估 |
+| --- | --- |
+| Team Wood Games 原版 | 官方资料用于核对 Arena 和 Standard pack 定义。本轮未找到开发者公开授权的原版玩法源码。[开发者页面](https://teamwoodgames.com/super-auto-pets/) [Steam 商店说明](https://store.steampowered.com/app/1714040/Super_Auto_Pets/) |
+| `sapai` 社区模拟器 | MIT 许可。固定版本为 2023 年的 Python 包，包含原版内容数据和社区模拟测试。引擎与目录依赖 Python 和原版数据模型，直接移植需要重写接口与内容。[源码与授权](https://github.com/manny405/sapai/tree/3850d25b1646aa9f8696306c6b8df2a2f7b6aecd) |
+| `auto-auto-battler` 社区模拟器 | GPL-3.0，面向原版模拟与训练。当前无 Lua 移植，未引入代码或原版内容。[源码与授权](https://github.com/hellbound22/auto-auto-battler) |
+| `auto-magical-animal` | 同类名称的 Go/Ebiten 守屋游戏。所查版本根目录无许可文件，机制与本项目的回合商店和五格战斗不同。[源码](https://github.com/Amovement/auto-magical-animal/tree/4eb4b3b35a6f6d11c171f2469bf66ba5289359f1) |
+| `roguelite-core` | MIT 许可、内容可替换的 TypeScript 自动交战库。其关卡图、属性克制和对战规则不符合本项目的 Lua 五格交战模型。[源码与授权](https://github.com/tiagomaciels/roguelite-core/tree/65d68588c6f8576540fed7589fc6baa8ffa54e3f) |
+
+本项目的 Lua 玩法代码沿用本仓库的原创规则与数据。工具链单独复用已固定版本的社区千星 MCP。
