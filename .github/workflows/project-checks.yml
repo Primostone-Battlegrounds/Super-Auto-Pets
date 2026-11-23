@@ -1,0 +1,29 @@
+name: Project verification
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Project checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Lua and Backlog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+          npm install --prefix "$RUNNER_TEMP/backlog-tools" --no-audit --no-fund backlog.md@1.53.0
+          echo "$RUNNER_TEMP/backlog-tools/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Check project
+        env:
+          LUA: lua5.4
+        run: sh scripts/check.sh
