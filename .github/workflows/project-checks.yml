@@ -17,13 +17,23 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
       - name: Install Lua and Backlog
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.4
+          sudo apt-get install -y lua5.4 lua5.3
           npm install --prefix "$RUNNER_TEMP/backlog-tools" --no-audit --no-fund backlog.md@1.53.0
           echo "$RUNNER_TEMP/backlog-tools/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Check project
         env:
           LUA: lua5.4
         run: sh scripts/check.sh
+      - name: Verify native GIL roundtrip
+        if: hashFiles('tests/native/verify-g0.mjs') != ''
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
+          node tests/native/verify-g0.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" lua5.3
