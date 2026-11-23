@@ -29,6 +29,7 @@ local function copy_team(team, side)
             name = definition.name,
             attack = unit.attack,
             health = unit.health,
+            max_health = unit.health,
             level = unit.level,
             shield = 0,
             ability = definition.ability,
@@ -48,6 +49,7 @@ local function snapshot_team(team)
             id = unit.id,
             attack = unit.attack,
             health = unit.health,
+            max_health = unit.max_health,
             level = unit.level or 1,
             shield = unit.shield,
         }
@@ -120,6 +122,7 @@ function effects.buff_front(state, unit, ability)
     if target then
         local amount = math.min(ability.power * unit.level, math.maxinteger - target.health)
         target.health = target.health + amount
+        target.max_health = target.max_health + math.min(amount, math.maxinteger - target.max_health)
         emit(state, "buff", target, {amount = amount, health = target.health})
     end
 end
@@ -136,6 +139,7 @@ function effects.summon(state, unit, ability, position)
             name = token.name,
             attack = token.attack + unit.level - 1,
             health = token.health,
+            max_health = token.health,
             shield = 0,
         }
         table.insert(team, summon.slot, summon)

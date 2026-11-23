@@ -54,12 +54,13 @@ assert(opening.events[2].ability == "霞羽")
 assert(opening.events[3].slot == 2 and opening.events[4].slot == 1)
 assert(opening.events[5].slot == 1 and opening.events[6].slot == 2)
 local initial = opening.events[1].board
-assert(equal(initial.player[1], {id = "aurora_tern", attack = 5, health = 4, level = 1, shield = 0}))
+assert(equal(initial.player[1], {id = "aurora_tern", attack = 5, health = 4, max_health = 4, level = 1, shield = 0}))
 assert(initial.enemy[1].health == 1 and initial.enemy[2].health == 1)
 assert(not opening.events[2].board)
 local first_damage, second_damage = opening.events[3].board, opening.events[4].board
 assert(first_damage.enemy[1].health == 1 and first_damage.enemy[2].health == 0)
 assert(second_damage.enemy[1].health == 0 and second_damage.enemy[2].health == 0)
+assert(second_damage.enemy[1].max_health == 1 and second_damage.enemy[2].max_health == 1)
 assert(not opening.events[5].board and #opening.events[6].board.enemy == 0)
 local victory = opening.events[7].board
 assert(#victory.enemy == 0 and equal(victory.player, initial.player))
@@ -118,7 +119,7 @@ local spacious = battle.resolve({cloud}, defeated, 1)
 local spacious_summons = events_of(spacious, "summon")
 assert(#spacious_summons == 2)
 assert(spacious_summons[1].slot == 1 and spacious_summons[2].slot == 2)
-local cloud_chick = {id = "cloud_chick", attack = 3, health = 2, level = 1, shield = 0}
+local cloud_chick = {id = "cloud_chick", attack = 3, health = 2, max_health = 2, level = 1, shield = 0}
 assert(equal(spacious_summons[1].board.player, {cloud_chick}))
 assert(equal(spacious_summons[2].board.player, {cloud_chick, cloud_chick}))
 
@@ -160,8 +161,18 @@ local support = battle.resolve({pet("alder_marmot", 3, 1, 2), ally}, defeated, 1
 local buffs = events_of(support, "buff")
 assert(support.outcome == "win")
 assert(#buffs == 1 and buffs[1].slot == 1 and buffs[1].health == 7)
-assert(buffs[1].board.player[1].health == 7)
+local shifted = events_of(support, "faint", 1)[2].board.player[1]
+assert(shifted.id == "alder_marmot" and shifted.health == 3 and shifted.max_health == 3)
+assert(buffs[1].board.player[1].health == 7 and buffs[1].board.player[1].max_health == 7)
 assert(ally.health == 3)
+
+local saturated = battle.resolve({pet("alder_marmot", 3, 1, 2), pet("alder_marmot", 2, math.maxinteger - 1)},
+    {pet("aurora_tern", 1, 3)}, 1)
+local saturated_buff = events_of(saturated, "buff", 0)[1]
+assert(saturated_buff.amount == 3 and saturated_buff.board.player[1].health == math.maxinteger)
+assert(saturated_buff.board.player[1].max_health == math.maxinteger)
+local saturated_result = saturated.events[#saturated.events].board.player[1]
+assert(saturated_result.health == math.maxinteger - 2 and saturated_result.max_health == math.maxinteger)
 
 assert(battle.resolve({}, {}, 42).outcome == "draw")
 assert(battle.resolve({ally}, {}, 42).outcome == "win")
@@ -178,6 +189,7 @@ assert(last.type == "result" and last.outcome == "draw" and last.reason == "stri
 assert(last.strike == 256)
 assert(#last.board.player == 5 and #last.board.enemy == 5)
 assert(last.board.player[1].health == math.maxinteger - 256 and last.board.enemy[1].health == math.maxinteger - 256)
+assert(last.board.player[1].max_health == math.maxinteger and last.board.enemy[1].max_health == math.maxinteger)
 local frames = 0
 for _, event in ipairs(exhausted.events) do
     if event.board then
