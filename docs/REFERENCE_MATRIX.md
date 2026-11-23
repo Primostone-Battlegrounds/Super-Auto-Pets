@@ -10,7 +10,8 @@
 | [开发者 itch.io 页面](https://teamwood.itch.io/super-auto-pets) | 提供浏览器入口，确认 Arena 无回合计时并采用异步对战。页面条目列明鼠标输入。 |
 | [官方商店截图](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1714040/ss_f61be4caff97d77b7df02bcdadee2687232e991f.1920x1080.jpg?t=1680944541) | 五格阵容与下方货架分开，界面显示资源和技能提示。 |
 | [官方交战截图](https://cdn.cloudflare.steamstatic.com/steam/apps/1714040/ss_75e2d405204fa963fc6d5cb99c272c15f0f6dcc3.1920x1080.jpg?t=1660917023) | 两队相向，前排靠交战中央，单位附近显示攻命和等级。 |
-| [Steam 官方公告](https://steamcommunity.com/app/1714040/announcements/) | v44 公告说明 Arena 的 Normal 等难度影响对手阵容强度。Daily 公告确认所有玩家当天面对同样的 14 支队伍，队伍每日更换。公告未说明这些阵容的生成算法。 |
+| [Arena v44 官方公告](https://steamcommunity.com/games/1714040/announcements/detail/501718945006355542) | Normal 等难度影响对手阵容强度。 |
+| [Daily 官方公告](https://steamcommunity.com/app/1714040/announcements/) | 所有玩家当天面对同样的 14 支队伍，队伍每日更换。公告未说明这些阵容的生成算法。 |
 
 ## 项目规则
 
