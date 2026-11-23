@@ -27,6 +27,8 @@ GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub �
 
 用 `lua5.4 scripts/audit-balance.lua` 在种子 1 至 64 检查五种玩家策略、训练回放和编队多样性。候选胜线可用 `lua5.4 scripts/audit-balance.lua carry 1 | lua5.4 scripts/play.lua 1` 复现。用 `lua5.4 scripts/audit-balance.lua trace 1 4 swarm` 导出固定的四轮养成轨迹。轨迹从两支空队重算商店、训练战斗和各轮状态。用 Lua 5.3 执行相同命令可核对跨版本输出。
 
+用 `lua5.4 scripts/audit-balance.lua versus-random 128` 复验三种 AI 策略。双方以相同商店种子从空队经营至第 12 轮，交换战斗双方位置各跑一次。随机购物会优先补充阵容，按合法选项购买、合成、喂食和刷新。输出平局计半分的得分率、第 12 轮阵容组合数和最常见组合的占比。
+
 ## 原生画面复验
 
 [目录图鉴](media/m1-animal-art.webp) 从同一份 Lua 图元数据绘制。动物、召唤物与食物图标均由项目原创几何构成。千星使用原生实色色块和圆点，图鉴分别以 66 和 44 像素检查造型。

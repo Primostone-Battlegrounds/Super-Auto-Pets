@@ -2,9 +2,12 @@
 -- lua scripts/audit-balance.lua role 1 | lua scripts/play.lua 1
 package.path = "src/?.lua;" .. package.path
 
+local battle = require("autopets.battle")
 local bot = require("autopets.bot")
 local data = require("autopets.data")
+local rng = require("autopets.rng")
 local run = require("autopets.run")
+local shop = require("autopets.shop")
 local rules = data.rules
 local policies = {"spread", "funded-spread", "carry", "merge", "role"}
 
@@ -243,6 +246,98 @@ local function size(set)
     return count
 end
 
+local function random_purchases(store, random)
+    while true do
+        local market = store:snapshot()
+        local recruits, purchases = {}, {}
+        if market.gold >= rules.pet_cost then
+            for _, shelf in ipairs(pet_shelves) do
+                for slot, offer in ipairs(market[shelf]) do
+                    if offer then
+                        local reward = shelf == "rewards"
+                        recruits[#recruits + 1] = {action = "buy", offer = slot, reward = reward}
+                        for target, unit in ipairs(market.team) do
+                            if unit.id == offer.id and unit.level < rules.max_level then
+                                purchases[#purchases + 1] = {
+                                    action = "combine", offer = slot, target = target, reward = reward,
+                                }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        if market.gold >= rules.food_cost then
+            for slot, offer in ipairs(market.foods) do
+                if offer and #market.team > 0 then
+                    purchases[#purchases + 1] = {action = "feed", offer = slot}
+                end
+            end
+        end
+        local choices = #market.team < rules.team_size and #recruits > 0 and recruits or purchases
+        if #choices > 0 then
+            local command = choices[random:int(1, #choices)]
+            if command.action == "feed" then
+                command.target = random:int(1, #market.team)
+            end
+            assert(store:apply(command))
+        elseif market.gold >= rules.reroll_cost + math.min(rules.pet_cost, rules.food_cost) then
+            assert(store:apply({action = "reroll"}))
+        else
+            return
+        end
+    end
+end
+
+local function audit_against_random(sample_size)
+    local rounds = 12
+    local reverse_outcome = {win = "loss", loss = "win", draw = "draw"}
+    local compositions = {}
+    print(string.format("Paired shop seeds 1–%d; %d rounds; both seat orders", sample_size, rounds))
+    for _, style in ipairs({"guardian", "striker", "swarm"}) do
+        local outcomes = {win = 0, loss = 0, draw = 0}
+        local style_compositions = {}
+        for seed = 1, sample_size do
+            local pool = bot.new_pool(seed, style)
+            while not bot.advance_to_round(pool, 1, 32) do end
+            local trace = assert(bot.trace(pool))
+            local baseline = shop.new(trace.sessions[trace.selected].shop_seed)
+            local choice_random = rng.new(seed ~ 0x425559) -- BUY
+            local battle_random = rng.new(seed ~ 0x424154544c45) -- BATTLE
+            for round = 1, rounds do
+                while not bot.advance_to_round(pool, round, 32) do end
+                local strategic = assert(bot.snapshot(pool)).team
+                random_purchases(baseline, choice_random)
+                local random_team = assert(baseline:finish_turn())
+                local fight_seed = battle_random:next()
+                local first = battle.resolve(strategic, random_team, fight_seed)
+                local second = battle.resolve(random_team, strategic, fight_seed)
+                assert(first.status == "resolved" and second.status == "resolved")
+                outcomes[first.outcome] = outcomes[first.outcome] + 1
+                local mirrored = reverse_outcome[second.outcome]
+                outcomes[mirrored] = outcomes[mirrored] + 1
+                assert(baseline:record_battle(first, "enemy"))
+                assert(baseline:advance_round())
+                if round == rounds then
+                    local members = {}
+                    for slot, unit in ipairs(strategic) do members[slot] = unit.id end
+                    table.sort(members)
+                    local composition = table.concat(members, "/")
+                    style_compositions[composition] = true
+                    compositions[composition] = (compositions[composition] or 0) + 1
+                end
+            end
+        end
+        print(string.format("%-8s %d wins / %d draws / %d losses, %.1f%% points, %d distinct final compositions",
+            style, outcomes.win, outcomes.draw, outcomes.loss,
+            100 * (outcomes.win + outcomes.draw / 2) / (2 * sample_size * rounds), size(style_compositions)))
+    end
+    local top_count = 0
+    for _, count in pairs(compositions) do top_count = math.max(top_count, count) end
+    print(string.format("Final compositions across styles: %d, most common %d/%d (%.1f%%)",
+        size(compositions), top_count, 3 * sample_size, 100 * top_count / (3 * sample_size)))
+end
+
 local function audit_pool(sample_size)
     local rounds = {1, 3, 6, 12}
     local summaries, styles, actions = {}, {}, {}
@@ -298,6 +393,10 @@ end
 if #arg > 0 then
     local seed = arg[2] and math.tointeger(tonumber(arg[2]))
     local round = arg[3] and math.tointeger(tonumber(arg[3]))
+    if arg[1] == "versus-random" and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
+        audit_against_random(seed or 64)
+        return
+    end
     if arg[1] == "trace" and seed and round and round >= 1 and (#arg == 3 or #arg == 4) then
         print(json(prepare_pool(seed, round, arg[4])))
         return
@@ -309,7 +408,8 @@ if #arg > 0 then
         end
     end
     io.stderr:write("Usage  lua scripts/audit-balance.lua [spread|funded-spread|carry|merge|role INTEGER_SEED]\n",
-        "       lua scripts/audit-balance.lua trace INTEGER_SEED ROUND [guardian|striker|swarm]\n")
+        "       lua scripts/audit-balance.lua trace INTEGER_SEED ROUND [guardian|striker|swarm]\n",
+        "       lua scripts/audit-balance.lua versus-random [SEED_COUNT]\n")
     os.exit(1)
 end
 
