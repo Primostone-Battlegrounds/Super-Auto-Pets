@@ -1,10 +1,23 @@
 # 参照矩阵
 
-查证于 2026-11-23。Team Wood Games 的 Steam 商店说明确认 Arena 是无计时的异步多人模式，玩家争取在耗尽心数前取得 10 胜。该说明将 Standard packs 描述为预设动物包。页面标注的 2021-09-24 为发行日期。Arena 与 Standard pack 的客户端构建号、具体规则版本与完整目录待核验。[Steam 商店说明](https://store.steampowered.com/app/1714040/Super_Auto_Pets/#about)
+查证于 2026-11-23。Team Wood Games 的 Steam 商店说明确认 Arena 是无计时的异步多人模式，玩家争取在耗尽心数前取得 10 胜。该说明将 Standard packs 描述为预设动物包。页面标注的 2021-09-24 为发行日期。Arena 与 Standard pack 的客户端构建号、具体规则版本与完整目录待核验。[Steam 商店说明](https://store.steampowered.com/app/1714040/Super_Auto_Pets/?l=schinese#about)
+
+## Steam 官方参照
+
+| 来源 | 可确认的内容 |
+| --- | --- |
+| [Steam 中文页](https://store.steampowered.com/app/1714040/Super_Auto_Pets/?l=schinese#about) | Arena 无回合计时，异步对战，目标是在生命耗尽前取得 10 胜。 |
+| [开发者 itch.io 页面](https://teamwood.itch.io/super-auto-pets) | 提供浏览器入口，确认 Arena 无回合计时并采用异步对战。页面条目列明鼠标输入。 |
+| [官方商店截图](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1714040/ss_f61be4caff97d77b7df02bcdadee2687232e991f.1920x1080.jpg?t=1680944541) | 五格阵容与下方货架分开，界面显示资源和技能提示。 |
+| [官方交战截图](https://cdn.cloudflare.steamstatic.com/steam/apps/1714040/ss_75e2d405204fa963fc6d5cb99c272c15f0f6dcc3.1920x1080.jpg?t=1660917023) | 两队相向，前排靠交战中央，单位附近显示攻命和等级。 |
+| [Arena v44 官方公告](https://steamcommunity.com/games/1714040/announcements/detail/501718945006355542) | Normal 等难度影响对手阵容强度。 |
+| [Daily 官方公告](https://steamcommunity.com/app/1714040/announcements/) | 所有玩家当天面对同样的 14 支队伍，队伍每日更换。公告未说明这些阵容的生成算法。 |
+
+## 项目规则
 
 | 项目 | 开发基线 | 设计依据 |
 | --- | --- | --- |
-| 准备与交战 | 每轮先经营商店与排列阵容，再自动交战 | 项目产品定义采用 Arena 的轻量自动战斗体验。[项目产品定义](PRODUCT.md) [Steam 商店说明](https://store.steampowered.com/app/1714040/Super_Auto_Pets/#about) |
+| 准备与交战 | 每轮先经营商店与排列阵容，再自动交战 | 项目产品定义采用 Arena 的轻量自动战斗体验。[项目产品定义](PRODUCT.md) [Steam 商店说明](https://store.steampowered.com/app/1714040/Super_Auto_Pets/?l=schinese#about) |
 | 对手 | 回合、种子和流派决定本地 PvE 阵容 | 项目产品定义要求单人、可复现的流程。[项目产品定义](PRODUCT.md) |
 | 终局 | 以 5 命开始，10 胜或零命结束；每次失败扣 1 命，平局维持胜数与命数 | 胜数和命数目标由项目产品定义确定；失败与平局的结算是本项目的开发规则。[项目产品定义](PRODUCT.md) |
 | 阵型 | 五个从前到后排列的位置 | 五格阵容来自项目产品定义，前后顺序是本项目的战斗接口。[项目产品定义](PRODUCT.md) [项目架构](ARCHITECTURE.md) |

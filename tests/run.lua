@@ -1,5 +1,6 @@
 package.path = "src/?.lua;" .. package.path
 
+local battle = require("autopets.battle")
 local data = require("autopets.data")
 local run = require("autopets.run")
 local rules = data.rules
@@ -28,12 +29,17 @@ end
 local function finish_round(game, outcome)
     local before = game:snapshot()
     assert(before.phase == "preparation" and not before.battle)
+    assert(before.opponent.round == before.round and #before.opponent.team > 0)
+    assert(before.opponent.tier == data.tier_for_round(before.round))
     assert(game:submit())
     local replay = game:snapshot()
     assert(replay.phase == "battle" and replay.battle.outcome == outcome)
     assert(replay.battle.round == before.round)
     assert(replay.battle.events[1].type == "start")
     assert(replay.battle.events[#replay.battle.events].outcome == outcome)
+    local expected = battle.resolve(before.shop.team, before.opponent.team, replay.battle.seed)
+    assert(replay.battle.outcome == expected.outcome)
+    assert_same(replay.battle.events, expected.events, "submitted battle against the prepared local opponent")
     assert(replay.wins == before.wins and replay.lives == before.lives)
     assert_same(replay.shop, before.shop)
     assert_same(replay.opponent, before.opponent)
@@ -88,6 +94,12 @@ local playbook = {
     feed_all,
 }
 
+local function play_shop(game, actions)
+    for _, action in ipairs(actions) do
+        assert(game:shop_action(table.unpack(action)))
+    end
+end
+
 local function win_game()
     local game = run.new(seed)
     reject(game, "empty_team", "submit")
@@ -97,9 +109,7 @@ local function win_game()
     reject(game, "unknown_action", "shop_action", "advance_round")
     local rounds = {}
     for round, actions in ipairs(playbook) do
-        for _, action in ipairs(actions) do
-            assert(game:shop_action(table.unpack(action)))
-        end
+        play_shop(game, actions)
         rounds[round] = finish_round(game, round == 7 and "draw" or "win")
         if round == 1 then
             local held = game:snapshot().shop.pets[3]
@@ -112,16 +122,25 @@ local function win_game()
     reject(game, "invalid_seed", "restart", "7")
     assert(game:restart())
     assert_same(game:snapshot(), opening)
+    play_shop(game, playbook[1])
+    assert_same(finish_round(game, "win"), rounds[1], "first battle after same-seed restart")
+    assert_same(game:snapshot().opponent, rounds[2].before.opponent, "second opponent after same-seed restart")
     return rounds
 end
 
-assert_same(win_game(), win_game(), "same-seed full-game replay")
+local won_rounds = win_game()
+assert_same(won_rounds, win_game(), "same-seed full-game replay")
 
 local lost = run.new(seed)
 assert(lost:shop_action("buy", 1))
 for round = 1, rules.start_lives do
     local transcript = finish_round(lost, "loss")
     assert(transcript.settled.lives == rules.start_lives - round)
+    local won = won_rounds[round]
+    assert(#transcript.before.shop.team < #won.before.shop.team)
+    assert_same(transcript.before.opponent, won.before.opponent,
+        "round " .. round .. " local opponent independent of purchases and rerolls")
+    assert(transcript.replay.battle.seed == won.replay.battle.seed)
 end
 local defeated = lost:snapshot()
 assert(defeated.phase == "ended" and defeated.final == "loss" and defeated.lives == 0 and defeated.wins == 0)
@@ -143,4 +162,4 @@ assert(first:settle() and second:settle())
 assert(first:advance() and second:advance())
 assert_same(first:snapshot().opponent, second:snapshot().opponent, "bot independent of shop RNG draws")
 
-print("run tests passed (10 wins, 0 lives, draw, restart, deterministic replay)")
+print("run tests passed (10 wins, 0 lives, draw, local AI, restart, deterministic replay)")

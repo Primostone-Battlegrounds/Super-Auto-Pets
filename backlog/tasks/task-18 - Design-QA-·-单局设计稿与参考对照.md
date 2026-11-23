@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 02:46'
-updated_date: '2026-11-23 02:52'
+updated_date: '2026-11-23 03:02'
 labels: []
 milestone: m-1
 dependencies:
@@ -45,6 +45,8 @@ ordinal: 13000
 
 <!-- SECTION:NOTES:BEGIN -->
 以用户给出的 Steam 简中页面和开发者公开的商店、交战两张图为固定参照。设计稿与 4149416 的种子 7 GIL 实跑画面逐阶段并排。
+
+已被 TASK-21 停用作为开发和验收依据。原稿版本保留在合入提交 e0055d5f707f1a5527558743c58a818729e45f8e。
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
