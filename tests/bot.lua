@@ -79,7 +79,13 @@ local function inspect(trace, snapshot, round)
         if index < round then
             local left, right = frame.sessions[1].finished.team, frame.sessions[2].finished.team
             local verified = battle.resolve(left, right, frame.training.result.seed)
-            assert(same(verified, frame.training.result))
+            for _, field in ipairs({"seed", "status", "outcome", "rng_state"}) do
+                assert(verified[field] == frame.training.result[field])
+            end
+            assert(frame.training.result.event_count == #verified.events)
+            assert(frame.training.result.reason == verified.events[#verified.events].reason)
+            assert(frame.training.result.event_digest:match("^%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x$"))
+            assert(frame.training.result.events == nil)
             local player, enemy = frame.training.settled[1], frame.training.settled[2]
             assert(player.phase == "settlement" and enemy.phase == "settlement")
             local mirror = {win = "loss", loss = "win", draw = "draw"}
@@ -142,8 +148,14 @@ reject(function(trace) trace.rounds[1].sessions[1].commands[1].gold_after = 99 e
 reject(function(trace) trace.rounds[2].sessions[2].opened.rng_state = 0 end)
 reject(function(trace) trace.rounds[2].training.result.outcome = "fake" end)
 reject(function(trace) trace.rounds[3].training.result.rng_state = 0 end)
-reject(function(trace) trace.rounds[4].training.result.events[1].strike = 999 end)
+reject(function(trace) trace.rounds[4].training.result.event_count = 999 end)
+reject(function(trace) trace.rounds[4].training.result.event_digest = "0000000000000000" end)
 reject(function(trace) trace.rounds[7].sessions[trace.selected].finished.team[1].attack = 999 end)
+local digest_fixture = bot.new_pool(1, "swarm")
+assert(bot.advance_to_round(digest_fixture, 2, 64))
+local first_training = bot.trace(digest_fixture).rounds[1].training.result
+assert(first_training.event_count == 48 and first_training.event_digest == "e6b2ec74c3ad5ef5")
+
 local different_rules = bot.trace(single)
 different_rules.rules_hash = "different"
 local _, version_error = bot.replay(different_rules)

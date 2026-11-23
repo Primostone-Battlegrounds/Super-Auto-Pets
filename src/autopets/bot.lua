@@ -5,7 +5,7 @@ local shop = require("autopets.shop")
 
 local bot = {}
 local rules = data.rules
-local policy_version = "shared-shop-v1"
+local policy_version = "shared-shop-v2"
 local max_actions_per_turn = 20
 local default_budget = 32
 local styles = {"guardian", "striker", "swarm"}
@@ -44,6 +44,62 @@ local function equal(expected, observed)
         end
     end
     return true
+end
+
+local function hash_bytes(hash, bytes)
+    for index = 1, #bytes do
+        hash = (hash ~ bytes:byte(index)) * 0x100000001b3
+    end
+    return hash
+end
+
+-- The digest covers ordered events and nested boards. Encode typed lengths and
+-- fixed-width integers, sorting field names so Lua table order cannot affect it.
+local function hash_value(hash, value)
+    local kind = type(value)
+    if kind == "string" then
+        return hash_bytes(hash_bytes(hash, string.pack("<c1I4", "s", #value)), value)
+    elseif kind == "number" then
+        assert(math.type(value) == "integer", "non-integer training event")
+        return hash_bytes(hash, string.pack("<c1i8", "i", value))
+    elseif kind == "boolean" then
+        return hash_bytes(hash, value and "t" or "f")
+    end
+    assert(kind == "table", "unsupported training event value")
+    local size = #value
+    if size > 0 then
+        hash = hash_bytes(hash, string.pack("<c1I4", "a", size))
+        for key in pairs(value) do
+            assert(math.type(key) == "integer" and key >= 1 and key <= size, "mixed training event table")
+        end
+        for index = 1, size do
+            hash = hash_value(hash, value[index])
+        end
+        return hash
+    end
+    local keys = {}
+    for key in pairs(value) do
+        assert(type(key) == "string", "non-string training event field name")
+        keys[#keys + 1] = key
+    end
+    table.sort(keys)
+    hash = hash_bytes(hash, string.pack("<c1I4", "o", #keys))
+    for _, key in ipairs(keys) do
+        hash = hash_value(hash_value(hash, key), value[key])
+    end
+    return hash
+end
+
+local function summarize_battle(result)
+    return {
+        seed = result.seed,
+        status = result.status,
+        outcome = result.outcome,
+        rng_state = result.rng_state,
+        reason = result.events[#result.events].reason,
+        event_count = #result.events,
+        event_digest = string.format("%016x", hash_value(0xcbf29ce484222325, result.events)),
+    }
 end
 
 local function stats(unit, style)
@@ -265,9 +321,10 @@ local function train(pool)
     assert(left.store:record_battle(result, "player"))
     assert(right.store:record_battle(result, "enemy"))
     pool.turn.training = {
-        result = result,
+        result = summarize_battle(result),
         settled = {left.store:snapshot(), right.store:snapshot()},
     }
+    left.battle_team, right.battle_team = nil, nil
     pool.history[#pool.history + 1] = pool.turn
     pool.phase = "advance"
 end
