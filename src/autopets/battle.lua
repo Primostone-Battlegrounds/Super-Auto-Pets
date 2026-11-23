@@ -41,6 +41,26 @@ local function opposing_side(side)
     return side == "player" and "enemy" or "player"
 end
 
+local function snapshot_team(team)
+    local snapshot = {}
+    for slot, unit in ipairs(team) do
+        snapshot[slot] = {
+            id = unit.id,
+            attack = unit.attack,
+            health = unit.health,
+            level = unit.level or 1,
+            shield = unit.shield,
+        }
+    end
+    return snapshot
+end
+
+local function snapshot_board(teams)
+    return {player = snapshot_team(teams.player), enemy = snapshot_team(teams.enemy)}
+end
+
+local board_events = {start = true, damage = true, shield = true, buff = true, summon = true, result = true}
+
 local function emit(state, kind, unit, event)
     event = event or {}
     event.type = kind
@@ -51,7 +71,11 @@ local function emit(state, kind, unit, event)
         event.id = unit.id
         event.name = unit.name
     end
+    if board_events[kind] then
+        event.board = snapshot_board(state.teams)
+    end
     state.events[#state.events + 1] = event
+    return event
 end
 
 local function damage(state, source, target, amount)
@@ -132,12 +156,13 @@ end
 -- Remove all casualties from both teams before their queued effects use the free slots.
 local function resolve_faints(state)
     local queue = {}
+    local last_faint
     for _, side in ipairs(state.order) do
         local team = state.teams[side]
         local remaining = 0
         for _, unit in ipairs(team) do
             if unit.health == 0 then
-                emit(state, "faint", unit)
+                last_faint = emit(state, "faint", unit)
                 if unit.ability and unit.ability.trigger == "faint" then
                     queue[#queue + 1] = {unit = unit, surviving_before = remaining}
                 end
@@ -150,6 +175,10 @@ local function resolve_faints(state)
         for slot = #team, remaining + 1, -1 do
             team[slot] = nil
         end
+    end
+    if last_faint then
+        -- Keep the original faint coordinates, then show both formations compacted together.
+        last_faint.board = snapshot_board(state.teams)
     end
     -- In each formation, replacements go after earlier survivors and summons.
     local summoned_before = {player = 0, enemy = 0}
@@ -211,7 +240,8 @@ end
 
 -- Inputs are dense, front-first teams of pet snapshots. Events are emitted in
 -- replay order, with strike 0 reserved for opening effects. Faint slots refer
--- to the formation before the current damage batch is compacted.
+-- to the formation before the current damage batch is compacted. Board frames
+-- show the post-event state. For events without a frame, retain the prior one.
 function battle.resolve(player, enemy, seed)
     local generator = rng.new(seed)
     local first = generator:int(1, 2) == 1 and "player" or "enemy"
