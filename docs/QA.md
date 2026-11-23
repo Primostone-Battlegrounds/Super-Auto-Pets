@@ -32,4 +32,16 @@ python3 scripts/render-native-previews.py /path/to/frames.json /tmp/auto-pets-mo
 python3 scripts/render-native-previews.py /path/to/frames.json /tmp/auto-pets-pc --desktop
 ```
 
-画面参考用于检查战斗前能否一扫看清队伍、金币和攻防，以及受击后能否跟上棋盘变化。预览覆盖商店、编队、受伤与两种终局，官方设备的输入和渲染另行验收。[原版商店画面参照](https://www.pocketgamer.com/super-auto-pets/best-lineups/)
+### 画面对照与独立评审
+
+以 Team Wood Games 公布的商店画面和双方交战画面为固定参照，逐项检查信息层级、动物朝向和战斗反馈。项目的场景、角色图元与控件样式保持原创。[参照商店](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1714040/ss_f61be4caff97d77b7df02bcdadee2687232e991f.1920x1080.jpg) · [参照战斗](https://cdn.cloudflare.steamstatic.com/steam/apps/1714040/ss_75e2d405204fa963fc6d5cb99c272c15f0f6dcc3.1920x1080.jpg)
+
+| 场景 | 通过条件 |
+| --- | --- |
+| 动物图鉴 | 商店和己方都使用右向姿态。同种资产在头像尺寸仍有清楚的头、眼和重心。逐一看完 9 种动物、3 种召唤物与 6 种食物，在小尺寸依旧能凭轮廓区分。 |
+| 商店 | 先看到己方五格和动物，再看到下方货架。动物头像约 64 像素或更大，攻、命、等级、价格和冻结状态易读。金币、胜场、生命、轮次固定在顶部。 |
+| 战斗 | 双方分区，前排靠近交战中心，左右动物朝向对手。受击、格挡、退场和召唤由战斗状态驱动，实际扣血同时体现在数字和血条上。自动、暂停、逐条和跳过控件保持可用。 |
+| 结算 | 胜利与落败各有清楚的结算，大字可读。保留同种子重开以及更换种子开新局，回到准备阶段的状态正确。 |
+| 画布 | 在 1600×900 和 1280×720 的回读模拟帧分别检查文字、图标和命中区域，无跨区遮挡或出界。 |
+
+独立评审者用同一候选的图鉴、商店、有效伤害、胜利和落败画面逐项给出结论，并附对应帧、提交 SHA 与完整单局日志。官方设备的输入和实际渲染另行验收。
