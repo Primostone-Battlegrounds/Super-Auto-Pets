@@ -509,6 +509,7 @@ local function replay()
     if not battle then return end
     set_playing(false)
     event_index = event_index % #battle.events + 1
+    if event_index == #battle.events then replay_complete = true end
     draw(false)
 end
 

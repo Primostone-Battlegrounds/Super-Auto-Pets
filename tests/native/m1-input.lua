@@ -222,7 +222,14 @@ local function finish(outcome, terminal, inspect_playback)
         capture("battle_full")
     end
     local first_event = label("Battle/Event")
-    if inspect_playback then
+    if inspect_playback == "manual" then
+        click("Battle/Auto")
+        for _ = 1, 250 do
+            if label("Primary/Title") == "结算" then break end
+            click("Battle/Replay")
+        end
+        assert(label("Battle/Event"):find("战斗结束", 1, true))
+    elseif inspect_playback then
         mirrored_portrait()
         click("Battle/Auto")
         assert(not ticking)
@@ -396,6 +403,7 @@ assert(label("Team2/Name") == "棉尾兔")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 assert(label("Team1/DropLabel") == "合并" and nodes["Team1/DropTarget"].active)
 assert(label("Hint"):find("队员会被消耗", 1, true) and label("Team2/Name") == "棉尾兔")
+capture("merge_preview")
 merge_drag.CursorDrag(cursor_event(11, 0, 0))
 assert(not nodes["Team1/DropTarget"].active and label("Team2/Name") == "棉尾兔")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
@@ -421,6 +429,7 @@ assert(label("Money/Value") == "2" and label("Team1/Name") == "空位 1")
 assert(label("Hint"):find("重开本局", 1, true))
 click("Reset")
 assert(nodes.Restart.active and nodes["Restart/Heading"].visible)
+capture("restart_confirm")
 click("Shop/Reroll")
 assert(label("Money/Value") == "2")
 click("Restart/Cancel")
@@ -429,6 +438,19 @@ click("Reset")
 click("Restart/Confirm")
 opening(seed)
 assert(label("Shop/Pet1/Name") == "棉尾兔")
+
+shop("buy", 1)
+for _ = 1, 6 do click("Shop/Reroll") end
+assert(label("Money/Value") == "1")
+click("Team1")
+click("Shop/Sell")
+assert(label("Money/Value") == "2" and label("Team1/Name") == "空位 1")
+assert(label("Hint"):find("重开本局", 1, true))
+click("Reset")
+click("Restart/Confirm")
+opening(seed)
+shop("buy", 1)
+finish("loss", false, "manual")
 
 sandbox.OnDestroy()
 assert(capture_file:close())
