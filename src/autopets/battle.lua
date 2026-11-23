@@ -1,3 +1,4 @@
+local battle_receipt = require("autopets.battle_receipt")
 local data = require("autopets.data")
 local rng = require("autopets.rng")
 
@@ -12,7 +13,7 @@ local function copy_team(team, side)
         assert(math.type(slot) == "integer" and slot >= 1 and slot <= size, "battle team must be dense")
     end
 
-    local copy = {}
+    local copy, seen_uids = {}, {}
     for slot = 1, size do
         local unit = team[slot]
         assert(type(unit) == "table", "battle team must be dense")
@@ -22,8 +23,16 @@ local function copy_team(team, side)
         assert(math.type(unit.health) == "integer" and unit.health >= 1, "invalid battle health")
         assert(math.type(unit.level) == "integer" and unit.level >= 1
             and unit.level <= data.rules.max_level, "invalid battle level")
+        local uid = side .. ":slot:" .. slot
+        if unit.uid ~= nil then
+            assert(math.type(unit.uid) == "integer" and unit.uid > 0, "invalid battle pet uid")
+            assert(not seen_uids[unit.uid], "duplicate battle pet uid")
+            seen_uids[unit.uid] = true
+            uid = side .. ":" .. unit.uid
+        end
         copy[slot] = {
             side = side,
+            uid = uid,
             slot = slot,
             id = unit.id,
             name = definition.name,
@@ -47,6 +56,7 @@ local function snapshot_team(team)
     for slot, unit in ipairs(team) do
         snapshot[slot] = {
             id = unit.id,
+            uid = unit.uid,
             attack = unit.attack,
             health = unit.health,
             max_health = unit.max_health,
@@ -71,6 +81,7 @@ local function emit(state, kind, unit, event)
         event.side = unit.side
         event.slot = unit.slot
         event.id = unit.id
+        event.uid = unit.uid
         event.name = unit.name
     end
     if board_events[kind] then
@@ -89,6 +100,7 @@ local function damage(state, source, target, amount)
         source_side = source.side,
         source_slot = source.slot,
         source_id = source.id,
+        source_uid = source.uid,
         amount = remaining,
         absorbed = absorbed,
         health = target.health,
@@ -132,8 +144,10 @@ function effects.summon(state, unit, ability, position)
     local token = data.token_by_id[ability.token]
     local count = math.min(ability.power, data.rules.team_size - #team)
     for offset = 0, count - 1 do
+        state.summon_count = state.summon_count + 1
         local summon = {
             side = unit.side,
+            uid = unit.side .. ":summon:" .. state.summon_count,
             slot = position + offset,
             id = token.id,
             name = token.name,
@@ -227,6 +241,7 @@ local function announce_attack(state, unit, target)
         target_side = target.side,
         target_slot = target.slot,
         target_id = target.id,
+        target_uid = target.uid,
         target_name = target.name,
     })
 end
@@ -254,6 +269,7 @@ function battle.resolve(player, enemy, seed)
         rng = generator,
         order = {first, opposing_side(first)},
         strike = 0,
+        summon_count = 0,
         events = {},
     }
     emit(state, "start", nil, {seed = seed, first_side = first})
@@ -274,7 +290,15 @@ function battle.resolve(player, enemy, seed)
         outcome = "loss"
     end
     emit(state, "result", nil, {outcome = outcome, reason = reason})
-    return {outcome = outcome, events = state.events}
+    local result = {
+        outcome = outcome,
+        status = reason == "strike_limit" and reason or "resolved",
+        seed = seed,
+        rng_state = generator.state,
+        events = state.events,
+    }
+    battle_receipt.register(result, player, enemy)
+    return result
 end
 
 return battle

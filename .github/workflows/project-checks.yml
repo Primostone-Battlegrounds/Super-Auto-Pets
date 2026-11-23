@@ -30,6 +30,11 @@ jobs:
         env:
           LUA: lua5.4
         run: sh scripts/check.sh
+      - name: Check domain compatibility on Lua 5.3
+        run: |
+          for suite in tests/*.lua; do
+            lua5.3 -E "$suite"
+          done
       - name: Prepare pinned Miliastra MCP
         if: hashFiles('tests/native/verify-g0.mjs', 'tests/native/verify-m1.mjs') != ''
         run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"

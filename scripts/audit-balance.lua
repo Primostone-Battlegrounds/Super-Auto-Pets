@@ -2,6 +2,7 @@
 -- lua scripts/audit-balance.lua role 1 | lua scripts/play.lua 1
 package.path = "src/?.lua;" .. package.path
 
+local bot = require("autopets.bot")
 local data = require("autopets.data")
 local run = require("autopets.run")
 local rules = data.rules
@@ -199,22 +200,124 @@ local function play(policy, seed, transcript)
     end
 end
 
+local function prepare_pool(seed, round, style)
+    local pool = bot.new_pool(seed, style)
+    while not bot.advance_to_round(pool, round, 32) do end
+    local trace = bot.trace(pool)
+    local replayed, err, detail = bot.replay(trace)
+    assert(replayed, tostring(err) .. ": " .. tostring(detail))
+    return trace
+end
+
+local function json(value)
+    if type(value) == "string" then
+        return '"' .. value:gsub('[%z\1-\31\\"]', function(character)
+            if character == '"' or character == '\\' then return '\\' .. character end
+            return string.format("\\u%04x", character:byte())
+        end) .. '"'
+    end
+    if type(value) ~= "table" then
+        assert(type(value) == "number" or type(value) == "boolean", "unsupported trace value")
+        return tostring(value)
+    end
+    local values = {}
+    local count = #value
+    if next(value) == nil or count > 0 then
+        for key in pairs(value) do
+            assert(math.type(key) == "integer" and key >= 1 and key <= count, "mixed trace table")
+        end
+        for index = 1, count do values[index] = json(value[index]) end
+        return "[" .. table.concat(values, ",") .. "]"
+    end
+    for key, item in pairs(value) do
+        assert(type(key) == "string", "non-string trace record key")
+        values[#values + 1] = json(key) .. ":" .. json(item)
+    end
+    table.sort(values)
+    return "{" .. table.concat(values, ",") .. "}"
+end
+
+local function size(set)
+    local count = 0
+    for _ in pairs(set) do count = count + 1 end
+    return count
+end
+
+local function audit_pool(sample_size)
+    local rounds = {1, 3, 6, 12}
+    local summaries, styles, actions = {}, {}, {}
+    for index in ipairs(rounds) do
+        summaries[index] = {lineups = {}, leveled = 0, team_size = 0, min = math.maxinteger, max = 0, total = 0}
+    end
+    for seed = 1, sample_size do
+        local trace = prepare_pool(seed, rounds[#rounds])
+        local style = trace.sessions[trace.selected].style
+        styles[style] = (styles[style] or 0) + 1
+        for index, round in ipairs(rounds) do
+            local lineup, stats = {}, 0
+            local summary = summaries[index]
+            local team = trace.rounds[round].sessions[trace.selected].finished.team
+            local leveled = false
+            for slot, unit in ipairs(team) do
+                lineup[slot] = unit.id
+                stats = stats + unit.attack + unit.health
+                leveled = leveled or unit.level > 1
+            end
+            summary.lineups[table.concat(lineup, "/")] = true
+            if leveled then summary.leveled = summary.leveled + 1 end
+            summary.team_size = summary.team_size + #team
+            summary.min = math.min(summary.min, stats)
+            summary.max = math.max(summary.max, stats)
+            summary.total = summary.total + stats
+        end
+        for _, frame in ipairs(trace.rounds) do
+            for _, session in ipairs(frame.sessions) do
+                for _, transition in ipairs(session.commands) do
+                    local action = transition.command.action
+                    actions[action] = (actions[action] or 0) + 1
+                end
+            end
+        end
+    end
+    print(string.format("Training replay: %d/%d pools through round %d, %d verified training fights",
+        sample_size, sample_size, rounds[#rounds], sample_size * (rounds[#rounds] - 1)))
+    print(string.format("Sample by style    guardian=%d striker=%d swarm=%d",
+        styles.guardian or 0, styles.striker or 0, styles.swarm or 0))
+    for index, round in ipairs(rounds) do
+        local summary = summaries[index]
+        print(string.format("Round %2d: %2d unique ordered lineups, %2d with level 2+, mean units %.2f, "
+            .. "total atk+hp min/mean/max %d/%.2f/%d", round, size(summary.lineups), summary.leveled,
+            summary.team_size / sample_size, summary.min, summary.total / sample_size, summary.max))
+    end
+    local counts = {}
+    for action, count in pairs(actions) do counts[#counts + 1] = string.format("%s=%d", action, count) end
+    table.sort(counts)
+    print("Shared shop actions: " .. table.concat(counts, " "))
+end
+
 if #arg > 0 then
     local seed = arg[2] and math.tointeger(tonumber(arg[2]))
+    local round = arg[3] and math.tointeger(tonumber(arg[3]))
+    if arg[1] == "trace" and seed and round and round >= 1 and (#arg == 3 or #arg == 4) then
+        print(json(prepare_pool(seed, round, arg[4])))
+        return
+    end
     for _, policy in ipairs(policies) do
         if arg[1] == policy and #arg == 2 and seed then
             play(policy, seed, true)
             return
         end
     end
-    io.stderr:write("Usage  lua scripts/audit-balance.lua [spread|funded-spread|carry|merge|role INTEGER_SEED]\n")
+    io.stderr:write("Usage  lua scripts/audit-balance.lua [spread|funded-spread|carry|merge|role INTEGER_SEED]\n",
+        "       lua scripts/audit-balance.lua trace INTEGER_SEED ROUND [guardian|striker|swarm]\n")
     os.exit(1)
 end
 
+local sample_size = 64
 print("Local opponent audit, fixed seeds 1–64")
 for _, policy in ipairs(policies) do
     local wins, perfect, leveled, high_tier = 0, 0, 0, 0
-    for seed = 1, 64 do
+    for seed = 1, sample_size do
         local won, lost_none, reached_level_two, ended_with_high_tier = play(policy, seed)
         if won then wins = wins + 1 end
         if lost_none then perfect = perfect + 1 end
@@ -222,5 +325,6 @@ for _, policy in ipairs(policies) do
         if ended_with_high_tier then high_tier = high_tier + 1 end
     end
     print(string.format("%-14s %2d wins  %2d losses  %2d perfect  %2d level 2+  %2d finished with tier %d",
-        policy, wins, 64 - wins, perfect, leveled, high_tier, rules.max_tier))
+        policy, wins, sample_size - wins, perfect, leveled, high_tier, rules.max_tier))
 end
+audit_pool(sample_size)

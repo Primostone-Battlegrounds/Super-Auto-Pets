@@ -1,5 +1,6 @@
 package.path = "src/?.lua;" .. package.path
 
+local battle = require("autopets.battle")
 local data = require("autopets.data")
 local shop = require("autopets.shop")
 local rules = data.rules
@@ -26,6 +27,12 @@ local function reject(store, expected, action, ...)
     local ok, reason = store[action](store, ...)
     assert(not ok and reason == expected, action .. " rejected with " .. tostring(reason))
     assert(equal(store:snapshot(), before), action .. " should leave state unchanged")
+end
+
+local function advance(store)
+    local team = assert(store:finish_turn())
+    assert(store:record_battle(battle.resolve(team, {}, 1), "player"))
+    assert(store:advance_round())
 end
 
 local market = shop.new(7)
@@ -82,7 +89,7 @@ assert(reference:reroll())
 assert(equal(frozen:snapshot(), reference:snapshot()), "rejected actions must preserve future offers")
 assert(frozen:snapshot().gold == held.gold - rules.reroll_cost)
 for round = 2, rules.tier_unlock_rounds[rules.max_tier] do
-    frozen:advance_round()
+    advance(frozen)
     local state = frozen:snapshot()
     assert(state.round == round and state.tier == data.tier_for_round(round))
     assert(state.gold == rules.gold_per_round)
@@ -98,14 +105,17 @@ local growing = shop.new(6)
 local pet = data.pet_by_id[growing:snapshot().pets[1].id]
 assert(growing:buy(1))
 assert(growing:buy(2))
+local duplicates = growing:snapshot().team
+assert(duplicates[1].id == duplicates[2].id and duplicates[1].uid ~= duplicates[2].uid)
 reject(growing, "same_position", "merge", 1, 1)
 assert(growing:merge(2, 1))
 local pair = growing:snapshot()
 assert(#pair.team == 1 and pair.team[1].xp == 1 and pair.team[1].level == 1)
 assert(pair.team[1].attack == pet.attack + rules.merge_attack)
+assert(pair.team[1].uid == duplicates[1].uid)
 assert(pair.team[1].health == pet.health + rules.merge_health and #pair.rewards == 0)
 assert(growing:freeze("pet", 3))
-growing:advance_round()
+advance(growing)
 assert(growing:combine(3, 1))
 local upgraded = growing:snapshot()
 assert(upgraded.team[1].xp == rules.level_xp[2] and upgraded.team[1].level == 2)
@@ -130,7 +140,7 @@ local function find_offer(store, id)
 end
 
 for _ = 1, 3 do
-    growing:advance_round()
+    advance(growing)
     local index = find_offer(growing, pet.id)
     while not index do
         assert(growing:snapshot().gold > rules.pet_cost, "fixture must offer a merge within budget")
@@ -142,7 +152,7 @@ end
 local maxed = growing:snapshot()
 assert(maxed.team[1].level == rules.max_level and maxed.team[1].xp == rules.level_xp[rules.max_level])
 assert(#maxed.rewards == 1 and data.pet_by_id[maxed.rewards[1].id].tier == rules.max_tier)
-growing:advance_round()
+advance(growing)
 assert(#growing:snapshot().rewards == 0)
 local matching = find_offer(growing, pet.id)
 while not matching do
@@ -159,7 +169,7 @@ local full = shop.new(7)
 for position = 1, 3 do
     assert(full:buy(position))
 end
-full:advance_round()
+advance(full)
 assert(full:buy(1) and full:buy(2))
 assert(#full:snapshot().team == rules.team_size)
 reject(full, "team_full", "buy", 3)
@@ -178,8 +188,58 @@ for _ = 1, rules.gold_per_round do
 end
 reject(broke, "insufficient_gold", "reroll")
 reject(broke, "insufficient_gold", "buy", 3)
-broke:advance_round()
-control:advance_round()
+advance(broke)
+advance(control)
 assert(equal(broke:snapshot(), control:snapshot()), "insufficient gold must preserve the RNG")
+
+local left, right = shop.new(7), shop.new(7)
+assert(left:snapshot().rng_state == right:snapshot().rng_state)
+reject(left, "invalid_command", "apply")
+reject(left, "unknown_action", "apply", {action = "advance_round"})
+reject(left, "invalid_command", "apply", {action = "freeze", kind = "pet", offer = 1, frozen = 1})
+assert(left:apply({action = "freeze", kind = "pet", offer = 1, frozen = true}))
+local explicitly_frozen = left:snapshot()
+assert(left:apply({action = "freeze", kind = "pet", offer = 1, frozen = true}))
+assert(equal(left:snapshot(), explicitly_frozen))
+assert(left:apply({action = "buy", offer = 1}))
+assert(right:buy(1))
+assert(equal(left:snapshot(), right:snapshot()), "named and structured actions must share the same rules")
+
+reject(left, "wrong_phase", "advance_round")
+local left_team = assert(left:finish_turn())
+local right_team = assert(right:finish_turn())
+assert(left:snapshot().phase == "battle" and right:snapshot().phase == "battle")
+reject(left, "wrong_phase", "apply", {action = "reroll"})
+reject(left, "wrong_phase", "move", 1, 1)
+reject(left, "wrong_phase", "finish_turn")
+reject(left, "wrong_phase", "advance_round")
+reject(left, "invalid_battle_result", "record_battle", {outcome = "win", status = "resolved"}, "player")
+local detached_battle = battle.resolve(left:snapshot().team, right_team, 1)
+reject(left, "wrong_battle_team", "record_battle", detached_battle, "player")
+left_team[1].health = left_team[1].health + 1
+local changed_battle = battle.resolve(left_team, right_team, 1)
+left_team[1].health = left_team[1].health - 1
+reject(left, "wrong_battle_team", "record_battle", changed_battle, "player")
+local legitimate = battle.resolve(left_team, right_team, 1)
+reject(left, "invalid_side", "record_battle", legitimate, "spectator")
+reject(left, "wrong_battle_team", "record_battle", legitimate, "enemy")
+local outcome = legitimate.outcome
+legitimate.outcome = outcome == "win" and "loss" or "win"
+reject(left, "invalid_battle_result", "record_battle", legitimate, "player")
+legitimate.outcome = outcome
+reject(left, "resolved_battle", "abort_turn", legitimate, "player")
+assert(left:record_battle(legitimate, "player"))
+assert(right:record_battle(legitimate, "enemy"))
+assert(left:snapshot().phase == "settlement" and left:snapshot().last_outcome == outcome)
+local opposing = {draw = "draw", win = "loss", loss = "win"}
+assert(right:snapshot().last_outcome == opposing[outcome])
+assert(equal(left:snapshot().team, left_team) and equal(right:snapshot().team, right_team),
+    "temporary battle state may not modify persistent teams")
+reject(left, "wrong_phase", "record_battle", legitimate, "player")
+assert(left:advance_round())
+assert(left:snapshot().phase == "preparation" and left:snapshot().last_outcome == outcome)
+reject(left, "wrong_phase", "advance_round")
+assert(left:finish_turn())
+reject(left, "wrong_battle_team", "record_battle", legitimate, "player")
 
 print("shop tests passed")

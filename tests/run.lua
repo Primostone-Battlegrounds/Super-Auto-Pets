@@ -1,6 +1,7 @@
 package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
+local bot = require("autopets.bot")
 local data = require("autopets.data")
 local run = require("autopets.run")
 local rules = data.rules
@@ -41,7 +42,10 @@ local function finish_round(game, outcome)
     assert(replay.battle.outcome == expected.outcome)
     assert_same(replay.battle.events, expected.events, "submitted battle against the prepared local opponent")
     assert(replay.wins == before.wins and replay.lives == before.lives)
+    assert(before.shop.phase == "preparation" and replay.shop.phase == "battle")
+    before.shop.phase = "battle"
     assert_same(replay.shop, before.shop)
+    before.shop.phase = "preparation"
     assert_same(replay.opponent, before.opponent)
     reject(game, "wrong_phase", "submit")
     reject(game, "wrong_phase", "advance")
@@ -54,6 +58,8 @@ local function finish_round(game, outcome)
     assert(settled.lives == before.lives - (outcome == "loss" and 1 or 0))
     assert(settled.round == before.round)
     assert_same(settled.battle, replay.battle)
+    assert(settled.shop.phase == "settlement" and settled.shop.last_outcome == outcome)
+    assert_same(settled.shop.team, before.shop.team, "settlement retains persistent stats")
     reject(game, "wrong_phase", "settle")
     if settled.phase == "settlement" then
         reject(game, "wrong_phase", "restart", 7)
@@ -61,6 +67,7 @@ local function finish_round(game, outcome)
         local prepared = game:snapshot()
         assert(prepared.phase == "preparation" and prepared.round == settled.round + 1)
         assert(prepared.shop.gold == rules.gold_per_round)
+        assert(prepared.shop.phase == "preparation" and prepared.shop.last_outcome == outcome)
         assert(prepared.wins == settled.wins and prepared.lives == settled.lives and not prepared.battle)
         assert_same(prepared.shop.team, settled.shop.team)
     else
@@ -71,33 +78,31 @@ local function finish_round(game, outcome)
     return {before = before, replay = replay, settled = settled}
 end
 
-local seed = 7
+local seed = 1
 local opening = run.new(seed):snapshot()
 assert(opening.phase == "preparation" and opening.round == 1)
 assert(opening.wins == 0 and opening.lives == rules.start_lives and opening.shop.gold == rules.gold_per_round)
 assert(#opening.shop.team == 0 and not opening.final and not opening.battle)
 
-local feed_all = {{"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 1, 1}}
-local function combine_and_feed(offer)
-    return {{"combine", offer, 1}, {"feed", 1, 1}, {"feed", 2, 1}}
+local function feed_all(first, after_roll)
+    return {{"feed", first, 1}, {"feed", 3 - first, 1}, {"reroll"}, {"feed", after_roll, 1}}
 end
 
 local playbook = {
-    {{"buy", 1}, {"buy", 2, 1}, {"move", 2, 1}, {"feed", 1, 2}, {"freeze", "pet", 3}, {"reroll"}},
-    {{"buy", 1}, {"buy", 2}, {"buy", 3}, {"move", 2, 1}},
-    feed_all,
-    combine_and_feed(1),
-    feed_all,
-    combine_and_feed(3),
-    feed_all,
-    feed_all,
-    combine_and_feed(3),
-    feed_all,
-    feed_all,
-    feed_all,
-    feed_all,
+    {{"buy", 3}, {"buy", 2}, {"buy", 1}},
+    {{"buy", 1}, {"buy", 2}, {"feed", 1, 1}},
+    feed_all(1, 1),
+    feed_all(1, 1),
+    feed_all(2, 2),
+    feed_all(2, 1),
+    feed_all(1, 1),
+    feed_all(1, 2),
+    feed_all(1, 2),
+    feed_all(2, 1),
+    feed_all(1, 2),
+    feed_all(1, 1),
 }
-local loss_rounds = {[7] = true, [8] = true, [10] = true}
+local other_outcomes = {[1] = "draw", [11] = "loss"}
 
 local function play_shop(game, actions)
     for _, action in ipairs(actions) do
@@ -115,20 +120,19 @@ local function win_game()
     local rounds = {}
     for round, actions in ipairs(playbook) do
         play_shop(game, actions)
-        rounds[round] = finish_round(game, loss_rounds[round] and "loss" or "win")
-        if round == 1 then
-            local held = game:snapshot().shop.pets[3]
-            assert(held.frozen and held.id == opening.shop.pets[3].id)
-        end
+        local trace = assert(game:opponent_trace())
+        assert(#trace.rounds == round)
+        assert_same(assert(bot.replay(trace)), game:snapshot().opponent, "played opponent's full trajectory")
+        rounds[round] = finish_round(game, other_outcomes[round] or "win")
     end
     local finished = game:snapshot()
     assert(finished.phase == "ended" and finished.final == "win")
-    assert(finished.wins == rules.wins_to_win and finished.lives == rules.start_lives - 3)
+    assert(finished.wins == rules.wins_to_win and finished.lives == rules.start_lives - 1)
     reject(game, "invalid_seed", "restart", "7")
     assert(game:restart())
     assert_same(game:snapshot(), opening)
     play_shop(game, playbook[1])
-    assert_same(finish_round(game, "win"), rounds[1], "first battle after same-seed restart")
+    assert_same(finish_round(game, "draw"), rounds[1], "first battle after same-seed restart")
     assert_same(game:snapshot().opponent, rounds[2].before.opponent, "second opponent after same-seed restart")
     return rounds
 end
@@ -194,5 +198,14 @@ reject(sold_last, "empty_team", "submit")
 assert(sold_last:restart())
 assert_same(sold_last:snapshot(), opening, "new attempt after selling the last pet")
 assert(sold_last:shop_action("buy", 1))
+
+local exhausted = run.new(seed)
+assert(exhausted:shop_action("buy", 1))
+exhausted.shop.team[1].health = math.maxinteger
+exhausted.opponent.team[1].health = math.maxinteger
+local prior_rng = exhausted.battle_random.state
+reject(exhausted, "strike_limit", "submit")
+assert(exhausted.battle_random.state == prior_rng)
+assert(exhausted:shop_action("reroll"), "an exhausted battle must reopen the shop without scoring")
 
 print("run tests passed (10 wins, 0 lives, draw, local AI, restart, stalled prep recovery, deterministic replay)")

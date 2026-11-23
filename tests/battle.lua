@@ -54,7 +54,9 @@ assert(opening.events[2].ability == "猫步突袭")
 assert(opening.events[3].slot == 2 and opening.events[4].slot == 1)
 assert(opening.events[5].slot == 1 and opening.events[6].slot == 2)
 local initial = opening.events[1].board
-assert(equal(initial.player[1], {id = "sunset_cat", attack = 5, health = 4, max_health = 4, level = 1, shield = 0}))
+assert(equal(initial.player[1], {
+    id = "sunset_cat", uid = "player:slot:1", attack = 5, health = 4, max_health = 4, level = 1, shield = 0,
+}))
 assert(initial.enemy[1].health == 1 and initial.enemy[2].health == 1)
 assert(not opening.events[2].board)
 local first_damage, second_damage = opening.events[3].board, opening.events[4].board
@@ -119,9 +121,12 @@ local spacious = battle.resolve({sheep}, defeated, 1)
 local spacious_summons = events_of(spacious, "summon")
 assert(#spacious_summons == 2)
 assert(spacious_summons[1].slot == 1 and spacious_summons[2].slot == 2)
-local lambkin = {id = "lambkin", attack = 3, health = 2, max_health = 2, level = 1, shield = 0}
-assert(equal(spacious_summons[1].board.player, {lambkin}))
-assert(equal(spacious_summons[2].board.player, {lambkin, lambkin}))
+local function lambkin(uid)
+    return {id = "lambkin", uid = uid, attack = 3, health = 2, max_health = 2, level = 1, shield = 0}
+end
+local first_lamb, second_lamb = lambkin("player:summon:1"), lambkin("player:summon:2")
+assert(equal(spacious_summons[1].board.player, {first_lamb}))
+assert(equal(spacious_summons[2].board.player, {first_lamb, second_lamb}))
 
 -- Death during the opening frees the slot before the opening sequence resumes.
 local born_opening = battle.resolve({pet("maple_fox", 2, 3)}, {pet("cottontail_rabbit", 1, 1)}, 1)
@@ -155,6 +160,10 @@ assert(ordered_summons[3].id == "rabbit_kit" and ordered_summons[3].slot == 3)
 for index, event in ipairs(ordered_summons) do
     assert(#event.board.enemy == index + 1 and event.board.enemy[index].id == event.id)
     assert(event.board.enemy[index + 1].id == ally.id)
+    assert(event.uid == event.board.enemy[index].uid)
+    if index > 1 then
+        assert(event.uid ~= ordered_summons[index - 1].uid)
+    end
 end
 
 local support = battle.resolve({pet("alder_marmot", 3, 1, 2), ally}, defeated, 1)
@@ -174,7 +183,19 @@ assert(saturated_buff.board.player[1].max_health == math.maxinteger)
 local saturated_result = saturated.events[#saturated.events].board.player[1]
 assert(saturated_result.health == math.maxinteger - 2 and saturated_result.max_health == math.maxinteger)
 
-assert(battle.resolve({}, {}, 42).outcome == "draw")
+local copy_a, copy_b = pet("reed_turtle", 1, 4), pet("reed_turtle", 1, 4)
+copy_a.uid, copy_b.uid = 8, 9
+local instances = battle.resolve({copy_a, copy_b}, {copy_b, copy_a}, 42)
+local starting_board = instances.events[1].board
+assert(starting_board.player[1].uid == "player:8" and starting_board.player[2].uid == "player:9")
+assert(starting_board.enemy[1].uid == "enemy:9" and starting_board.enemy[2].uid == "enemy:8")
+for _, event in ipairs(events_of(instances, "attack", 1)) do
+    assert(event.uid == starting_board[event.side][event.slot].uid)
+    assert(event.target_uid == starting_board[event.target_side][event.target_slot].uid)
+end
+assert(not pcall(battle.resolve, {copy_a, copy_a}, {}, 42))
+local draw = battle.resolve({}, {}, 42)
+assert(draw.outcome == "draw" and draw.status == "resolved" and draw.seed == 42 and draw.rng_state > 0)
 assert(battle.resolve({ally}, {}, 42).outcome == "win")
 assert(battle.resolve({}, {ally}, 42).outcome == "loss")
 assert(not pcall(battle.resolve, {ally, ally, ally, ally, ally, ally}, defeated, 1))
@@ -186,7 +207,7 @@ local sturdy = {sturdy_pet, sturdy_pet, sturdy_pet, sturdy_pet, sturdy_pet}
 local exhausted = battle.resolve(sturdy, sturdy, 1)
 local last = exhausted.events[#exhausted.events]
 assert(last.type == "result" and last.outcome == "draw" and last.reason == "strike_limit")
-assert(last.strike == 256)
+assert(last.strike == 256 and exhausted.status == "strike_limit")
 assert(#last.board.player == 5 and #last.board.enemy == 5)
 assert(last.board.player[1].health == math.maxinteger - 256 and last.board.enemy[1].health == math.maxinteger - 256)
 assert(last.board.player[1].max_health == math.maxinteger and last.board.enemy[1].max_health == math.maxinteger)
