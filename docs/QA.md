@@ -34,6 +34,8 @@ python3 scripts/render-native-previews.py /path/to/frames.json /tmp/auto-pets-pc
 
 ### 画面对照与独立评审
 
+[单局设计稿](design/M1_DESIGN_DRAFT.md) 汇总公开图、画面布局与真实回放检查点。
+
 以 Team Wood Games 公布的商店画面和双方交战画面为固定参照，逐项检查信息层级、动物朝向和战斗反馈。项目的场景、角色图元与控件样式保持原创。[参照商店](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1714040/ss_f61be4caff97d77b7df02bcdadee2687232e991f.1920x1080.jpg) · [参照战斗](https://cdn.cloudflare.steamstatic.com/steam/apps/1714040/ss_75e2d405204fa963fc6d5cb99c272c15f0f6dcc3.1920x1080.jpg)
 
 | 场景 | 通过条件 |
