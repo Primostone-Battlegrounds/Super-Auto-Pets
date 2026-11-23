@@ -14,6 +14,15 @@ local function player_id(value)
     return (type(value) == "string" and value ~= "") or positive_integer(value)
 end
 
+-- Use the SplitMix64 finalizer before reducing each domain to the shop RNG's
+-- range. Successive Park–Miller states would create shifted shop streams.
+local function stream_seed(seed, domain)
+    local mixed = seed ~ domain
+    mixed = (mixed ~ (mixed >> 30)) * 0xbf58476d1ce4e5b9
+    mixed = (mixed ~ (mixed >> 27)) * 0x94d049bb133111eb
+    return mixed ~ (mixed >> 31)
+end
+
 local function copy(value)
     if type(value) ~= "table" then
         return value
@@ -32,6 +41,10 @@ local function end_match(match, winner, reason)
     match.deadline = nil
 end
 
+local function phase_deadline(match, duration)
+    return match.clock + math.min(duration, match.match_deadline - match.clock)
+end
+
 local function open_next_round(match)
     for _, seat in ipairs(match.seats) do
         assert(seat.shop:advance_round())
@@ -42,7 +55,7 @@ local function open_next_round(match)
     end
     match.round = match.round + 1
     match.phase = "preparation"
-    match.deadline = match.clock + match.preparation_ms
+    match.deadline = phase_deadline(match, match.preparation_ms)
     match.battle = nil
 end
 
@@ -57,7 +70,7 @@ local function resolve_round(match)
         left.ready = false
         right.ready = false
         match.battle_error = result.status
-        match.deadline = match.clock + match.preparation_ms
+        match.deadline = phase_deadline(match, match.preparation_ms)
         return
     end
 
@@ -80,7 +93,7 @@ local function resolve_round(match)
         end
     end
     match.phase = "settlement"
-    match.deadline = match.clock + match.settlement_ms
+    match.deadline = phase_deadline(match, match.settlement_ms)
 end
 
 -- The room adapter supplies authenticated participant IDs and a monotonic
@@ -92,18 +105,18 @@ function duel.new(seed, player_one, player_two, options)
     options = options or {}
     local preparation_ms = options.preparation_ms or 60000
     local settlement_ms = options.settlement_ms or 10000
+    local match_ms = options.match_ms or 2700000
     local lives = options.starting_lives or data.rules.start_lives
     local now = options.now or 0
-    assert(positive_integer(preparation_ms) and positive_integer(settlement_ms) and positive_integer(lives),
+    assert(positive_integer(preparation_ms) and positive_integer(settlement_ms)
+        and positive_integer(match_ms) and positive_integer(lives),
         "duel configuration must use positive integers")
-    local latest_clock = math.maxinteger - math.max(preparation_ms, settlement_ms)
-    assert(math.type(now) == "integer" and now >= 0 and now <= latest_clock, "invalid duel clock")
+    assert(math.type(now) == "integer" and now >= 0 and now <= math.maxinteger - match_ms, "invalid duel clock")
 
-    local shop_random = rng.new(seed ~ 0x53484f50) -- SHOP
     local seats = {}
     for index = 1, 2 do
         seats[index] = {
-            shop = shop.new(shop_random:next()),
+            shop = shop.new(stream_seed(seed, 0x53484f50 + index)), -- SHOP
             lives = lives,
             sequence = 0,
             ready = false,
@@ -113,33 +126,43 @@ function duel.new(seed, player_one, player_two, options)
     return setmetatable({
         seats = seats,
         seat_by_player = {[player_one] = 1, [player_two] = 2},
-        battle_random = rng.new(seed ~ 0x4649474854), -- FIGHT
+        battle_random = rng.new(stream_seed(seed, 0x4649474854)), -- FIGHT
         phase = "preparation",
         round = 1,
         revision = 0,
         clock = now,
-        latest_clock = latest_clock,
         preparation_ms = preparation_ms,
         settlement_ms = settlement_ms,
-        deadline = now + preparation_ms,
+        match_deadline = now + match_ms,
+        deadline = now + math.min(preparation_ms, match_ms),
     }, duel)
 end
 
 function duel:tick(now)
-    if math.type(now) ~= "integer" or now < self.clock or now > self.latest_clock then
+    if math.type(now) ~= "integer" or now < self.clock then
         return nil, "invalid_clock"
     end
     self.clock = now
-    if self.deadline and now >= self.deadline then
-        if self.phase == "preparation" then
-            self.seats[1].ready = true
-            self.seats[2].ready = true
-            resolve_round(self)
-        else
-            open_next_round(self)
-        end
-        self.revision = self.revision + 1
+    if not self.deadline or now < self.deadline then
+        return true
     end
+    if now >= self.match_deadline then
+        local first, second = self.seats[1].lives, self.seats[2].lives
+        local winner
+        if first > second then
+            winner = 1
+        elseif second > first then
+            winner = 2
+        end
+        end_match(self, winner, "match_timeout")
+    elseif self.phase == "preparation" then
+        self.seats[1].ready = true
+        self.seats[2].ready = true
+        resolve_round(self)
+    else
+        open_next_round(self)
+    end
+    self.revision = self.revision + 1
     return true
 end
 

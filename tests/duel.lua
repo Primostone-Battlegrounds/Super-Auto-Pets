@@ -55,6 +55,18 @@ end
 
 local match_options = {now = 100, starting_lives = 2, preparation_ms = 100, settlement_ms = 50}
 
+-- Independent shops must not be successive views of the same random stream.
+local shifted_shelves = 0
+for seed = 1, 128 do
+    local instance = duel.new(seed, first, second)
+    local left = assert(instance:snapshot(first)).shop.pets
+    local right = assert(instance:snapshot(second)).shop.pets
+    if left[2].id == right[1].id and left[3].id == right[2].id then
+        shifted_shelves = shifted_shelves + 1
+    end
+end
+assert(shifted_shelves < 64, "shop streams share the same shifted offers")
+
 local function opening()
     for seed = 1, 64 do
         local match = duel.new(seed, first, second, match_options)
@@ -181,6 +193,22 @@ local vacant = duel.new(11, first, second, {starting_lives = 2, preparation_ms =
 assert(vacant:tick(12))
 local vacant_left, vacant_right = assert_both_battles(vacant, "draw", "draw")
 assert(vacant_left.lives == 2 and vacant_right.lives == 2 and vacant_left.deadline == 17)
+
+local tied = duel.new(11, first, second, {preparation_ms = 10, settlement_ms = 5, match_ms = 23})
+assert(tied:tick(10) and tied:tick(15))
+assert(assert(tied:snapshot(first)).deadline == 23)
+assert(tied:tick(23))
+local tie = assert(tied:snapshot(first))
+assert(tie.phase == "ended" and tie.reason == "match_timeout" and not tie.winner and not tie.deadline)
+
+local leader = duel.new(11, first, second, {preparation_ms = 10, settlement_ms = 5, match_ms = 12})
+send(leader, second, 1, "shop", {action = "buy", offer = 1})
+assert(leader:tick(10) and leader:tick(12))
+local timed_winner = assert(leader:snapshot(second))
+assert(timed_winner.phase == "ended" and timed_winner.reason == "match_timeout" and timed_winner.winner == 2)
+
+local final_tick = duel.new(11, first, second, {now = math.maxinteger - 1, match_ms = 1})
+assert(final_tick:tick(math.maxinteger) and assert(final_tick:snapshot(first)).phase == "ended")
 
 local surrendered = duel.new(11, first, second, match_options)
 local forfeit = send(surrendered, second, 100, "forfeit")

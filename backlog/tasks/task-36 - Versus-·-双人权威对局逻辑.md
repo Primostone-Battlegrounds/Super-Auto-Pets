@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-11-23 09:12'
-updated_date: '2026-11-23 09:16'
+updated_date: '2026-11-23 09:21'
 labels: []
 milestone: m-2
 dependencies:
@@ -32,6 +32,12 @@ ordinal: 30000
 <!-- SECTION:PLAN:BEGIN -->
 复用 shop 与 battle。独立管理两个席位、房间回合、服务端时间与命令序号，覆盖完整多轮对局。
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+独立复审后的回归覆盖随机数流分离、货架错位检查和房间超时。房间总时限为本地可配置默认值。
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
