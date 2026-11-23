@@ -13,6 +13,7 @@ SCENE_COLOUR = "#0b1f24"
 ELLIPSE_IMAGE = 106025
 RECTANGLE_IMAGE = 100001
 DESKTOP_CANVAS = (1600, 900)
+PREVIEW_SCALE = 2
 
 
 def read_font():
@@ -33,7 +34,7 @@ def draw_label(draw, record, font, position, size):
     content = record.get("content", "")
     if not content:
         return
-    face = font(record["fontSize"])
+    face = font(record["fontSize"] * PREVIEW_SCALE)
     alignment = record.get("align", "centre")
     vertical = record.get("valign", "middle")
     x, y = position
@@ -51,13 +52,13 @@ def draw_label(draw, record, font, position, size):
     else:
         vertical_anchor = "m"
     draw.text(
-        (x, y), content, font=face, anchor=horizontal_anchor + vertical_anchor,
+        (x * PREVIEW_SCALE, y * PREVIEW_SCALE), content, font=face, anchor=horizontal_anchor + vertical_anchor,
         fill=colour(record.get("colour", "#ffffff"), record.get("opacity", 1)),
     )
 
 
 def draw_frame(records, size, font):
-    canvas = Image.new("RGB", size, SCENE_COLOUR)
+    canvas = Image.new("RGB", tuple(axis * PREVIEW_SCALE for axis in size), SCENE_COLOUR)
     draw = ImageDraw.Draw(canvas, "RGBA")
     centre = size[0] / 2, size[1] / 2
     parents = {}
@@ -82,13 +83,13 @@ def draw_frame(records, size, font):
                 continue
             if image not in (ELLIPSE_IMAGE, RECTANGLE_IMAGE):
                 raise ValueError(f"Image {image} is unavailable for preview at {record['path']}")
-            box = (x - width / 2, y - height / 2, x + width / 2, y + height / 2)
+            box = tuple(axis * PREVIEW_SCALE for axis in (x - width / 2, y - height / 2, x + width / 2, y + height / 2))
             paint = colour(record.get("colour", "#ffffff"), record.get("opacity", 1))
             if image == ELLIPSE_IMAGE:
                 draw.ellipse(box, fill=paint)
             else:
                 draw.rectangle(box, fill=paint)
-    return canvas
+    return canvas.resize(size, Image.Resampling.LANCZOS)
 
 
 def main():
