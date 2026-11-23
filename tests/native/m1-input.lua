@@ -341,7 +341,8 @@ shop("move", 2, 1)
 finish("win")
 
 local combines = { [4] = 1, [6] = 3, [9] = 3 }
-for round = 3, 11 do
+local losses = { [7] = true, [8] = true, [10] = true }
+for round = 3, 13 do
     if combines[round] then shop("combine", combines[round], 1) end
     shop("feed", 1, 1)
     shop("feed", 2, 1)
@@ -349,9 +350,9 @@ for round = 3, 11 do
         shop("reroll")
         shop("feed", 1, 1)
     end
-    finish(round == 7 and "draw" or "win", round == 11)
+    finish(losses[round] and "loss" or "win", round == 13)
 end
-assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=11 wins=10 lives=5 final=win seed=7")
+assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=13 wins=10 lives=2 final=win seed=7")
 assert(full_formation_captured)
 capture("victory")
 click("Primary")
@@ -364,6 +365,12 @@ capture("defeat")
 click("Battle/NewSeed")
 opening(seed + 1)
 assert(logs[#logs] == "AUTO_PETS_M1 phase=preparation round=1 wins=0 lives=5 final=- seed=8")
+
+restart_script()
+opening(seed)
+for _, position in ipairs({2, 1, 3}) do shop("buy", position) end
+finish("draw")
+assert(label("Wins/Value") == "0 / 10" and label("Lives/Value") == "5 / 5")
 
 restart_script()
 opening(seed)

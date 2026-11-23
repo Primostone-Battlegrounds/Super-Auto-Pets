@@ -104,7 +104,8 @@ function readFrames(file, records) {
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
   assert.deepEqual([...frames.keys()].sort(), [
-    'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'populated', 'preparation', 'victory',
+    'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'merge_preview', 'populated', 'preparation',
+    'restart_confirm', 'victory',
   ]);
   return {
     canvas: canvases.mobile,
@@ -185,6 +186,7 @@ try {
   assert.equal(decoded.interface.hidden, undefined);
   assert.equal(decoded.interface.showCursor, true);
   assert.equal(decoded.interface.blockCursor, true);
+  assert.equal(decoded.interface.blockKeys, true);
   assert.equal(decoded.containerId, built.containerId);
   assert.equal(decoded.rootId, built.rootId);
   const records = [];
