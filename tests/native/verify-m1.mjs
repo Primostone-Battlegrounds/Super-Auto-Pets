@@ -96,7 +96,9 @@ function readFrames(file, records) {
     assert.ok(!frame.has(key), `Duplicate frame control: ${name} ${key}`);
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
-  assert.deepEqual([...frames.keys()], ['preparation', 'populated', 'battle_damage', 'battle_full', 'victory', 'defeat']);
+  assert.deepEqual([...frames.keys()].sort(), [
+    'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'populated', 'preparation', 'victory',
+  ]);
   return {
     canvas: canvases.mobile,
     canvases,

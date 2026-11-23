@@ -201,8 +201,10 @@ local function finish(outcome, terminal, inspect_playback)
                 saw_block = true
             end
             local summoned = event_card("^入场$")
-            if summoned then
+            if summoned and not saw_summon then
+                assert(label(summoned .. "/Name") == "兔宝宝")
                 assert(nodes[summoned .. "/Portrait/Layer1"].visible)
+                capture("battle_summon")
                 saw_summon = true
             end
         end
@@ -242,11 +244,11 @@ capture("preparation")
 click("Primary")
 assert(label("Hint") == "先购买至少一只动物")
 shop("buy", 1)
-assert(label("Team1/Name") == "灯囊蛾")
+assert(label("Team1/Name") == "棉尾兔")
 shop("buy", 2, 1)
 assert(label("Team1/Name") == "芦纹龟")
 shop("move", 2, 1)
-assert(label("Team1/Name") == "灯囊蛾")
+assert(label("Team1/Name") == "棉尾兔")
 click("Shop/Food1")
 assert(label("Shop/Info"):find("一名队员获得", 1, true))
 click("Team2")
@@ -255,7 +257,7 @@ assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].activ
 shop("reroll")
 click("Shop/Pet3")
 assert(nodes["Shop/Pet3/Selected"].active and nodes["Team1/Portrait/Layer1"].active)
-assert(label("Shop/Info"):find("幼蛾破茧", 1, true))
+assert(label("Shop/Info"):find("兔窝接力", 1, true))
 capture("populated")
 finish("win", false, true)
 assert(label("Shop/Pet3/Tag") == "已冻结")
