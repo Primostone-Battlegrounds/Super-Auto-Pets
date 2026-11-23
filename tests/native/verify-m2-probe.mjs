@@ -87,7 +87,7 @@ const ui = {
           name: `${name}Label`, kind: 'text', position, size,
           text: { content, fontSize: 29, colour: '#fff3d7', align: 'centre', valign: 'middle' },
         },
-        { name, kind: 'image', position, size, image: 100001, opacity: 0 },
+        { name, kind: 'cursorArea', position, size },
       ];
     }),
   ],
@@ -129,7 +129,11 @@ try {
   assert.equal(readSource, source);
   const readUi = await call('scene_get_client_ui', { mapPath, ui: ui.name });
   assert.deepEqual(readUi.interface.scripts, [script]);
-  assert.deepEqual(readUi.interface.controls.map(control => control.name), ui.controls.map(control => control.name));
+  assert.deepEqual(
+    readUi.interface.controls.map(({ name, kind, position, size }) => ({ name, kind, position, size })),
+    ui.controls.map(({ name, kind, position, size }) => ({ name, kind, position, size })),
+  );
+  assert.ok(readUi.interface.controls.every(control => control.active !== false && control.visible !== false));
   const checked = await call('scene_check_client', { mapPath, scripts: [script] });
   assert.deepEqual(checked.problems, []);
   const graphSimulation = verifyGraph(graphSource, toolRequire('typescript'));
@@ -147,13 +151,16 @@ try {
   const gil = path.join(candidate, path.basename(mapPath));
   fs.copyFileSync(mapPath, gil, fs.constants.COPYFILE_EXCL);
   fs.copyFileSync(new URL('../../platform/M2.md', import.meta.url), path.join(candidate, 'README.md'));
-  fs.writeFileSync(path.join(candidate, 'SHA256SUMS'), `${hash}  ${path.basename(gil)}\n`);
+  fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(candidate, 'MCP-FIXTURE-LICENSE.txt'));
   fs.writeFileSync(path.join(candidate, 'evidence.json'), JSON.stringify({
     revision, fixtureHash, players, graph: readGraph, signals: registered.parameters,
     clientScriptSha256: sha256(readSource), graphSourceSha256: sha256(graphSource),
     clientDiagnostics: checked.problems, graphSimulation, clientSimulation: clientSimulation.trimEnd().split('\n'),
     luaVersion, sha256: hash, officialTwoDeviceTest: 'pending',
   }, null, 2) + '\n');
+  const packageFiles = [path.basename(gil), 'README.md', 'MCP-FIXTURE-LICENSE.txt', 'evidence.json'];
+  const checksums = packageFiles.map(name => `${sha256(fs.readFileSync(path.join(candidate, name)))}  ${name}`);
+  fs.writeFileSync(path.join(candidate, 'SHA256SUMS'), checksums.join('\n') + '\n');
   console.log(`Candidate: ${gil}`);
 } finally {
   await client.close();
