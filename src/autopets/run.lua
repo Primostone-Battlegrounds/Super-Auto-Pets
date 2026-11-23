@@ -5,6 +5,7 @@ local rng = require("autopets.rng")
 local shop = require("autopets.shop")
 
 local rules = data.rules
+local opponent_turn_budget = 64
 local run = {}
 run.__index = run
 
@@ -20,7 +21,7 @@ local function copy(value)
 end
 
 local function prepare(self)
-    self.opponent = bot.generate(self.shop.round, self.opponent_random:next())
+    self.opponent = assert(bot.snapshot(self.opponents))
     self.battle = nil
     self.phase = "preparation"
 end
@@ -32,8 +33,10 @@ local function reset(self, seed)
     self.final = nil
     -- Salt each RNG with its domain so shop activity cannot influence later battles.
     self.shop = shop.new(seed ~ 0x53484f50) -- SHOP
-    self.opponent_random = rng.new(seed ~ 0x424f54) -- BOT
+    local opponent_random = rng.new(seed ~ 0x424f54) -- BOT
+    self.opponents = bot.new_pool(opponent_random:next())
     self.battle_random = rng.new(seed ~ 0x4649474854) -- FIGHT
+    assert(bot.advance_to_round(self.opponents, 1, opponent_turn_budget))
     prepare(self)
 end
 
@@ -56,6 +59,11 @@ function run:snapshot()
         opponent = copy(self.opponent),
         battle = copy(self.battle),
     }
+end
+
+-- A diagnostic export of the opponent actually selected for this run.
+function run:opponent_trace()
+    return bot.trace(self.opponents)
 end
 
 function run:shop_action(name, ...)
@@ -113,6 +121,9 @@ end
 function run:advance()
     if self.phase ~= "settlement" then
         return nil, "wrong_phase"
+    end
+    if not bot.advance_to_round(self.opponents, self.shop.round + 1, opponent_turn_budget) then
+        return nil, "opponent_preparing"
     end
     local ok, error_code = self.shop:advance_round()
     if not ok then
