@@ -4,9 +4,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { bundleRun } from '../../platform/m1-bundle.mjs';
-import { nativeRun } from '../../platform/m1-ui.mjs';
+import { nativeRun, portraitLayers } from '../../platform/m1-ui.mjs';
 
 const revision = '59c576e41632a6bf6781bbca83a676d0da0374ec';
 const fixtureName = 'editor-2026-10-26-shapes.gil';
@@ -17,14 +18,43 @@ assert.ok(checkoutArg && scratch && lua,
   'Usage: node tests/native/verify-m1.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable> [new package directory]');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0', 'Set MILIASTRA_ALLOW_LIVE_WRITE=0');
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
-let sourceRevision;
+const git = args => execFileSync('git', args, { cwd: projectRoot, encoding: 'utf8' }).trim();
+const sourceRevision = git(['rev-parse', 'HEAD']);
+const checkedPaths = ['src', 'platform', 'tests/native', 'scripts/render-native-previews.py'];
+const sourceChanges = git(['status', '--porcelain', '--untracked-files=all', '--', ...checkedPaths]);
 if (packageDir) {
-  sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, encoding: 'utf8' }).trim();
-  execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'src', 'platform', 'tests/native'], { cwd: projectRoot });
+  assert.equal(sourceChanges, '', 'Commit the runtime sources and evidence inputs before exporting a candidate');
   assert.ok(!fs.existsSync(packageDir), 'Use a new package directory');
 }
-const luaVersion = execFileSync(lua, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim();
-assert.match(luaVersion, /^Lua 5\.3\./);
+const lua54 = process.env.LUA54 || 'lua5.4';
+const versions = {
+  lua53: execFileSync(lua, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim(),
+  lua54: execFileSync(lua54, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim(),
+  node: process.version,
+};
+assert.match(versions.lua53, /^Lua 5\.3\./);
+assert.match(versions.lua54, /^Lua 5\.4\./);
+const replayScript = fileURLToPath(new URL('./m1-replay.lua', import.meta.url));
+const replayOptions = { cwd: projectRoot, timeout: 30_000, maxBuffer: 64 * 1024 * 1024 };
+const startedAt = performance.now();
+const source54 = execFileSync(lua54, ['-E', replayScript, 'source'], replayOptions);
+const source53 = execFileSync(lua, ['-E', replayScript, 'source'], replayOptions);
+const replayHash = sha256(source54);
+assert.equal(sha256(source53), replayHash, 'Source replay differs between Lua 5.3 and Lua 5.4');
+const replayPrelude = source54.subarray(0, 200).toString('utf8');
+const rulesHash = replayPrelude.match(/^rules_hash ((?:sha256:)?[a-f0-9]{64})\n/)?.[1];
+const assets = replayPrelude.match(/\nassets (\d+) (\d+) (\d+)\n/);
+assert.ok(rulesHash && assets, 'Replay must identify its runtime catalog and enumerate presentation assets');
+assert.ok(Number(assets[3]) <= portraitLayers, 'The GIL portrait pool cannot display the whole runtime catalog');
+const catalog = fs.readFileSync(path.join(projectRoot, 'src/autopets/data.lua'));
+const normalizedCatalog = catalog.toString('utf8').replace(/\r\n/g, '\n').replace(/^data\.rules_hash = "[^"]*"\n/m, '');
+assert.equal(rulesHash, `sha256:${sha256(normalizedCatalog)}`, 'The runtime catalog hash is stale');
+const sources = {
+  revision: sourceRevision, dirty: sourceChanges !== '', rulesHash,
+  catalogSha256: sha256(catalog),
+  artSha256: sha256(fs.readFileSync(path.join(projectRoot, 'src/autopets/art.lua'))),
+};
+const sourceReplayMs = performance.now() - startedAt;
 
 const checkout = fs.realpathSync(checkoutArg);
 const toolHead = execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -47,7 +77,10 @@ const transport = new StdioClientTransport({
   args: [path.join(checkout, 'src', 'server.mjs')],
   cwd: checkout,
   stderr: 'inherit',
-  env: { MILIASTRA_ALLOW_LIVE_WRITE: '0', MILIASTRA_SAVE_ROOTS: '[]', MILIASTRA_WORKSPACE: workspace },
+  env: {
+    LOCALAPPDATA: path.join(workspace, 'host-runtime'),
+    MILIASTRA_ALLOW_LIVE_WRITE: '0', MILIASTRA_SAVE_ROOTS: '[]', MILIASTRA_WORKSPACE: workspace,
+  },
 });
 
 async function call(name, args = {}) {
@@ -104,8 +137,8 @@ function readFrames(file, records) {
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
   assert.deepEqual([...frames.keys()].sort(), [
-    'battle_attack', 'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'merge_preview', 'populated',
-    'preparation', 'restart_confirm', 'shop_tooltip', 'victory',
+    'battle_attack', 'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'menu', 'menu_discard',
+    'merge_preview', 'populated', 'preparation', 'restart_confirm', 'shop_tooltip', 'victory',
   ]);
   return {
     canvas: canvases.mobile,
@@ -139,7 +172,25 @@ function readFrames(file, records) {
   };
 }
 
-const seed = 7;
+function visibleResources(frames) {
+  return Object.fromEntries(Object.entries(frames.frames).map(([name, items]) => {
+    const effective = new Map();
+    let controls = 0;
+    let portraitLayers = 0;
+    for (const item of items) {
+      const visible = item.active && item.visible && (item.parent === null || effective.get(item.parent));
+      effective.set(item.path, visible);
+      if (visible) {
+        controls += 1;
+        if (/\/Portrait\/Layer[1-9][0-9]*$/.test(item.path)) portraitLayers += 1;
+      }
+    }
+    return [name, { controls, portraitLayers }];
+  }));
+}
+
+const seed = 1;
+const buildStartedAt = performance.now();
 let report;
 try {
   await client.connect(transport);
@@ -227,23 +278,71 @@ try {
   const bindings = path.join(workspace, 'control-paths.tsv');
   fs.writeFileSync(bindings, records.map(record =>
     [record.path, record.kind, ...record.position, ...record.size].join('\t')).join('\n') + '\n');
+  const buildAndReadbackMs = performance.now() - buildStartedAt;
+  const replayStartedAt = performance.now();
+  const extractedReplay = execFileSync(lua, ['-E', replayScript, 'bundle', extracted], replayOptions);
+  assert.equal(sha256(extractedReplay), replayHash, 'GIL readback replay differs from tested source');
+  const replayMs = performance.now() - replayStartedAt;
+  const replayPath = path.join(workspace, 'domain-replay.txt');
+  fs.writeFileSync(replayPath, extractedReplay);
   const framesRaw = path.join(workspace, 'frames-runtime.tsv');
+  const inputStartedAt = performance.now();
   const log = execFileSync(lua, ['-E', fileURLToPath(new URL('./m1-input.lua', import.meta.url)),
     extracted, bindings, String(decodedSeed), framesRaw],
-    { encoding: 'utf8', timeout: 10_000 });
+    { cwd: projectRoot, encoding: 'utf8', timeout: 30_000 });
+  const inputSimulationMs = performance.now() - inputStartedAt;
   const framesPath = path.join(workspace, 'frames.json');
-  fs.writeFileSync(framesPath, JSON.stringify(readFrames(framesRaw, records)) + '\n');
+  const frames = readFrames(framesRaw, records);
+  fs.writeFileSync(framesPath, JSON.stringify(frames) + '\n');
   fs.writeFileSync(path.join(workspace, 'simulated-run.log'), log);
   console.log(log.trimEnd());
+  const sample = log.match(/^NATIVE_RESOURCES (.+)$/m)?.[1];
+  assert.ok(sample, 'Missing lifecycle metrics');
+  const lifecycle = Object.fromEntries(sample.split(' ').map(item => {
+    const [name, value] = item.split('=');
+    return [name, Number(value)];
+  }));
+  const audioIds = log.match(/^NATIVE_AUDIO ([0-9,]+)$/m)?.[1].split(',').map(Number);
+  const soundCatalog = JSON.parse(fs.readFileSync(path.join(checkout, 'src/scene/media/sounds.json'), 'utf8'));
+  const validSounds = new Set(soundCatalog.rows.map(([id]) => id));
+  assert.ok(audioIds?.length && audioIds.every(id => validSounds.has(id)), 'Runtime used an unlisted sound');
+  const resources = {
+    lifecycle,
+    static: {
+      controls: records.length,
+      containers: records.filter(record => record.kind === 'container').length,
+      cursorAreas: records.filter(record => record.kind === 'cursorArea').length,
+      textControls: records.filter(record => record.kind === 'text').length,
+      imageControls: records.filter(record => record.kind === 'image').length,
+      portraitLayersPerSlot: portraitLayers,
+      portraitLayerPool: records.filter(record => /\/Portrait\/Layer[1-9][0-9]*$/.test(record.path)).length,
+      portraitRoots: records.filter(record => record.path.endsWith('/Portrait')).length,
+      catalogAssets: Number(assets[1]),
+      catalogDefinitionLayers: Number(assets[2]),
+      largestCatalogPortrait: Number(assets[3]),
+      simulatedSoundIds: audioIds,
+      gilBytes: inspected.bytes,
+      bundleBytes: Buffer.byteLength(source),
+    },
+    visiblePerCapturedFrame: visibleResources(frames),
+    durationsMs: { sourceReplayMs, buildAndReadbackMs, replayMs, inputSimulationMs },
+    measurement: 'MCP host and simulated UI. Frame counts follow parent visibility before overlay occlusion. Device frame and capacity metrics pending.',
+  };
+  fs.writeFileSync(path.join(workspace, 'resource-report.json'), JSON.stringify(resources, null, 2) + '\n');
   report = {
-    toolRevision: toolHead, fixture: { file: fixtureName, sha256: fixtureHash, originalsUnchanged: true },
+    sources, versions, toolRevision: toolHead,
+    fixture: { file: fixtureName, sha256: fixtureHash, originalsUnchanged: true },
     gil: { mapPath, sha256: inspected.sha256, bytes: inspected.bytes, schema: inspected.schema },
     players,
     binding: { layoutId: layouts.layouts[0].layoutId, containerId: decoded.containerId, rootId: decoded.rootId,
-      scriptId: embedded.scriptId, sourceSha256: sha256(source), sourceBytes: Buffer.byteLength(source), controls: records.length },
+      scriptId: embedded.scriptId, sourceSha256: sha256(embedded.source), sourceBytes: Buffer.byteLength(source),
+      controls: records.length },
     offline: { status: 'passed', checkProblems: checked.problems },
-    simulation: { status: 'passed', runtime: luaVersion, input: 'mocked cursor events and update ticks', seed: decodedSeed,
-      framesPath, logs: log.trimEnd().split('\n') },
+    replay: { status: 'passed', sourceRuntimes: [versions.lua53, versions.lua54], readbackRuntime: versions.lua53,
+      sha256: replayHash, bytes: extractedReplay.length },
+    simulation: { status: 'passed', runtime: versions.lua53, input: 'mocked cursor events and update ticks',
+      seed: decodedSeed, framesPath, logs: log.trimEnd().split('\n') },
+    resources,
     officialClient: { pc: 'pending', mobile: 'pending' },
   };
 } finally {
@@ -257,11 +356,17 @@ if (packageDir) {
   const mapFile = 'm1-auto-pets.gil';
   const manifest = {
     sourceRevision,
+    rulesHash: report.sources.rulesHash,
+    catalogSha256: report.sources.catalogSha256,
+    artSha256: report.sources.artSha256,
     toolRevision: report.toolRevision,
+    versions: report.versions,
+    binding: report.binding,
     fixture: { file: report.fixture.file, sha256: report.fixture.sha256 },
     gil: { file: mapFile, sha256: report.gil.sha256, bytes: report.gil.bytes, schema: report.gil.schema },
     players: report.players,
     offline: report.offline.status,
+    replay: report.replay,
     simulation: { status: report.simulation.status, seed: report.simulation.seed },
     officialClient: report.officialClient,
   };
@@ -271,15 +376,38 @@ if (packageDir) {
     fs.copyFileSync(report.gil.mapPath, mapPath, fs.constants.COPYFILE_EXCL);
     assert.equal(sha256(fs.readFileSync(mapPath)), manifest.gil.sha256);
     fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-    fs.writeFileSync(path.join(packageDir, 'SHA256SUMS'), `${manifest.gil.sha256}  ${mapFile}\n`);
-    fs.writeFileSync(path.join(packageDir, 'simulated-run.log'), report.simulation.logs.join('\n') + '\n');
-    fs.copyFileSync(report.simulation.framesPath, path.join(packageDir, 'frames.json'));
+    const generated = ['simulated-run.log', 'frames.json', 'resource-report.json', 'domain-replay.txt'];
+    for (const name of generated) fs.copyFileSync(path.join(workspace, name), path.join(packageDir, name));
+    const evidenceForPackage = {
+      ...report,
+      gil: { ...report.gil, mapPath: mapFile },
+      simulation: { ...report.simulation, framesPath: 'frames.json' },
+    };
+    fs.writeFileSync(path.join(packageDir, 'evidence.json'), JSON.stringify(evidenceForPackage, null, 2) + '\n');
     fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(packageDir, 'MCP-FIXTURE-LICENSE.txt'));
-    const guide = `# 小动物自走棋 M1 真机验收候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
-      `先在本目录运行 \`sha256sum -c SHA256SUMS\`。使用获授权的官方隔离关卡导入 \`${mapFile}\`。\n` +
-      `在 PC 与手机分别核对画面、操作和完整单局，留存客户端版本与 AUTO_PETS_M1 日志。\n\n` +
-      `[同一提交的 M1 验收步骤](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/blob/${sourceRevision}/platform/M1.md#官方客户端待验)\n`;
+    fs.copyFileSync(path.join(projectRoot, 'platform/M1.md'), path.join(packageDir, 'device-acceptance.md'));
+    const acceptanceDir = path.join(packageDir, 'acceptance-input');
+    fs.mkdirSync(acceptanceDir);
+    const inputs = {
+      'm1-replay.lua': replayScript,
+      'm1-input.lua': fileURLToPath(new URL('./m1-input.lua', import.meta.url)),
+      'control-paths.tsv': path.join(workspace, 'control-paths.tsv'),
+      'readback.lua': path.join(workspace, `${nativeRun.script}.lua`),
+    };
+    for (const [name, inputPath] of Object.entries(inputs)) {
+      fs.copyFileSync(inputPath, path.join(acceptanceDir, name));
+    }
+    const guide = `# 小动物自走棋 M1 千星候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
+      `运行 \`sha256sum -c SHA256SUMS\` 校验文件。设备验收步骤见 [device-acceptance.md](device-acceptance.md)。\n\n` +
+      `用 Lua 5.3 复验回读快照和事件。\n\n` +
+      `\`\`\`sh\nlua5.3 -E acceptance-input/m1-replay.lua bundle acceptance-input/readback.lua > replay-check.txt\n` +
+      `cmp domain-replay.txt replay-check.txt\n` +
+      `lua5.3 -E acceptance-input/m1-input.lua acceptance-input/readback.lua acceptance-input/control-paths.tsv ${seed} input-frames.tsv\n\`\`\`\n`;
     fs.writeFileSync(path.join(packageDir, 'README.md'), guide);
+    const files = [mapFile, 'manifest.json', 'README.md', 'device-acceptance.md', 'evidence.json',
+      'MCP-FIXTURE-LICENSE.txt', ...generated, ...Object.keys(inputs).map(name => `acceptance-input/${name}`)];
+    fs.writeFileSync(path.join(packageDir, 'SHA256SUMS'), files.map(name =>
+      `${sha256(fs.readFileSync(path.join(packageDir, name)))}  ${name}\n`).join(''));
   } catch (error) {
     fs.rmSync(packageDir, { recursive: true, force: true });
     throw error;

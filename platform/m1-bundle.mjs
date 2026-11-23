@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { portraitLayers } from './m1-ui.mjs';
 
-const names = ['data', 'rng', 'shop', 'bot', 'battle', 'run', 'art'];
+const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art'];
 const validModules = new Set(names.map(name => `autopets.${name}`));
 
 export function bundleRun(parse) {
@@ -29,6 +30,7 @@ export function bundleRun(parse) {
     `factories['autopets.${name}'] = function()\n${convert(`../src/autopets/${name}.lua`)}\nend`,
   );
   return [
+    `local portrait_layers = ${portraitLayers}`,
     'local factories, loaded, loading = {}, {}, {}',
     'local function loadAutoPetsModule(name)',
     '    if loaded[name] == nil then',

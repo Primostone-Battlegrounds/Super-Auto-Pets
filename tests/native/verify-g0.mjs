@@ -40,6 +40,7 @@ const transport = new StdioClientTransport({
   cwd: checkout,
   stderr: 'inherit',
   env: {
+    LOCALAPPDATA: path.join(workspace, 'host-runtime'),
     MILIASTRA_ALLOW_LIVE_WRITE: '0',
     MILIASTRA_SAVE_ROOTS: '[]',
     MILIASTRA_WORKSPACE: workspace,

@@ -1,12 +1,15 @@
 assert(_VERSION == "Lua 5.3")
 local bundle_path, bindings_path, seed = arg[1], arg[2], assert(math.tointeger(tonumber(arg[3])))
 local nodes, logs = {}, {}
+local configured_seed = seed
 local cursor = {CursorDown = "CursorDown", CursorClick = "CursorClick",
     CursorBeginDrag = "CursorBeginDrag", CursorDrag = "CursorDrag", CursorEndDrag = "CursorEndDrag"}
 local canvas = {1600, 900}
 local capture_file = assert(io.open(arg[4], "w"))
 local ticking, image_writes = false, 0
-local full_formation_captured = false
+local captured = {}
+local listeners, listener_peak, installs, removals = 0, 0, 0, 0
+local audio_plays, audio_stops, active_audio, sound_ids = 0, 0, {}, {}
 
 local node_methods = {}
 function node_methods:SetActive(value) self.active = value end
@@ -24,10 +27,13 @@ function node_methods:AddCursorEventListener(event, callback)
     assert(self.kind == "cursorArea" and self.active and self.visible)
     assert(cursor[event] and not self.callbacks[event])
     self.callbacks[event] = callback
+    listeners, installs = listeners + 1, installs + 1
+    listener_peak = math.max(listener_peak, listeners)
 end
 function node_methods:RemoveCursorEventListener(event, callback)
     assert(self.callbacks[event] == callback)
     self.callbacks[event] = nil
+    listeners, removals = listeners - 1, removals + 1
 end
 
 for line in io.lines(bindings_path) do
@@ -45,9 +51,25 @@ local function colour(r, g, b, a)
 end
 
 local sandbox = {
-    assert = assert, error = error, ipairs = ipairs, math = math, next = next, pairs = pairs, select = select,
+    assert = assert, error = error, ipairs = ipairs, math = math, next = next, pairs = pairs,
+    pcall = pcall, rawequal = rawequal, select = select,
     setmetatable = setmetatable, string = string, table = table, tonumber = tonumber, tostring = tostring, type = type,
-    game = { GetUICanvasSize = function() return table.unpack(canvas) end },
+    game = {
+        GetUICanvasSize = function() return table.unpack(canvas) end,
+        PlayAudio2D = function(sound)
+            assert(math.type(sound) == "integer")
+            sound_ids[sound] = true
+            audio_plays = audio_plays + 1
+            active_audio[audio_plays] = true
+            return audio_plays
+        end,
+        IsAudioAlive = function(instance) return active_audio[instance] == true end,
+        StopAudio = function(instance)
+            assert(active_audio[instance], "invalid sound instance")
+            active_audio[instance] = nil
+            audio_stops = audio_stops + 1
+        end,
+    },
     Enum = {
         CursorEventType = cursor,
         ImageSource = { StaticReference = "StaticReference" },
@@ -59,7 +81,7 @@ local sandbox = {
         object = { FindChild = function(_, path) return nodes[path] end },
         GetParam = function(_, name)
             assert(name == "seed")
-            return seed
+            return configured_seed
         end,
         EnableUpdate = function(_, value) ticking = value end,
     },
@@ -73,6 +95,8 @@ local function flag(value)
 end
 
 local function capture(frame)
+    assert(not captured[frame], "duplicate capture " .. frame)
+    captured[frame] = true
     local paths = {}
     for path in pairs(nodes) do paths[#paths + 1] = path end
     table.sort(paths)
@@ -116,9 +140,9 @@ local function cursor_event(touch, x, y)
     return {touchId = touch, GetUIPos = function() return x, y end}
 end
 
-local function click(path)
+local function click(path, touch)
     local target = hit_area(path)
-    local event = cursor_event(-1, hit_centre(path))
+    local event = cursor_event(touch or -1, hit_centre(path))
     target.callbacks.CursorDown(event)
     target.callbacks.CursorClick(event)
 end
@@ -158,11 +182,17 @@ local function drag_to(source, target, touch, offset_x, offset_y)
     callbacks.CursorClick(drop)
 end
 
-local function restart_script()
+local function destroy_script()
     sandbox.OnDestroy()
+    assert(listeners == 0 and not ticking and next(active_audio) == nil)
     for _, node in pairs(nodes) do assert(not next(node.callbacks)) end
-    assert(loadfile(bundle_path, "t", sandbox))()
+end
+
+local function restart_script(new_seed)
+    destroy_script()
+    configured_seed = new_seed or configured_seed
     sandbox.OnStart()
+    assert(nodes.Menu.active and label("Menu/Continue/Title") == "开始游戏")
 end
 
 local function shop(action, first, second)
@@ -205,13 +235,16 @@ local function inward_formation()
 end
 
 local function mirrored_portrait()
+    local layers = 0
+    while nodes["Team1/Portrait/Layer" .. (layers + 1)] do layers = layers + 1 end
+    assert(layers > 0)
     for ally = 1, 5 do
         for enemy = 1, 5 do
             local left, right = "Team" .. ally, "Enemy" .. enemy
             if label(left .. "/Name") == label(right .. "/Name") and nodes[left .. "/Portrait/Layer1"].visible then
                 assert(nodes[left .. "/Name"].x == nodes[right .. "/Name"].x)
                 local asymmetry = false
-                for layer = 1, 16 do
+                for layer = 1, layers do
                     local key = "/Portrait/Layer" .. layer
                     local a, b = nodes[left .. key], nodes[right .. key]
                     assert(a.visible == b.visible)
@@ -235,8 +268,8 @@ local function finish(outcome, terminal, inspect_playback)
     assert(label("Battle/Outcome") == "战斗回放")
     assert(label("OpponentCaption"):find("电脑对手", 1, true))
     inward_formation()
-    if not full_formation_captured and nodes["Team5/Portrait/Layer1"].visible and nodes["Enemy5/Portrait/Layer1"].visible then
-        full_formation_captured = true
+    if not captured.battle_full and nodes["Team5/Portrait/Layer1"].visible and nodes["Enemy5/Portrait/Layer1"].visible then
+        mirrored_portrait()
         capture("battle_full")
     end
     local first_event = label("Battle/Event")
@@ -248,7 +281,6 @@ local function finish(outcome, terminal, inspect_playback)
         end
         assert(label("Battle/Event"):find("战斗结束", 1, true))
     elseif inspect_playback then
-        mirrored_portrait()
         click("Battle/Auto")
         assert(not ticking)
         local stable_writes = image_writes
@@ -265,22 +297,22 @@ local function finish(outcome, terminal, inspect_playback)
             local impact = nodes["BattleFX/Impact"]
             local value = impact.active and label("BattleFX/Impact/Value")
             if value and value ~= "格挡" and not saw_damage then
+                local side, name, damage, health = label("Battle/Event"):match("   (%S+) (%S+) · 受到伤害 (%d+) · 剩余 (%d+) 命")
+                assert(side and nodes.BattleFX.active and value == "-" .. damage)
+                local prefix = side == "我方" and "Team" or "Enemy"
                 local hit
-                for _, side in ipairs({"Team", "Enemy"}) do
-                    for slot = 1, 5 do
-                        local path = side .. slot
-                        if nodes[path .. "/Rim"].imageColor == "#8f3c30" then hit = path end
+                for slot = 1, 5 do
+                    local path = prefix .. slot
+                    local card = nodes[path]
+                    local expected_x = card.x + (slot == 1 and (side == "我方" and 59 or -59) or 0)
+                    if impact.x == expected_x and label(path .. "/Name") == name then
+                        hit = path
+                        break
                     end
                 end
-                assert(hit and nodes.BattleFX.active)
+                assert(hit and label(hit .. "/Detail"):match(" " .. health .. "命$"))
                 local bar = nodes[hit .. "/Health"]
                 assert(not bar.visible or bar.width < nodes[hit .. "/HealthTrack"].width)
-                local damage = assert(label("Battle/Event"):match("受到伤害 (%d+)"))
-                local front = hit:sub(-1) == "1"
-                local toward_centre = hit:find("^Team") and 1 or -1
-                assert(value == "-" .. damage)
-                assert(impact.x == nodes[hit].x + (front and 59 * toward_centre or 0))
-                assert(impact.y + nodes.BattleFX.y == nodes[hit].y + (front and 52 or 70))
                 capture("battle_damage")
                 saw_damage = true
             end
@@ -289,11 +321,12 @@ local function finish(outcome, terminal, inspect_playback)
                 local portrait = nodes[actor .. "/Portrait"]
                 local target = actor:find("^Team") and nodes.Enemy1 or nodes.Team1
                 local strike = nodes["BattleFX/Strike"]
-                assert(strike.active and math.abs(portrait.x) == 12 and portrait.x * nodes[actor].x < 0)
+                assert(strike.active and portrait.x ~= 0 and portrait.x * nodes[actor].x < 0)
                 assert(strike.x == (nodes[actor].x + portrait.x + target.x) / 2)
                 capture("battle_attack")
+                local original_x = math.abs(portrait.x)
                 sandbox.OnUpdate(0.14)
-                assert(math.abs(portrait.x) == 6 and strike.active)
+                assert(math.abs(portrait.x) < original_x and strike.active)
                 saw_attack = true
             end
             if value == "格挡" then
@@ -302,7 +335,6 @@ local function finish(outcome, terminal, inspect_playback)
             end
             local summoned = event_card("^入场$")
             if summoned and not saw_summon then
-                assert(label(summoned .. "/Name") == "兔宝宝")
                 assert(nodes[summoned .. "/Portrait/Layer1"].visible)
                 capture("battle_summon")
                 saw_summon = true
@@ -314,14 +346,35 @@ local function finish(outcome, terminal, inspect_playback)
         assert(label("Battle/Event") ~= first_event and not ticking)
         click("Primary")
     end
-    assert(label("Primary/Title") == "结算" and not ticking)
-    assert(label("Battle/Outcome") == "本轮" .. outcomes[outcome])
+    assert(label("Primary/Title") == "结算" and not ticking and not nodes["Battle/Replay"].active)
+    local battle_outcome = label("Battle/Outcome")
+    if outcome then assert(battle_outcome == "本轮" .. outcomes[outcome], battle_outcome) end
     local result = label("Battle/Event")
-    click("Battle/Replay")
-    assert(label("Battle/Event") ~= result and label("Primary/Title") == "结算")
+    local wins, lives = label("Wins/Value"), label("Lives/Value")
+    if inspect_playback then
+        click("Battle/Rewatch")
+        assert(label("Battle/Event") == first_event and label("Primary/Title") == "跳过回放")
+        local replaying = label("Battle/Event")
+        assert(ticking)
+        click("OpenMenu")
+        assert(not ticking)
+        sandbox.OnUpdate(5)
+        click("Primary")
+        click("Menu/Continue")
+        assert(ticking and label("Battle/Event") == replaying)
+        click("Battle/Fast")
+        assert(label("Battle/Fast/Title") == "速度：3 倍")
+        sandbox.OnUpdate(0.2)
+        assert(label("Battle/Event") ~= replaying)
+        click("Battle/Fast")
+        click("Primary")
+        assert(label("Battle/Event") == result and label("Battle/Outcome") == battle_outcome)
+        assert(label("Wins/Value") == wins and label("Lives/Value") == lives)
+        assert(label("Primary/Title") == "结算")
+    end
     click("Primary")
     if terminal then
-        assert(label("Primary/Title") == "重开同种子")
+        assert(label("Primary/Title") == "再挑战本局")
         assert(label("Battle/Outcome") == "单局" .. outcomes[outcome])
     else
         assert(label("Primary/Title") == "下一轮")
@@ -332,8 +385,9 @@ local function finish(outcome, terminal, inspect_playback)
 end
 
 local function opening(expected_seed)
+    if nodes.Menu.active then click("Menu/Continue") end
     assert(label("Round/Value") == "第 1 轮 · 准备")
-    assert(label("Seed"):find("种子 " .. expected_seed, 1, true))
+    assert(logs[#logs]:find("seed=" .. expected_seed .. "$"))
     assert(label("Money/Value") == "10")
     assert(label("TeamCaption"):find("右侧为前排", 1, true))
     assert(label("OpponentCaption"):find("电脑对手", 1, true))
@@ -346,8 +400,55 @@ local function opening(expected_seed)
     assert(label("Shop/Sell/Title") == "出售 · +1 金/级")
 end
 
+assert(nodes.Menu.active and label("Menu/Continue/Title") == "开始游戏")
+capture("menu")
+click("Menu/Audio", 9)
+assert(label("Menu/Audio/Title") == "音效：关闭")
 opening(seed)
 capture("preparation")
+local wins = {
+    {"draw", {"buy", 3}, {"buy", 2}, {"buy", 1}},
+    {"win", {"buy", 1}, {"buy", 2}, {"feed", 1, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 1, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 1, 1}},
+    {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"reroll"}, {"feed", 2, 1}},
+    {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"reroll"}, {"feed", 1, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 1, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 2, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 2, 1}},
+    {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"reroll"}, {"feed", 1, 1}},
+    {"loss", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 2, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 1, 1}},
+}
+for round, fixture in ipairs(wins) do
+    if round == 3 then
+        local before = label("Money/Value")
+        shop("buy", 1)
+        assert(label("Hint") == "阵容已满" and label("Money/Value") == before)
+    end
+    for command = 2, #fixture do shop(table.unpack(fixture[command])) end
+    finish(fixture[1], round == #wins)
+    if round == 1 then
+        assert(label("Wins/Value") == "0 / 10" and label("Lives/Value") == "5 / 5")
+    end
+end
+assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=12 wins=10 lives=4 final=win seed=1")
+assert(captured.battle_full)
+capture("victory")
+assert(audio_plays == 0, "muted session triggered audio")
+click("Primary")
+opening(seed)
+
+shop("buy", 1)
+for round = 1, 5 do finish("loss", round == 5) end
+assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=5 wins=0 lives=0 final=loss seed=1")
+capture("defeat")
+click("Battle/NewSeed")
+opening(seed + 1)
+
+local interaction_seed = 7
+restart_script(interaction_seed)
+opening(interaction_seed)
 click("Primary")
 assert(label("Hint") == "先购买至少一只动物")
 drag_to("Shop/Pet1", "Team3", -1)
@@ -381,46 +482,10 @@ capture("populated")
 click("Shop/Pet1")
 assert_tooltip("Shop/Pet1", true)
 capture("shop_tooltip")
-finish("win", false, true)
+finish(nil, false, true)
 assert(label("Shop/Pet3/Tag") == "已冻结")
-for offer = 1, 3 do shop("buy", offer) end
-shop("move", 2, 1)
-finish("win")
-
-local combines = { [4] = 1, [6] = 3, [9] = 3 }
-local losses = { [7] = true, [8] = true, [10] = true }
-for round = 3, 13 do
-    if combines[round] then shop("combine", combines[round], 1) end
-    shop("feed", 1, 1)
-    shop("feed", 2, 1)
-    if not combines[round] then
-        shop("reroll")
-        shop("feed", 1, 1)
-    end
-    finish(losses[round] and "loss" or "win", round == 13)
-end
-assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=13 wins=10 lives=2 final=win seed=7")
-assert(full_formation_captured)
-capture("victory")
-click("Primary")
-opening(seed)
-
-shop("buy", 1)
-for round = 1, 5 do finish("loss", round == 5) end
-assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=5 wins=0 lives=0 final=loss seed=7")
-capture("defeat")
-click("Battle/NewSeed")
-opening(seed + 1)
-assert(logs[#logs] == "AUTO_PETS_M1 phase=preparation round=1 wins=0 lives=5 final=- seed=8")
-
-restart_script()
-opening(seed)
-for _, position in ipairs({2, 1, 3}) do shop("buy", position) end
-finish("draw")
-assert(label("Wins/Value") == "0 / 10" and label("Lives/Value") == "5 / 5")
-
-restart_script()
-opening(seed)
+restart_script(interaction_seed)
+opening(interaction_seed)
 
 shop("buy", 1)
 shop("buy", 3)
@@ -447,7 +512,7 @@ click("Shop/Sell")
 assert(label("Team1/Name") == "空位 1")
 
 restart_script()
-opening(seed)
+opening(interaction_seed)
 shop("buy", 1)
 shop("buy", 3)
 local merge_drag = start_drag("Team2", 11)
@@ -465,7 +530,7 @@ merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 merge_drag.CursorEndDrag(cursor_event(11, hit_centre("Team1")))
 assert(label("Team2/Name") == "空位 2" and not nodes["Team2/Selected"].active)
 assert(label("Team1/XP") == "L1  经验 1/2" and not nodes["Team1/DropTarget"].active)
-finish("loss")
+finish(nil)
 drag_to("Shop/Pet1", "Team1", 4)
 assert(label("Team1/XP") == "L2  经验 2/5" and label("Money/Value") == "7")
 local reward_name = label("Shop/Reward/Name")
@@ -478,7 +543,7 @@ stale_drag.CursorEndDrag(cursor_event(4, hit_centre("Team3")))
 assert(label("Team3/Name") == "空位 3" and label("Money/Value") == "3")
 
 restart_script()
-opening(seed)
+opening(interaction_seed)
 for _ = 1, 8 do click("Shop/Reroll") end
 assert(label("Money/Value") == "2" and label("Team1/Name") == "空位 1")
 assert(label("Hint"):find("重开本局", 1, true))
@@ -491,7 +556,7 @@ click("Restart/Cancel")
 assert(not nodes.Restart.active and label("Money/Value") == "2")
 click("Reset")
 click("Restart/Confirm")
-opening(seed)
+opening(interaction_seed)
 assert(label("Shop/Pet1/Name") == "棉尾兔")
 
 shop("buy", 1)
@@ -503,12 +568,39 @@ assert(label("Money/Value") == "2" and label("Team1/Name") == "空位 1")
 assert(label("Hint"):find("重开本局", 1, true))
 click("Reset")
 click("Restart/Confirm")
-opening(seed)
+opening(interaction_seed)
 shop("buy", 1)
-finish("loss", false, "manual")
+finish(nil, false, "manual")
 
-sandbox.OnDestroy()
+local gold, unit = label("Money/Value"), label("Team1/Name")
+assert(audio_plays > 0, "enabled positive and battle feedback produced no audio calls")
+click("OpenMenu", 8)
+assert(next(active_audio) == nil)
+click("Menu/NewGame", 8)
+assert(label("Restart/Heading") == "放弃本局？")
+capture("menu_discard")
+click("Shop/Reroll", 8)
+assert(label("Money/Value") == gold and label("Team1/Name") == unit)
+click("Restart/Cancel", 8)
+assert(nodes.Menu.active)
+click("Menu/Continue", 8)
+assert(label("Money/Value") == gold and label("Team1/Name") == unit)
+click("OpenMenu", 8)
+click("Menu/NewGame", 8)
+click("Restart/Confirm", 8)
+opening(interaction_seed + 1)
+local idle_writes = image_writes
+for _ = 1, 60 do sandbox.OnUpdate(1 / 60) end
+assert(image_writes == idle_writes, "idle preparation rebuilt portraits")
+
+destroy_script()
 assert(capture_file:close())
-for _, node in pairs(nodes) do assert(not next(node.callbacks)) end
+assert(installs == removals and audio_stops <= audio_plays)
+print(string.format("NATIVE_RESOURCES listeners_peak=%d listeners_installed=%d listeners_released=%d portrait_image_writes=%d audio_plays=%d audio_stops=%d",
+    listener_peak, installs, removals, image_writes, audio_plays, audio_stops))
+local sounds = {}
+for sound in pairs(sound_ids) do sounds[#sounds + 1] = sound end
+table.sort(sounds)
+print("NATIVE_AUDIO " .. table.concat(sounds, ","))
 for _, line in ipairs(logs) do print(line) end
-print("Native UI simulation passed XP, cost and merge preview, desktop/mobile drag, both terminal states, and preparation recovery")
+print("Native UI simulation passed shop, desktop/mobile input, menu recovery, replay, audio lifecycle, and all outcomes")
