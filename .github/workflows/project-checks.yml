@@ -30,10 +30,16 @@ jobs:
         env:
           LUA: lua5.4
         run: sh scripts/check.sh
-      - name: Verify native GIL roundtrip
+      - name: Prepare pinned Miliastra MCP
+        if: hashFiles('tests/native/verify-g0.mjs', 'tests/native/verify-m1.mjs') != ''
+        run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
+      - name: Verify G0 native GIL roundtrip
         if: hashFiles('tests/native/verify-g0.mjs') != ''
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
-        run: |
-          sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
-          node tests/native/verify-g0.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" lua5.3
+        run: node tests/native/verify-g0.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" lua5.3
+      - name: Verify M1 native GIL and simulated run
+        if: hashFiles('tests/native/verify-m1.mjs') != ''
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: node tests/native/verify-m1.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" lua5.3
