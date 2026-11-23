@@ -1,7 +1,9 @@
 assert(_VERSION == "Lua 5.3")
 local bundle_path, bindings_path, seed = arg[1], arg[2], assert(math.tointeger(tonumber(arg[3])))
 local nodes, logs = {}, {}
-local cursor_click = "CursorClick"
+local cursor = {CursorDown = "CursorDown", CursorClick = "CursorClick",
+    CursorBeginDrag = "CursorBeginDrag", CursorEndDrag = "CursorEndDrag"}
+local canvas = {1600, 900}
 local capture_file = assert(io.open(arg[4], "w"))
 local ticking, image_writes = false, 0
 local full_formation_captured = false
@@ -11,6 +13,8 @@ function node_methods:SetActive(value) self.active = value end
 function node_methods:SetVisible(value) self.visible = value end
 function node_methods:SetAnchoredPosition(x, y) self.x, self.y = x, y end
 function node_methods:SetSizeDelta(width, height) self.width, self.height = width, height end
+function node_methods:GetAnchoredPosition() return self.x, self.y end
+function node_methods:GetSizeDelta() return self.width, self.height end
 function node_methods:SetImage(source, image)
     assert(source == "StaticReference" and (image == 100001 or image == 106025))
     self.image = image
@@ -18,19 +22,19 @@ function node_methods:SetImage(source, image)
 end
 function node_methods:AddCursorEventListener(event, callback)
     assert(self.kind == "cursorArea" and self.active and self.visible)
-    assert(event == cursor_click and not self.callback)
-    self.callback = callback
+    assert(cursor[event] and not self.callbacks[event])
+    self.callbacks[event] = callback
 end
 function node_methods:RemoveCursorEventListener(event, callback)
-    assert(event == cursor_click and self.callback == callback)
-    self.callback = nil
+    assert(self.callbacks[event] == callback)
+    self.callbacks[event] = nil
 end
 
 for line in io.lines(bindings_path) do
     local path, kind, x, y, width, height = line:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)$")
     assert(path and not nodes[path], "invalid control path " .. line)
     local parent = path:match("^(.*)/[^/]+$")
-    nodes[path] = setmetatable({ kind = kind, alive = true, parent = parent and assert(nodes[parent]),
+    nodes[path] = setmetatable({ kind = kind, alive = true, parent = parent and assert(nodes[parent]), callbacks = {},
         x = assert(tonumber(x)), y = assert(tonumber(y)), width = assert(tonumber(width)), height = assert(tonumber(height)) },
         { __index = node_methods })
 end
@@ -43,8 +47,9 @@ end
 local sandbox = {
     assert = assert, error = error, ipairs = ipairs, math = math, next = next, pairs = pairs, select = select,
     setmetatable = setmetatable, string = string, table = table, tonumber = tonumber, tostring = tostring, type = type,
+    game = { GetUICanvasSize = function() return table.unpack(canvas) end },
     Enum = {
-        CursorEventType = { CursorClick = cursor_click },
+        CursorEventType = cursor,
         ImageSource = { StaticReference = "StaticReference" },
         ImageType = { Stretch = "Stretch" },
     },
@@ -87,14 +92,58 @@ local function label(path)
     return assert(node.text, path)
 end
 
-local function click(path)
+local function hit_area(path)
     local node = assert(nodes[path .. "/Hit"], path)
     local target = node
     while node do
         assert(node.active and node.visible, "hidden hit area " .. path)
         node = node.parent
     end
-    assert(target.callback, "missing click callback " .. path)()
+    return target
+end
+
+local function hit_centre(path)
+    local x, y = canvas[1] / 2, canvas[2] / 2
+    local node = hit_area(path)
+    while node do
+        x, y = x + node.x, y + node.y
+        node = node.parent
+    end
+    return x, y
+end
+
+local function cursor_event(touch, x, y)
+    return {touchId = touch, GetUIPos = function() return x, y end}
+end
+
+local function click(path)
+    local target = hit_area(path)
+    local event = cursor_event(-1, hit_centre(path))
+    target.callbacks.CursorDown(event)
+    target.callbacks.CursorClick(event)
+end
+
+local function start_drag(path, touch)
+    local target = hit_area(path)
+    local press = cursor_event(touch, hit_centre(path))
+    target.callbacks.CursorDown(press)
+    target.callbacks.CursorBeginDrag(press)
+    return target.callbacks
+end
+
+local function drag_to(source, target, touch, offset_x, offset_y)
+    local callbacks = start_drag(source, touch)
+    local x, y = hit_centre(target)
+    local drop = cursor_event(touch, x + (offset_x or 0), y + (offset_y or 0))
+    callbacks.CursorEndDrag(drop)
+    callbacks.CursorClick(drop)
+end
+
+local function restart_script()
+    sandbox.OnDestroy()
+    for _, node in pairs(nodes) do assert(not next(node.callbacks)) end
+    assert(loadfile(bundle_path, "t", sandbox))()
+    sandbox.OnStart()
 end
 
 local function shop(action, first, second)
@@ -165,6 +214,7 @@ local function finish(outcome, terminal, inspect_playback)
     assert(label("Primary/Title") == "跳过回放" and ticking)
     assert(not nodes.Shop.active and nodes.Battle.active)
     assert(label("Battle/Outcome") == "战斗回放")
+    assert(label("OpponentCaption"):find("电脑对手", 1, true))
     inward_formation()
     if not full_formation_captured and nodes["Team5/Portrait/Layer1"].visible and nodes["Enemy5/Portrait/Layer1"].visible then
         full_formation_captured = true
@@ -233,6 +283,7 @@ local function opening(expected_seed)
     assert(label("Seed"):find("种子 " .. expected_seed, 1, true))
     assert(label("Money/Value") == "10")
     assert(label("TeamCaption"):find("右侧为前排", 1, true))
+    assert(label("OpponentCaption"):find("电脑对手", 1, true))
     assert(nodes.Team1.x > nodes.Team5.x and nodes.Team5.y == nodes.Team1.y)
     for index = 1, 5 do assert(nodes["Enemy" .. index].active == false) end
     assert(label("Team1/Name") == "空位 1")
@@ -243,15 +294,24 @@ opening(seed)
 capture("preparation")
 click("Primary")
 assert(label("Hint") == "先购买至少一只动物")
-shop("buy", 1)
+drag_to("Shop/Pet1", "Team3", -1)
 assert(label("Team1/Name") == "棉尾兔")
-shop("buy", 2, 1)
+assert(label("Money/Value") == "7" and label("Shop/Pet1/Name") == "空商品")
+canvas = {1280, 720}
+drag_to("Shop/Pet2", "Team1", 4, nodes["Team1/Hit"].width / 2 + 1)
+assert(label("Team1/Name") == "棉尾兔" and label("Money/Value") == "7" and not nodes["Shop/Pet2/Selected"].active)
+drag_to("Shop/Pet2", "Team1", 4, nodes["Team1/Hit"].width / 2 - 1)
 assert(label("Team1/Name") == "芦纹龟")
-shop("move", 2, 1)
+drag_to("Team2", "Team1", 4)
 assert(label("Team1/Name") == "棉尾兔")
 click("Shop/Food1")
 assert(label("Shop/Info"):find("一名队员获得", 1, true))
-click("Team2")
+local detail_before_food = label("Team2/Detail")
+drag_to("Shop/Food1", "Team5", 4)
+assert(label("Team2/Detail") == detail_before_food and label("Money/Value") == "4")
+drag_to("Shop/Food1", "Team2", 4, 0, -nodes["Team2/Hit"].height / 2 + 1)
+assert(label("Team2/Detail") ~= detail_before_food and label("Money/Value") == "1")
+canvas = {1600, 900}
 shop("freeze", 3)
 assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].active)
 shop("reroll")
@@ -290,10 +350,7 @@ click("Battle/NewSeed")
 opening(seed + 1)
 assert(logs[#logs] == "AUTO_PETS_M1 phase=preparation round=1 wins=0 lives=5 final=- seed=8")
 
-sandbox.OnDestroy()
-for _, node in pairs(nodes) do assert(not node.callback) end
-assert(loadfile(bundle_path, "t", sandbox))()
-sandbox.OnStart()
+restart_script()
 opening(seed)
 
 shop("buy", 1)
@@ -315,8 +372,31 @@ click("Team1")
 click("Shop/Sell")
 assert(label("Team1/Name") == "空位 1")
 
+restart_script()
+opening(seed)
+shop("buy", 1)
+shop("buy", 3)
+local merge_drag = start_drag("Team2", 11)
+assert(nodes["Team2/Selected"].active)
+assert(label("Hint"):find("空位表示队尾", 1, true))
+merge_drag.CursorEndDrag(cursor_event(12, hit_centre("Team1")))
+assert(label("Team2/Name") == "棉尾兔")
+merge_drag.CursorEndDrag(cursor_event(11, hit_centre("Team1")))
+assert(label("Team2/Name") == "空位 2" and not nodes["Team2/Selected"].active)
+finish("loss")
+drag_to("Shop/Pet1", "Team1", 4)
+assert(label("Team1/Detail"):find("Lv2", 1, true) and label("Money/Value") == "7")
+local reward_name = label("Shop/Reward/Name")
+assert(reward_name ~= "升级奖励")
+drag_to("Shop/Reward", "Team2", 4)
+assert(label("Team2/Name") == reward_name and label("Money/Value") == "4")
+local stale_drag = start_drag("Shop/Pet2", 4)
+click("Shop/Reroll")
+stale_drag.CursorEndDrag(cursor_event(4, hit_centre("Team3")))
+assert(label("Team3/Name") == "空位 3" and label("Money/Value") == "3")
+
 sandbox.OnDestroy()
 assert(capture_file:close())
-for _, node in pairs(nodes) do assert(not node.callback) end
+for _, node in pairs(nodes) do assert(not next(node.callbacks)) end
 for _, line in ipairs(logs) do print(line) end
-print("Native UI simulation passed portraits, battle playback, both terminal states, draw, restart, new seed, and shop input")
+print("Native UI simulation passed desktop/mobile drag, click controls, battle playback, both terminal states, and restart")
