@@ -1,11 +1,11 @@
 ---
 id: TASK-17
 title: Art / Roster · 亲和动物名册与宝宝召唤
-status: In Progress
+status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 02:17'
-updated_date: '2026-11-23 02:18'
+updated_date: '2026-11-23 02:23'
 labels: []
 milestone: m-1
 dependencies:
@@ -32,7 +32,7 @@ M1。检查目录和画面，验证确定性单局、召唤和隔离 GIL 回读�
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 更新全部目录与图鉴，商店和战斗可识别新动物与宝宝，同种子完整单局与 GIL 通过。
+- [x] #1 更新全部目录与图鉴，商店和战斗可识别新动物与宝宝，同种子完整单局与 GIL 通过。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -40,3 +40,17 @@ M1。检查目录和画面，验证确定性单局、召唤和隔离 GIL 回读�
 <!-- SECTION:PLAN:BEGIN -->
 保留槽位与数值，迁移名册、技能和召唤称呼，接入原创亲和动物图元。重跑完整单局、隔离 GIL 和两种画布，更新图鉴和复验图。
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+保留龟、雨燕、旱獭、麝与全部食物。五个动物位换成兔、狐、水獭、猫、绵羊，召唤位换成兔宝宝、水獭宝宝、卷毛小羊。旧数据库的槽位、数值、触发与流派逐项比较一致。
+
+已查看 44/66 像素图鉴，以及隔离 GIL 回读的 PC、移动画面。实际兔宝宝入场已生成截图。Lua 5.3 和 5.4 各六套通过，G0/M1 回读及模拟的十胜、零命、平局和两种重开通过。官方客户端仍单独待验。
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+更新了名册、原生原创图元、商店技能文案、三个宝宝召唤以及实际运行画面。保留既有单局规则。
+<!-- SECTION:FINAL_SUMMARY:END -->
