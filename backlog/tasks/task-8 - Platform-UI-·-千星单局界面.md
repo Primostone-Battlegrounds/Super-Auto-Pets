@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 00:51'
-updated_date: '2026-11-23 03:29'
+updated_date: '2026-11-23 08:52'
 labels: []
 milestone: m-1
 dependencies:
@@ -54,4 +54,6 @@ ordinal: 8000
 - PC 官方鼠标、布局、日志和终局待验。手机官方触屏、布局、日志和终局独立待验。
 
 成品复核候选从 PR #10 的 GitHub Actions Artifacts 下载。检查人数、操作、确认重开、两种终局与回放，并记录同一候选的 PC 与手机证据。
+
+PR #11 已进入 develop，沿用该 PR 的隔离单人候选完成官方 PC 和手机实测。已通过同 SHA 的源码、独立 GIL 读回与离线双端画面复核；官方客户端待验。候选 GIL SHA-256 为 3b54bd1f3cb1da7331fb063f3650d1248e30850136f3053b9873297a13cb3c81。[候选下载](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45113299227/artifacts/14790068203)
 <!-- SECTION:NOTES:END -->
