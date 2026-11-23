@@ -1,11 +1,11 @@
 ---
 id: TASK-19
 title: Platform / UI · 商店和五格阵容直接拖放
-status: In Progress
+status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 03:01'
-updated_date: '2026-11-23 03:02'
+updated_date: '2026-11-23 03:08'
 labels: []
 milestone: m-1
 dependencies:
@@ -34,7 +34,7 @@ Steam 参照要求把商店和阵容的操作落实到游戏。当前千星界�
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 隔离 GIL 回读后以模拟光标事件验证拖放成功、无效目标取消和点击回退，以及种子 7 完整单局。
+- [x] #1 隔离 GIL 回读后以模拟光标事件验证拖放成功、无效目标取消和点击回退，以及种子 7 完整单局。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,3 +42,15 @@ Steam 参照要求把商店和阵容的操作落实到游戏。当前千星界�
 <!-- SECTION:PLAN:BEGIN -->
 核对千星官方光标事件与画布映射。复用当前商店命令实现拖放，跑隔离 GIL 和完整单局回归。
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-23 隔离 MCP 和 GIL 回读后的 Lua 5.3 输入模拟对两种画布验证拖放。官方 PC 和手机输入仍由 TASK-8 跟踪。
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+买入、升级奖励、合并、喂食、调位和取消进入原生 Lua 界面。模拟验证坐标边界、点击路径与种子 7 的十胜、平局、零命和重开。
+<!-- SECTION:FINAL_SUMMARY:END -->

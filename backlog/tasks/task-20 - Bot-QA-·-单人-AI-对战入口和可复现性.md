@@ -1,11 +1,11 @@
 ---
 id: TASK-20
 title: Bot / QA · 单人 AI 对战入口和可复现性
-status: In Progress
+status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 03:01'
-updated_date: '2026-11-23 03:02'
+updated_date: '2026-11-23 03:08'
 labels: []
 milestone: m-1
 dependencies:
@@ -35,8 +35,8 @@ ordinal: 15000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 不同商店操作得到同一轮的同种子 AI 阵容，开战和重开回归通过。
-- [ ] #2 隔离 GIL 准备和交战画面明确标记电脑对手。
+- [x] #1 不同商店操作得到同一轮的同种子 AI 阵容，开战和重开回归通过。
+- [x] #2 隔离 GIL 准备和交战画面明确标记电脑对手。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -44,3 +44,9 @@ ordinal: 15000
 <!-- SECTION:PLAN:BEGIN -->
 核对官方 Arena 与 Daily 公告。准备和交战标记电脑对手，补足同种子、不同商店操作及实际提交战斗的回归。
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+两种种子 7 购物路线共有五轮的电脑队伍一致，战斗消费该阵容，重开重现首战和下一轮对手。GIL 回读的准备、交战画面标记电脑对手。
+<!-- SECTION:FINAL_SUMMARY:END -->
