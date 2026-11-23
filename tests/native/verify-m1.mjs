@@ -104,8 +104,8 @@ function readFrames(file, records) {
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
   assert.deepEqual([...frames.keys()].sort(), [
-    'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'merge_preview', 'populated', 'preparation',
-    'restart_confirm', 'victory',
+    'battle_attack', 'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'merge_preview', 'populated',
+    'preparation', 'restart_confirm', 'shop_tooltip', 'victory',
   ]);
   return {
     canvas: canvases.mobile,
@@ -273,6 +273,7 @@ if (packageDir) {
     fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     fs.writeFileSync(path.join(packageDir, 'SHA256SUMS'), `${manifest.gil.sha256}  ${mapFile}\n`);
     fs.writeFileSync(path.join(packageDir, 'simulated-run.log'), report.simulation.logs.join('\n') + '\n');
+    fs.copyFileSync(report.simulation.framesPath, path.join(packageDir, 'frames.json'));
     fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(packageDir, 'MCP-FIXTURE-LICENSE.txt'));
     const guide = `# 小动物自走棋 M1 真机验收候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
       `先在本目录运行 \`sha256sum -c SHA256SUMS\`。使用获授权的官方隔离关卡导入 \`${mapFile}\`。\n` +
