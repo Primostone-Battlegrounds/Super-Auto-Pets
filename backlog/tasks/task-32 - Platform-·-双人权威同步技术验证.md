@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-11-23 08:44'
-updated_date: '2026-11-23 08:52'
+updated_date: '2026-11-23 09:19'
 labels: []
 milestone: m-2
 dependencies: []
@@ -36,4 +36,6 @@ ordinal: 23000
 
 <!-- SECTION:NOTES:BEGIN -->
 独立 GIL 的人数读回为 2/2，信号、关卡服务端图和 Lua UI 绑定经过 MCP 读回。离线模拟通过两轮准备、重复及过期请求、双方同版本回包与单次结算。官方双设备还需核验客户端 Lua 信号事件的来源实体。
+
+隔离候选增加玩家模板原生按钮。按键从固定控件号映射到当前测试轮次，关卡按原生事件来源核对玩家，Lua 路径仍并列验证。独立 GIL 已核对四个按钮、玩家图、双向信号和两轮模拟。官方多人试玩、手机点按及 Lua 来源仍待双设备证据。
 <!-- SECTION:NOTES:END -->
