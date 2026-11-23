@@ -100,10 +100,9 @@ function effects.buff_front(state, unit, ability)
     end
 end
 
-function effects.summon(state, unit, ability)
+function effects.summon(state, unit, ability, position)
     local team = state.teams[unit.side]
     local token = data.token_by_id[ability.token]
-    local position = math.min(unit.slot, #team + 1)
     local count = math.min(ability.power, data.rules.team_size - #team)
     for offset = 0, count - 1 do
         local summon = {
@@ -121,12 +120,13 @@ function effects.summon(state, unit, ability)
     for slot = position + count, #team do
         team[slot].slot = slot
     end
+    return count
 end
 
-local function use_ability(state, unit)
+local function use_ability(state, unit, summon_position)
     local ability = unit.ability
     emit(state, "skill", unit, {ability = ability.name, trigger = ability.trigger})
-    effects[ability.effect](state, unit, ability)
+    return effects[ability.effect](state, unit, ability, summon_position)
 end
 
 -- Remove all casualties from both teams before their queued effects use the free slots.
@@ -139,7 +139,7 @@ local function resolve_faints(state)
             if unit.health == 0 then
                 emit(state, "faint", unit)
                 if unit.ability and unit.ability.trigger == "faint" then
-                    queue[#queue + 1] = unit
+                    queue[#queue + 1] = {unit = unit, surviving_before = remaining}
                 end
             else
                 remaining = remaining + 1
@@ -151,8 +151,14 @@ local function resolve_faints(state)
             team[slot] = nil
         end
     end
-    for _, unit in ipairs(queue) do
-        use_ability(state, unit)
+    -- In each formation, replacements go after earlier survivors and summons.
+    local summoned_before = {player = 0, enemy = 0}
+    for _, entry in ipairs(queue) do
+        local unit = entry.unit
+        local offset = summoned_before[unit.side]
+        local summon_position = entry.surviving_before + offset + 1
+        local count = use_ability(state, unit, summon_position) or 0
+        summoned_before[unit.side] = offset + count
     end
 end
 

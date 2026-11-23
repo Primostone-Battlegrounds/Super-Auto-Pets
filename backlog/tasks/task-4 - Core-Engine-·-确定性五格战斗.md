@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@rules-core'
 created_date: '2026-11-23 00:51'
-updated_date: '2026-11-23 00:59'
+updated_date: '2026-11-23 01:00'
 labels: []
 milestone: m-1
 dependencies:
@@ -49,6 +49,8 @@ ordinal: 4000
 
 <!-- SECTION:NOTES:BEGIN -->
 前排对撞先提交双方攻击，再批量结算伤亡后执行阵亡技能。开场同位与伤亡顺序由种子决定，非战斗成长状态由入参保留。256 次对撞后仍有双方存活时判平，回放结尾注明原因。
+
+独立评审复现同批阵亡的召唤错位。队列保留每只阵亡单位之前的存活数，计入同侧此前已插入的召唤单位。阵亡及技能事件继续保留原位置。新增先前位置未召唤和已召唤两种回归，lua tests/battle.lua 与 sh scripts/check.sh 均通过。
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -99,6 +99,27 @@ local early_summons = events_of(born_opening, "summon", 0)
 assert(#early_summons == 1 and early_summons[1].side == "enemy")
 assert(events_of(born_opening, "attack", 1)[1].target_id == "mothling")
 
+-- When slots 1 and 2 both faint, the slot-2 summon still precedes the slot-3 survivor.
+local double_faint = battle.resolve(attacker, {
+    pet("ember_swift", 2, 1), pet("lantern_moth", 2, 1), ally,
+}, 13)
+local opening_faints = events_of(double_faint, "faint", 0)
+assert(#opening_faints == 2 and opening_faints[1].slot == 1 and opening_faints[2].slot == 2)
+local opening_skills = events_of(double_faint, "skill", 0)
+assert(opening_skills[2].id == "lantern_moth" and opening_skills[2].slot == 2)
+local replacements = events_of(double_faint, "summon", 0)
+assert(#replacements == 1 and replacements[1].slot == 1)
+assert(events_of(double_faint, "attack", 1)[1].target_id == "mothling")
+
+local two_summoners = battle.resolve(attacker, {
+    pet("cloud_ostrich", 4, 1), pet("lantern_moth", 2, 1), ally,
+}, 13)
+local ordered_summons = events_of(two_summoners, "summon", 0)
+assert(#ordered_summons == 3)
+assert(ordered_summons[1].id == "cloud_chick" and ordered_summons[1].slot == 1)
+assert(ordered_summons[2].id == "cloud_chick" and ordered_summons[2].slot == 2)
+assert(ordered_summons[3].id == "mothling" and ordered_summons[3].slot == 3)
+
 local support = battle.resolve({pet("alder_marmot", 3, 1, 2), ally}, defeated, 1)
 local buffs = events_of(support, "buff")
 assert(support.outcome == "win")
