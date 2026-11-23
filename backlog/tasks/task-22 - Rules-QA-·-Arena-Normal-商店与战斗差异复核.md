@@ -4,6 +4,7 @@ title: Rules / QA · Arena Normal 商店与战斗差异复核
 status: To Do
 assignee: []
 created_date: '2026-11-23 03:03'
+updated_date: '2026-11-23 03:07'
 labels: []
 milestone: m-1
 dependencies:
@@ -11,8 +12,12 @@ dependencies:
   - TASK-20
   - TASK-21
 references:
-  - 'https://store.steampowered.com/app/1714040/Super_Auto_Pets/?l=schinese'
-  - 'https://teamwood.itch.io/super-auto-pets'
+  - >-
+    https://steamcommunity.com/games/1714040/announcements/detail/501718945006355542
+  - >-
+    https://steamcommunity.com/games/1714040/announcements/detail/3698065064748065722
+  - >-
+    https://steamcommunity.com/games/1714040/announcements/detail/3674407853169874545
 priority: high
 ordinal: 17000
 ---
@@ -37,3 +42,9 @@ ordinal: 17000
 <!-- AC:BEGIN -->
 - [ ] #1 至少核对商店、升阶、交战、结算、Normal 对手强度五项的来源与复验命令。
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+已核对官方 v44 的 Normal 阵容强度说明。2023 年 v0.27 的升级奖励和 Golden Pack 的第三轮回命仅作为历史线索。下一次以可见构建号记录 Normal 和标准兽群前几轮，核对第一次升阶、一次失败、第三轮生命和商店、首次交战触发顺序。
+<!-- SECTION:NOTES:END -->
