@@ -13,12 +13,16 @@
 | [Arena v44 官方公告](https://steamcommunity.com/games/1714040/announcements/detail/501718945006355542) | Normal 等难度影响对手阵容强度。 |
 | [Daily 官方公告](https://steamcommunity.com/app/1714040/announcements/) | 所有玩家当天面对同样的 14 支队伍，队伍每日更换。公告未说明这些阵容的生成算法。 |
 
-## 项目规则
+## 当前候选与历史研究
+
+[Turtle 研究覆盖表 v1](design/TURTLE-COVERAGE-v1.md) 记录带日期的 60 个常规宠物、18 个常规食物及可达生成物与状态。运行映射、Steam 行为金样与完整引用闭包仍待验证。下表记录 M1 兼容目录及本作玩法边界。[REASONS v1](design/REASONS-v1.md)
+
+## M1 兼容规则
 
 | 项目 | 开发基线 | 设计依据 |
 | --- | --- | --- |
 | 准备与交战 | 每轮先经营商店与排列阵容，再自动交战 | 项目产品定义采用 Arena 的轻量自动战斗体验。[项目产品定义](PRODUCT.md) [Steam 商店说明](https://store.steampowered.com/app/1714040/Super_Auto_Pets/?l=schinese#about) |
-| 对手 | 回合、种子和流派决定本地 PvE 阵容 | 项目产品定义要求单人、可复现的流程。[项目产品定义](PRODUCT.md) |
+| 对手 | 回合、独立种子与本地策略决定同轮合法养成的对手 | 项目产品定义要求单人、可复现的流程。[项目产品定义](PRODUCT.md) |
 | 终局 | 以 5 命开始，10 胜或零命结束；每次失败扣 1 命，平局维持胜数与命数 | 胜数和命数目标由项目产品定义确定；失败与平局的结算是本项目的开发规则。[项目产品定义](PRODUCT.md) |
 | 阵型 | 五个从前到后排列的位置 | 五格阵容来自项目产品定义，前后顺序是本项目的战斗接口。[项目产品定义](PRODUCT.md) [项目架构](ARCHITECTURE.md) |
 | 商店 | 每轮 10 金，3 个动物位、2 个食物位；刷新 1 金，购买动物或食物各 3 金；出售按每级 1 金返还 | 本项目的经济起点保留多次刷新或购买空间。[规则配置](../src/autopets/data.lua) |
@@ -28,7 +32,7 @@
 | 食物 | 三阶共六种原创食物，永久调整目标的攻击或生命 | 攻防取向由食物数值表达，目录和名称由项目定义。[食物目录](../src/autopets/data.lua) |
 | 召唤 | 三种由阵亡效果生成的原创单位，攻击随来源等级成长 | 公开货架目录由可买动物组成，召唤单位的数值独立定义。[召唤目录](../src/autopets/data.lua) |
 | 资产 | 当前规则交付使用原创中文名称与数值。外部图像、语音和界面资源的授权状态待核验 | 项目产品定义要求原创或经授权资源。[项目产品定义](PRODUCT.md) |
-| 里程碑版本 | G0 临时开发标识为 0.0.1-alpha.0；项目权威表的正式版本待读取 | 以项目权威表为准，访问仍受阻。[项目产品定义](PRODUCT.md) |
+| 里程碑版本 | G0 的历史开发标识为 0.0.1-alpha.0 | 交付版本与里程碑对应记录在项目表与 Backlog。[项目产品定义](PRODUCT.md) |
 
 随机模块接受任意 Lua 5.4 有符号整数种子。零以及模数的倍数映射到状态 1。`next()` 返回 1 至 2147483646。`int(low, high)` 在含两端的整数范围内采样，范围内最多容纳 2147483646 个值，两端须落在 -2147483646 至 2147483646 之间。
 
@@ -42,4 +46,4 @@
 | `auto-magical-animal` | 同类名称的 Go/Ebiten 守屋游戏。所查版本根目录无许可文件，机制与本项目的回合商店和五格战斗不同。[源码](https://github.com/Amovement/auto-magical-animal/tree/4eb4b3b35a6f6d11c171f2469bf66ba5289359f1) |
 | `roguelite-core` | MIT 许可、内容可替换的 TypeScript 自动交战库。其关卡图、属性克制和对战规则不符合本项目的 Lua 五格交战模型。[源码与授权](https://github.com/tiagomaciels/roguelite-core/tree/65d68588c6f8576540fed7589fc6baa8ffa54e3f) |
 
-本项目的 Lua 玩法代码沿用本仓库的原创规则与数据。工具链单独复用已固定版本的社区千星 MCP。
+当前 GIL 使用本仓库的 M1 兼容目录。构建工具链使用固定版本的社区千星 MCP。旧 PR #5 的样本数量与允许轻改的映射均已失效。其来源定位与实测方法仍可用于研究。[PR #5](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) [美术工艺](ART_PIPELINE.md)
