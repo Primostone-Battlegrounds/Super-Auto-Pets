@@ -20,11 +20,14 @@ local errors = {
 
 local session, state, selection, message
 local drag, consumed_gestures = nil, {}
+local confirming_restart = false
 local reward_index, event_index = 1, 1
 local listeners, controls, portraits = {}, {}, {}
 local playing, elapsed = false, 0
+local replay_complete = false
 local preparing_layout
 local accents = {win = 0x286452, loss = 0x984434, draw = 0x89591e}
+local drop_labels = {buy = "购买", combine = "购买并合并", feed = "喂食", move = "换位", merge = "合并"}
 local effects = {
     attack = {label = "出击", face = 0xe6c881, ink = 0x80521d},
     damage = {face = 0xe1a18a, ink = 0x8f3c30},
@@ -98,8 +101,17 @@ local function team_card(path, unit, index, selected, effect)
     local rim = selected and 0xa66c27 or 0x90aa91
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
-    show(path .. "/HealthTrack", unit ~= nil)
-    show(health_path, unit ~= nil and unit.health > 0)
+    local preparing = state.phase == "preparation"
+    show(path .. "/HealthTrack", unit ~= nil and not preparing)
+    show(health_path, unit ~= nil and unit.health > 0 and not preparing)
+    if not mirrored then
+        if preparing and unit then
+            local threshold = rules.level_xp[unit.level + 1]
+            text(path .. "/XP", threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满")
+        else
+            show(path .. "/XP", false)
+        end
+    end
     if not unit then
         card(path, "空位 " .. index, "", selected, nil, background, rim)
         text(path .. "/Tag", "")
@@ -130,6 +142,46 @@ local function offer(kind, index)
     if kind == "pet" then return state.shop.pets[index] end
     if kind == "food" then return state.shop.foods[index] end
     return state.shop.rewards[index]
+end
+
+local function action_for_team(source, index, dropped)
+    local unit = state.shop.team[index]
+    if source.kind == "team" then
+        local same_species = dropped and unit and unit.id == state.shop.team[source.index].id
+        if dropped then
+            index = math.min(index, #state.shop.team)
+            if index == source.index then return end
+        end
+        return (source.merge or same_species) and "merge" or "move", index
+    elseif source.kind == "food" then
+        if dropped and not unit then return end
+        return "feed", index
+    elseif unit and unit.id == offer(source.kind, source.index).id then
+        return "combine", index
+    end
+    return "buy", dropped and math.min(index, #state.shop.team + 1) or index
+end
+
+local function drag_feedback()
+    if not drag then return end
+    if not drag.target then
+        if drag.kind == "food" then return "拖向一名队员喂食" end
+        if drag.kind == "team" then return "拖到同种队员会合并，点击两个站位可换位" end
+        return "松开放入目标站位，空位表示队尾"
+    end
+    local action, index = action_for_team(drag, drag.target, true)
+    if not action then return "此处不能放入，松开将取消" end
+    local unit = state.shop.team[index]
+    if (action == "merge" or action == "combine") and unit.level == rules.max_level then
+        return "目标已满级，无法合并"
+    end
+    if action == "buy" and #state.shop.team == rules.team_size then return "阵容已满，无法购买" end
+    local cost = (action == "buy" or action == "combine") and rules.pet_cost or (action == "feed" and rules.food_cost)
+    if cost and state.shop.gold < cost then return string.format("金币不足，需要 %d 金", cost) end
+    local name = drop_labels[action]
+    if action == "merge" then return "松开将合并，拖动的队员会被消耗", name end
+    if cost then return string.format("松开将%s，花费 %d 金", name, cost), name end
+    return "松开将移动该队员", name
 end
 
 local function offer_card(path, kind, index)
@@ -236,12 +288,13 @@ local function draw(refresh)
         local paint = event.amount == 0 and effects.shield or effects.damage
         effect = { label = event.amount == 0 and "格挡" or ("-" .. event.amount), face = paint.face, ink = paint.ink }
     end
+    local drag_hint, drop_label = drag_feedback()
     arrange(preparing)
     text("Round/Value", string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
     text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x984434 or 0x286452)
-    text("Seed", "种子 " .. state.seed)
+    text("Seed", string.format("种子 %d · %d 胜通关", state.seed, rules.wins_to_win))
     text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
     text("OpponentCaption", (preparing and "下一位电脑对手 · " or "电脑对手 · ") .. styles[state.opponent.style])
     for index = 1, rules.team_size do
@@ -251,20 +304,37 @@ local function draw(refresh)
         end
         team_card("Team" .. index, player[index], index, matches(drag or selection, "team", index),
             hit and event.side == "player" and effect)
+        local drop = drop_label and drag.target == index
+        show("Team" .. index .. "/DropTarget", drop == true)
+        if drop then text("Team" .. index .. "/DropLabel", drop_label)
+        else show("Team" .. index .. "/DropLabel", false) end
     end
     show("Shop", preparing)
     show("Battle", not preparing)
+    show("Reset", preparing)
+    show("Restart", confirming_restart)
     local title = primary[state.phase]
     local hint = "拖动商品或队员到阵容，也可点击选择"
     if preparing then
+        if #state.shop.team == 0 then
+            hint = state.shop.gold < rules.pet_cost and "金币不足以招募。点“重开本局”恢复。"
+                or "先拖一只动物入队，或点选购买。输一轮扣一命，平局保留生命。"
+        end
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
         text("Shop/Caption", string.format("河岸市集 · T%d", state.shop.tier))
         text("Shop/Info", selected_info())
+        text("Shop/Buy/Title", string.format("购买 · %d 金", rules.pet_cost))
+        text("Shop/Reroll/Title", string.format("刷新 · %d 金", rules.reroll_cost))
+        local picked = drag or selection
+        local selling = picked and picked.kind == "team" and state.shop.team[picked.index]
+        local refund = selling and string.format("+%d 金", selling.level * rules.sell_gold_per_level)
+            or string.format("+%d 金/级", rules.sell_gold_per_level)
+        text("Shop/Sell/Title", "出售 · " .. refund)
         for index = 1, rules.pet_shop_slots do offer_card("Shop/Pet" .. index, "pet", index) end
         for index = 1, rules.food_shop_slots do offer_card("Shop/Food" .. index, "food", index) end
         offer_card("Shop/Reward", "reward", reward_index)
     else
-        local replaying = state.phase == "battle" and event_index < #battle.events
+        local replaying = state.phase == "battle" and not replay_complete
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
         local accent = replaying and 0x286452 or accents[battle.outcome]
         text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
@@ -284,7 +354,6 @@ local function draw(refresh)
         end
     end
     text("Primary/Title", title)
-    local drag_hint = drag and (drag.kind == "food" and "松开喂给目标队员" or "松开放入目标站位，空位表示队尾")
     text("Hint", drag_hint or message or hint)
 end
 
@@ -310,19 +379,11 @@ local function choose_offer(kind, index)
     draw()
 end
 
-local function apply_to_team(source, index)
-    local unit = state.shop.team[index]
-    if source.kind == "team" then
-        command(source.merge and "merge" or "move", source.index, index)
-    elseif source.kind == "food" then
-        command("feed", source.index, index)
+local function apply_to_team(action, source, index)
+    if action == "buy" or action == "combine" then
+        command(action, source.index, index, source.kind == "reward")
     else
-        local reward = source.kind == "reward"
-        if unit and unit.id == offer(source.kind, source.index).id then
-            command("combine", source.index, index, reward)
-        else
-            command("buy", source.index, index, reward)
-        end
+        command(action, source.index, index)
     end
 end
 
@@ -335,12 +396,13 @@ local function choose_team(index)
         draw()
         return
     end
-    apply_to_team(selection, index)
+    local action, destination = action_for_team(selection, index)
+    apply_to_team(action, selection, destination)
 end
 
 local function begin_drag(event, kind, index)
     consumed_gestures[event.touchId] = true
-    if drag or state.phase ~= "preparation" then return end
+    if drag or confirming_restart or state.phase ~= "preparation" then return end
     local item
     if kind == "team" then item = state.shop.team[index] else item = offer(kind, index) end
     if item then
@@ -366,6 +428,14 @@ local function drop_slot(event)
     end
 end
 
+local function update_drag(event)
+    if not drag or drag.touch ~= event.touchId then return end
+    local target = drop_slot(event)
+    if drag.target == target then return end
+    drag.target = target
+    draw(false)
+end
+
 local function end_drag(event)
     if not drag or drag.touch ~= event.touchId then return end
     local source = drag
@@ -373,20 +443,13 @@ local function end_drag(event)
     if state.phase ~= "preparation" then return end
     local index = drop_slot(event)
     if index then
-        local unit = state.shop.team[index]
-        if source.kind == "team" then
-            source.merge = unit and unit.id == state.shop.team[source.index].id
-            index = math.min(index, #state.shop.team)
-            if source.index ~= index then
-                apply_to_team(source, index)
-                return
-            end
-        elseif source.kind ~= "food" or unit then
-            -- The shop uses a dense roster, so an empty slot beyond the next open position appends.
-            apply_to_team(source, math.min(index, #state.shop.team + 1))
+        local action, destination = action_for_team(source, index, true)
+        if action then
+            apply_to_team(action, source, destination)
             return
         end
     end
+    message = "已取消拖放"
     draw(false)
 end
 
@@ -450,7 +513,7 @@ local function replay()
 end
 
 local function toggle_replay()
-    if state.phase == "battle" and event_index < #state.battle.events then
+    if state.phase == "battle" and not replay_complete then
         set_playing(not playing)
         draw(false)
     end
@@ -462,13 +525,15 @@ local function advance(new_seed)
     if old == "preparation" then
         ok, error_code = session:submit()
     elseif old == "battle" then
-        if event_index < #state.battle.events then
+        if not replay_complete then
             set_playing(false)
             event_index = #state.battle.events
+            replay_complete = true
             draw(false)
             return
         end
         ok, error_code = session:settle()
+        if ok then event_index = #state.battle.events end
     elseif old == "settlement" then
         ok, error_code = session:advance()
     else
@@ -478,8 +543,30 @@ local function advance(new_seed)
         drag, consumed_gestures = nil, {}
         selection, message = nil, nil
         reward_index = 1
-        if old ~= "battle" then event_index = 1 end
+        if old ~= "battle" then event_index, replay_complete = 1, false end
         set_playing(old == "preparation")
+    else
+        message = errors[error_code] or error_code
+    end
+    draw()
+    if ok then log_state() end
+end
+
+local function show_restart(visible)
+    if state.phase ~= "preparation" then return end
+    drag = nil
+    confirming_restart = visible
+    draw(false)
+end
+
+local function confirm_restart()
+    if not confirming_restart or state.phase ~= "preparation" then return end
+    confirming_restart = false
+    local ok, error_code = session:restart()
+    if ok then
+        drag, consumed_gestures = nil, {}
+        selection, message = nil, nil
+        reward_index, event_index, replay_complete = 1, 1, false
     else
         message = errors[error_code] or error_code
     end
@@ -495,7 +582,10 @@ function OnUpdate(dt)
     elapsed = elapsed + dt
     if elapsed < delay then return end
     event_index, elapsed = event_index + 1, 0
-    if event_index == #battle.events then set_playing(false) end
+    if event_index == #battle.events then
+        replay_complete = true
+        set_playing(false)
+    end
     draw(false)
 end
 
@@ -512,11 +602,13 @@ local function bind(path, callback, on_drag)
             end
         end,
         [Enum.CursorEventType.CursorClick] = function(event)
+            if confirming_restart and not path:match("^Restart/") then return end
             if not event or not consumed_gestures[event.touchId] then callback() end
         end,
     }
     if on_drag then
         bound[Enum.CursorEventType.CursorBeginDrag] = on_drag
+        bound[Enum.CursorEventType.CursorDrag] = update_drag
         bound[Enum.CursorEventType.CursorEndDrag] = end_drag
     end
     for event, handler in pairs(bound) do hit:AddCursorEventListener(event, handler) end
@@ -555,12 +647,16 @@ function OnStart()
         if state.phase == "ended" then advance(state.seed % 2147483646 + 1) end
     end)
     bind_button("Primary", function() advance() end)
+    bind_button("Reset", function() show_restart(true) end)
+    bind_button("Restart/Cancel", function() show_restart(false) end)
+    bind_button("Restart/Confirm", confirm_restart)
     for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Seed", "Field", "Field/Meadow", "Field/Bank",
         "Field/Water", "Field/Current", "Field/Ripple1", "Field/Ripple2", "Field/Ripple3", "Field/Reed-1A", "Field/Reed-1B",
         "Field/Reed-1C", "Field/Reed1A", "Field/Reed1B", "Field/Reed1C", "Shop/Paper", "Shop/Rail", "Shop/Rule",
         "TeamCaption", "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule"}) do
         show(path, true)
     end
+    for _, name in ipairs({"Shade", "Rim", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
     for _, path in ipairs({"Round", "Money", "Wins", "Lives"}) do
         show(path, true)
         show(path .. "/Surface", true)
