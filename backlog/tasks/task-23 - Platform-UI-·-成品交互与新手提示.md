@@ -1,11 +1,11 @@
 ---
 id: TASK-23
 title: Platform / UI · 成品交互与新手提示
-status: In Progress
+status: Done
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 03:18'
-updated_date: '2026-11-23 03:18'
+updated_date: '2026-11-23 03:29'
 labels: []
 milestone: m-1
 dependencies:
@@ -33,8 +33,8 @@ ordinal: 18000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 准备阶段可在行动前确认费用、经验与等级进度、合并与移动。
-- [ ] #2 初次玩家能从游戏提示进入完整单局。结算在手工检查回放时保持可达。
+- [x] #1 准备阶段可在行动前确认费用、经验与等级进度、合并与移动。
+- [x] #2 初次玩家能从游戏提示进入完整单局。结算在手工检查回放时保持可达。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,3 +42,9 @@ ordinal: 18000
 <!-- SECTION:PLAN:BEGIN -->
 依据独立产品评审的真实操作问题修正关键界面与回放，再用隔离 GIL 验证初次操作路径。
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+隔离 GIL 模拟覆盖 10 胜目标、金币提示、经验与合并预告、取消拖放和逐条回放后的结算。原生控件图和两种画布通过读回。
+<!-- SECTION:FINAL_SUMMARY:END -->

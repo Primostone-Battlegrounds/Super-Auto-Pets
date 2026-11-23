@@ -1,11 +1,11 @@
 ---
 id: TASK-24
 title: Engineering / QA · 千星设备验收候选包
-status: In Progress
+status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 03:18'
-updated_date: '2026-11-23 03:18'
+updated_date: '2026-11-23 03:29'
 labels: []
 milestone: m-1
 dependencies:
@@ -33,7 +33,7 @@ ordinal: 19000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 当且仅当 GIL 构建、读回与测试成功后，可从 CI 下载对应版本候选包并验证完整性。
+- [x] #1 当且仅当 GIL 构建、读回与测试成功后，可从 CI 下载对应版本候选包并验证完整性。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -41,3 +41,15 @@ ordinal: 19000
 <!-- SECTION:PLAN:BEGIN -->
 复用现有读回验证导出后置候选包。记录可核对的 Git SHA 和 GIL 校验值，纳入同一 CI 并验证可复现。
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+GitHub Actions 45106026588 实际通过并上传 14787229215。下载连接器返回 ZIP；上传前核验 GIL SHA-256。本地重建包校验通过，关卡人数读回为 1。
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+设备候选包随通过检查的 Git 提交生成，含 GIL、源码 SHA、SHA-256、模拟日志和设备检查入口。
+<!-- SECTION:FINAL_SUMMARY:END -->

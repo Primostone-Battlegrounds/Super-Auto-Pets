@@ -1,11 +1,11 @@
 ---
 id: TASK-26
 title: Game Flow / QA · 准备阶段可恢复重开
-status: In Progress
+status: Done
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-23 03:19'
-updated_date: '2026-11-23 03:19'
+updated_date: '2026-11-23 03:29'
 labels: []
 milestone: m-1
 dependencies:
@@ -33,7 +33,7 @@ ordinal: 21000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 源码测试与隔离 GIL 均从空阵低金并被禁止开战的状态恢复为满额开局。
+- [x] #1 源码测试与隔离 GIL 均从空阵低金并被禁止开战的状态恢复为满额开局。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -41,3 +41,9 @@ ordinal: 21000
 <!-- SECTION:PLAN:BEGIN -->
 允许准备阶段明确重开，同时保留战斗和结算的阶段边界。游戏界面明确确认，并验证陷入低金状态后的恢复。
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+源码与 GIL 模拟均验证了八次刷新和出售最后一员后低金币重开。确认前取消保留状态；确认恢复种子相同的 10 金、第 1 轮。
+<!-- SECTION:FINAL_SUMMARY:END -->

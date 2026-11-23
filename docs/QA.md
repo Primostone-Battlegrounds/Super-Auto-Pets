@@ -21,6 +21,12 @@ OpenHarness 固定到 `aebb0c2255a5df275491009285c1a23d03f90771`，使用 cooper
 
 GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub 连接器核对 PR、当前 SHA 和 CI，通过同一 GitHub PR 完成集成。
 
+## 单局成品复核
+
+成品候选由未参与实现的 Agent 在同一提交独立实跑。覆盖首轮操作能否发现、胜负和平局、低金币恢复、成长反馈、玩家策略差异与设备候选包。当只剩官方导入、输入和画面核验时，在 PR 记录结论、完整 SHA 与证据。设备验收仍按 [PC 和手机步骤](../platform/M1.md#官方客户端待验) 记录。
+
+用 `lua scripts/audit-balance.lua` 在种子 1 至 64 复验五种固定策略。用 `lua scripts/audit-balance.lua role 1 | lua scripts/play.lua 1` 复现按对手流派调整阵容的一条十胜路径。审查本地 AI 的回合压力时，以同样种子对照能通关的不同策略与失败路径。
+
 ## 原生画面复验
 
 [目录图鉴](media/m1-animal-art.webp) 从同一份 Lua 图元数据绘制。动物、召唤物与食物图标均由项目原创几何构成。千星使用原生实色色块和圆点，图鉴分别以 66 和 44 像素检查造型。
