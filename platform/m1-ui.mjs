@@ -1,11 +1,11 @@
 const plane = 100001;
 const disc = 106025;
-const portraitLayers = 16;
+export const portraitLayers = 16;
 const pigment = {
-  edge: '#90aa91', canvas: '#e3ead3', ink: '#203c34', muted: '#476354', cream: '#f8efd7',
-  land: '#b8c9a6', water: '#a4c8b7', river: '#8bb9ae', whiteWater: '#d9ebd7',
-  sand: '#eee1bc', sandLine: '#d2ba86', chip: '#f4f0db', primary: '#286452',
-  player: '#8da982', enemy: '#b2a584', market: '#e7d4a5', gold: '#a66c27', ice: '#406f82',
+  edge: '#9fb2aa', canvas: '#f4f4e9', ink: '#202f35', muted: '#475f5d', cream: '#fff9e9',
+  field: '#dce9e4', rail: '#c8ddd4', opposingRail: '#ecded4', rule: '#b9cec5',
+  shelf: '#f3e8cf', shelfRule: '#d9c7a6', chip: '#edf2e8', primary: '#286452',
+  player: '#8aaf9c', enemy: '#b79389', market: '#e9d3a0', gold: '#9b6021', ice: '#406f82',
 };
 
 function image(name, position, size, colour, options = {}) {
@@ -72,8 +72,8 @@ function card(name, position, width, type, interactive = true, visible = true) {
 
 function button(name, position, size, title, primary = false) {
   return group(name, position, size, [
-    ellipse('Rim', [0, 0], size, primary ? '#1e4f43' : pigment.edge),
-    ellipse('Face', [0, 0], [size[0] - 5, size[1] - 5], primary ? pigment.primary : pigment.chip),
+    image('Rim', [0, 0], size, primary ? '#1e4f43' : pigment.edge),
+    image('Face', [0, 0], [size[0] - 4, size[1] - 4], primary ? pigment.primary : pigment.chip),
     label('Title', [0, 0], [size[0] - 20, size[1] - 12], title, primary ? 23 : 17, primary ? pigment.cream : pigment.ink),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
@@ -105,27 +105,19 @@ export const nativeRun = {
     image('Panel', [0, 0], [1194, 676], pigment.canvas),
     image('Header', [0, 280], [1172, 98], pigment.cream),
     label('Heading', [-373, 291], [374, 46], '小动物自走棋', 35, pigment.ink, 'left'),
-    label('Seed', [-373, 257], [374, 24], '', 16, pigment.muted, 'left'),
-    button('Reset', [-266, 250], [142, 42], '重开本局'),
+    button('OpenMenu', [-486, 250], [142, 42], '菜单'),
+    button('Reset', [-328, 250], [142, 42], '重开本局'),
     stat('Round', -105, '回合'),
     stat('Money', 69, '金币'),
     stat('Wins', 243, '胜场'),
     stat('Lives', 417, '生命'),
     group('Field', [0, 119], [1172, 218], [
-      image('Meadow', [0, 0], [1172, 218], pigment.land),
-      ellipse('Bank', [0, -11], [1072, 172], '#cdd8b4'),
-      ellipse('Water', [11, -54], [1114, 93], pigment.water),
-      ellipse('Current', [74, -72], [902, 54], pigment.river),
-      ellipse('Ripple1', [-384, -80], [157, 5], pigment.whiteWater),
-      ellipse('Ripple2', [401, -78], [127, 6], pigment.whiteWater),
-      ellipse('Ripple3', [91, -92], [198, 4], pigment.whiteWater),
-      ellipse('PrepRail', [0, -49], [878, 45], '#e5e5bf'),
-      ellipse('Clash', [0, 4], [48, 12], pigment.whiteWater, { visible: false }),
-      ...[-1, 1].flatMap(sign => [
-        ellipse(`Reed${sign}A`, [sign * 548, -27], [7, 30], '#637e62'),
-        ellipse(`Reed${sign}B`, [sign * 533, -38], [9, 44], '#829c6c'),
-        ellipse(`Reed${sign}C`, [sign * 564, -41], [8, 42], '#718e65'),
-      ]),
+      image('Surface', [0, 0], [1172, 218], pigment.field),
+      image('Divider', [0, 76], [1100, 2], pigment.rule),
+      image('PrepRail', [0, -20], [874, 142], pigment.rail),
+      image('AllyRail', [-311, -20], [548, 142], pigment.rail, { visible: false }),
+      image('RivalRail', [311, -20], [548, 142], pigment.opposingRail, { visible: false }),
+      ellipse('Clash', [0, 4], [23, 23], '#faf5e6', { visible: false }),
     ]),
     label('TeamCaption', [-309, 208], [521, 25], '', 19, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 25], '', 19, pigment.ink, 'right'),
@@ -133,8 +125,10 @@ export const nativeRun = {
     ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
     group('Shop', [0, -124], [1164, 268], [
       image('Paper', [0, 0], [1164, 268], pigment.cream),
-      image('Rail', [0, 0], [1128, 164], pigment.sand),
-      image('Rule', [0, 83], [1128, 2], pigment.sandLine),
+      image('Rail', [0, 0], [1128, 164], pigment.shelf),
+      image('Rule', [0, 83], [1128, 2], pigment.shelfRule),
+      image('FoodDivider', [0, 0], [2, 146], pigment.shelfRule),
+      image('RewardDivider', [372, 0], [2, 146], pigment.shelfRule),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
       ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -104], [172, 52], title)),
@@ -166,13 +160,26 @@ export const nativeRun = {
       image('Rule', [-540, 37], [4, 35], pigment.gold),
       label('Outcome', [0, 43], [1038, 30], '', 25, pigment.ink, 'left'),
       label('Event', [0, 12], [1038, 25], '', 18, pigment.ink, 'left'),
-      button('Replay', [-401, -37], [233, 45], '下一条战斗事件'),
-      button('Auto', [-143, -37], [233, 45], '暂停回放'),
-      button('NewSeed', [115, -37], [233, 45], '新一局'),
+      button('Replay', [-430, -37], [202, 45], '下一条战斗事件'),
+      button('Auto', [-216, -37], [202, 45], '暂停回放'),
+      button('Fast', [-2, -37], [202, 45], '速度：1 倍'),
+      button('Rewatch', [212, -37], [202, 45], '重新回放'),
+      button('NewSeed', [426, -37], [202, 45], '新一局'),
     ], false),
     image('FooterLine', [0, -262], [1152, 2], pigment.edge),
     button('Primary', [411, -293], [329, 58], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
+    { ...group('Menu', [0, 0], [1202, 684], [
+      image('Backdrop', [0, 0], [1202, 684], '#dce9e4'),
+      image('Rim', [0, 0], [556, 416], '#8ca5a1'),
+      image('Paper', [0, 0], [548, 408], pigment.cream),
+      image('Rule', [0, 88], [336, 2], pigment.shelfRule),
+      label('Heading', [0, 134], [500, 63], '小动物自走棋', 43),
+      label('Progress', [0, 55], [496, 28], '', 21, pigment.muted),
+      button('Continue', [0, 0], [334, 56], '开始游戏', true),
+      button('NewGame', [0, -68], [334, 52], '放弃并开新局'),
+      button('Audio', [0, -139], [334, 48], '音效：开启'),
+    ], false), blockCursor: true },
     { ...group('Restart', [0, 0], [1202, 684], [
       image('Shade', [0, 0], [1202, 684], pigment.ink, { opacity: 0.65 }),
       image('Rim', [0, 5], [620, 234], pigment.edge),

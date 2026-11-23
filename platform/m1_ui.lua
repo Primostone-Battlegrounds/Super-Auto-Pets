@@ -1,13 +1,13 @@
 local rules_data = require("autopets.data")
 local run = require("autopets.run")
 local art = require("autopets.art")
-local root = script.object
+local root
 local rules = rules_data.rules
 
 local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
 local styles = {guardian = "守护", striker = "强攻", swarm = "群战"}
 local phases = {preparation = "准备", battle = "战斗", settlement = "结算", ended = "终局"}
-local primary = {preparation = "开战", battle = "结算", settlement = "下一轮", ended = "重开同种子"}
+local primary = {preparation = "开战", battle = "结算", settlement = "下一轮", ended = "再挑战本局"}
 local events = {
     start = "战斗开始", skill = "发动技能", attack = "发起攻击", damage = "受到伤害",
     faint = "退场", summon = "入场", buff = "增加生命", shield = "获得护盾", result = "战斗结束",
@@ -16,15 +16,22 @@ local errors = {
     empty_team = "先购买至少一只动物", missing_offer = "这个位置暂无商品", invalid_position = "请选择有效位置",
     insufficient_gold = "金币不足", team_full = "阵容已满", different_pet = "只能合并同种动物",
     max_level = "已达最高等级", same_position = "请选择不同站位", all_frozen = "当前商品都已冻结",
+    strike_limit = "战斗超过步数上限，无法结算", opponent_preparing = "对手正在准备，请稍后开战",
 }
 
 local session, state, selection, message
-local drag, consumed_gestures = nil, {}
-local confirming_restart = false
+local press, drag
+local menu_open, has_started = true, false
+local confirming_restart
 local reward_index, event_index = 1, 1
 local listeners, controls, portraits = {}, {}, {}
-local playing, elapsed = false, 0
-local replay_complete = false
+local visibility, displayed_text, displayed_colour = {}, {}, {}
+local playing, elapsed, replay_speed = false, 0, 1
+local replay_complete, reviewing = false, false
+local muted, sound_instance = false, nil
+-- Built-in 千星 sound catalog, from the pinned MCP tooling.
+local action_sounds = {buy = 50916, combine = 50917, merge = 50917, feed = 50882, freeze = 50937, reroll = 50929}
+local result_sounds = {win = 50915, loss = 50931, draw = 50916}
 local preparing_layout
 local lunging
 local accents = {win = 0x286452, loss = 0x984434, draw = 0x89591e}
@@ -43,6 +50,8 @@ local function control(path)
 end
 
 local function show(path, visible)
+    if visibility[path] == visible then return end
+    visibility[path] = visible
     local node = control(path)
     if visible then node:SetActive(true) end
     node:SetVisible(visible)
@@ -54,11 +63,30 @@ local function colour(rgb)
 end
 
 local function text(path, content, rgb)
+    show(path, true)
     local node = control(path)
-    node:SetActive(true)
-    node:SetVisible(true)
-    node.text = content
-    if rgb then node.fontColor = colour(rgb) end
+    if displayed_text[path] ~= content then
+        node.text = content
+        displayed_text[path] = content
+    end
+    if rgb and displayed_colour[path] ~= rgb then
+        node.fontColor = colour(rgb)
+        displayed_colour[path] = rgb
+    end
+end
+
+local function stop_sound()
+    if sound_instance and type(game.StopAudio) == "function" then
+        pcall(game.StopAudio, sound_instance)
+    end
+    sound_instance = nil
+end
+
+local function play_sound(sound)
+    if muted or not sound or type(game.PlayAudio2D) ~= "function" then return end
+    stop_sound()
+    local ok, instance = pcall(game.PlayAudio2D, sound)
+    if ok and math.type(instance) == "integer" then sound_instance = instance end
 end
 
 local function portrait(path, id, mirrored)
@@ -68,7 +96,7 @@ local function portrait(path, id, mirrored)
     local base = path .. "/Portrait"
     local layers = id and assert(art[id], id) or {}
     show(base, true)
-    for index = 1, 16 do
+    for index = 1, portrait_layers do
         local layer_path = base .. "/Layer" .. index
         local layer = layers[index]
         show(layer_path, layer ~= nil)
@@ -99,8 +127,8 @@ end
 
 local function team_card(path, unit, index, selected, effect)
     local mirrored = selected == nil
-    local background = mirrored and 0xb2a584 or 0x8da982
-    local rim = selected and 0xa66c27 or 0x90aa91
+    local background = mirrored and 0xb79389 or 0x8aaf9c
+    local rim = selected and 0x9b6021 or 0x9fb2aa
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
     local preparing = state.phase == "preparation"
@@ -192,7 +220,7 @@ end
 local function offer_card(path, kind, index)
     local item = offer(kind, index)
     local selected = matches(drag or selection, kind, index)
-    local face = selected and 0xf8efd7 or 0xe7d4a5
+    local face = selected and 0xfff9e9 or 0xe9d3a0
     local rim = selected and 0xa66c27 or (item and item.frozen and 0x406f82 or 0xd2ba86)
     show(path .. "/Frozen", item and item.frozen == true or false)
     text(path .. "/Tag", item and item.frozen and "已冻结" or "")
@@ -243,7 +271,7 @@ local function selected_info(picked)
 end
 
 local function draw_tooltip(preparing)
-    local picked = preparing and not confirming_restart and (drag or selection)
+    local picked = preparing and not menu_open and not confirming_restart and (drag or selection)
     show("Tooltip", not not picked)
     local caption = control("Shop/Caption")
     if not picked then
@@ -282,6 +310,8 @@ local function arrange(preparing)
     if preparing_layout == preparing then return end
     preparing_layout = preparing
     show("Field/PrepRail", preparing)
+    show("Field/AllyRail", not preparing)
+    show("Field/RivalRail", not preparing)
     show("Field/Clash", not preparing)
     for index = 1, rules.team_size do
         local x, y = 91 + (index - 1) * 112, 115 - (index - 1) * 9
@@ -302,7 +332,7 @@ local function draw_battle_cue(event, passed)
     local actor = strike and unit_path(event.side, event.slot)
     if lunging and lunging ~= actor then control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
     lunging = actor
-    local intensity = playing and math.max(0, 1 - (passed or 0) / 0.28) or 1
+    local intensity = math.max(0, 1 - (passed or 0) / 0.28)
     show("BattleFX", impact == true or (strike == true and intensity > 0))
     show("BattleFX/Strike", strike == true and intensity > 0)
     show("BattleFX/Impact", impact == true)
@@ -327,12 +357,30 @@ local function draw_battle_cue(event, passed)
     end
 end
 
+local function replay_pending()
+    return reviewing or (state.phase == "battle" and not replay_complete)
+end
+
+local function draw_menu()
+    show("Menu", menu_open)
+    if not menu_open then return end
+    text("Menu/Continue/Title", has_started and "继续本局" or "开始游戏")
+    show("Menu/NewGame", has_started and state.phase ~= "ended")
+    if has_started then
+        text("Menu/Progress", string.format("第 %d 轮 · %s · %d 胜 · 剩余 %d 命",
+            state.round, phases[state.phase], state.wins, state.lives))
+    else
+        show("Menu/Progress", false)
+    end
+    text("Menu/Audio/Title", muted and "音效：关闭" or "音效：开启")
+end
+
 local function draw(refresh)
     if refresh ~= false then state = session:snapshot() end
     local preparing = state.phase == "preparation"
     local battle = state.battle
     local event = battle and battle.events[event_index]
-    local player, enemy = state.shop.team, state.opponent.team
+    local player, enemy = state.shop.team, state.opponent and state.opponent.team
     if battle then
         for index = event_index, 1, -1 do
             local board = battle.events[index].board
@@ -353,9 +401,10 @@ local function draw(refresh)
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
     text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x984434 or 0x286452)
-    text("Seed", string.format("种子 %d · %d 胜通关", state.seed, rules.wins_to_win))
     text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
-    text("OpponentCaption", (preparing and "下一位电脑对手 · " or "电脑对手 · ") .. styles[state.opponent.style])
+    local opponent = preparing and "下一位电脑对手" or "电脑对手"
+    local style = state.opponent and styles[state.opponent.style]
+    text("OpponentCaption", style and (opponent .. " · " .. style) or opponent)
     for index = 1, rules.team_size do
         local hit = effect and event.slot == index
         if not preparing then
@@ -371,8 +420,16 @@ local function draw(refresh)
     show("Shop", preparing)
     show("Battle", not preparing)
     show("Reset", preparing)
-    show("Restart", confirming_restart)
-    draw_battle_cue(event)
+    draw_menu()
+    show("Restart", confirming_restart ~= nil)
+    if confirming_restart then
+        local in_menu = confirming_restart == "menu"
+        text("Restart/Heading", in_menu and "放弃本局？" or "重开本局？")
+        text("Restart/Body", in_menu and "本局阵容与战绩将清空，开始一局新游戏。" or "本局阵容与战绩将清空。")
+        text("Restart/Cancel/Title", in_menu and "返回菜单" or "继续本局")
+        text("Restart/Confirm/Title", in_menu and "确认放弃" or "确认重开")
+    end
+    draw_battle_cue(event, elapsed)
     local title = primary[state.phase]
     local hint = "拖动商品或队员到阵容，也可点击选择"
     if preparing then
@@ -381,7 +438,7 @@ local function draw(refresh)
                 or "先拖一只动物入队，或点选购买。输一轮扣一命，平局保留生命。"
         end
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
-        text("Shop/Caption", string.format("河岸市集 · T%d", state.shop.tier))
+        text("Shop/Caption", string.format("商店 · %d 阶", state.shop.tier))
         text("Shop/Buy/Title", string.format("购买 · %d 金", rules.pet_cost))
         text("Shop/Reroll/Title", string.format("刷新 · %d 金", rules.reroll_cost))
         local picked = drag or selection
@@ -393,23 +450,27 @@ local function draw(refresh)
         for index = 1, rules.food_shop_slots do offer_card("Shop/Food" .. index, "food", index) end
         offer_card("Shop/Reward", "reward", reward_index)
     else
-        local replaying = state.phase == "battle" and not replay_complete
+        local replaying = replay_pending()
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
         local accent = replaying and 0x286452 or accents[battle.outcome]
         text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
         control("Battle/Rule").imageColor = colour(accent)
         control("Battle/Border").imageColor = colour(state.final and accent or 0x90aa91)
         text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events, battle_event(event)))
-        show("Battle/Auto", replaying)
-        show("Battle/NewSeed", state.phase == "ended")
         text("Battle/Auto/Title", playing and "暂停回放" or "继续回放")
-        if replaying then title = "跳过回放" end
-        if state.phase == "ended" then
-            hint = "重开可以复盘同一局，也可以换种子开始新一局"
-        elseif replaying then
-            hint = "暂停后逐条看战斗事件，或直接跳到本轮结果"
+        text("Battle/Fast/Title", string.format("速度：%d 倍", replay_speed))
+        show("Battle/Replay", replaying)
+        show("Battle/Auto", replaying)
+        show("Battle/Fast", replaying)
+        show("Battle/Rewatch", replay_complete and not reviewing)
+        show("Battle/NewSeed", state.phase == "ended" and not reviewing)
+        if replaying then
+            title = "跳过回放"
+            hint = "可暂停、调整速度或跳到本轮结果"
+        elseif state.phase == "ended" then
+            hint = "可重看最后一场战斗，或开始新一局"
         else
-            hint = "可以单步重看战斗事件，或继续本局"
+            hint = "可重看战斗，或继续本局"
         end
     end
     draw_tooltip(preparing)
@@ -425,8 +486,13 @@ end
 local function command(action, ...)
     drag = nil
     local ok, error_code = session:shop_action(action, ...)
-    message = ok and nil or (errors[error_code] or error_code)
-    if ok and action ~= "freeze" then selection = nil end
+    if ok then
+        message = nil
+        if action ~= "freeze" then selection = nil end
+        play_sound(action_sounds[action])
+    else
+        message = errors[error_code] or error_code
+    end
     draw()
 end
 
@@ -461,8 +527,7 @@ local function choose_team(index)
 end
 
 local function begin_drag(event, kind, index)
-    consumed_gestures[event.touchId] = true
-    if drag or confirming_restart or state.phase ~= "preparation" then return end
+    if drag or state.phase ~= "preparation" then return end
     local item
     if kind == "team" then item = state.shop.team[index] else item = offer(kind, index) end
     if item then
@@ -499,7 +564,7 @@ end
 local function end_drag(event)
     if not drag or drag.touch ~= event.touchId then return end
     local source = drag
-    drag = nil
+    press, drag = nil, nil
     if state.phase ~= "preparation" then return end
     local index = drop_slot(event)
     if index then
@@ -559,53 +624,88 @@ local function next_reward()
     draw()
 end
 
+local function sync_updates()
+    script:EnableUpdate(playing and not menu_open)
+end
+
 local function set_playing(value)
-    if playing ~= value then script:EnableUpdate(value) end
-    playing, elapsed = value, 0
+    playing = value
+    sync_updates()
+end
+
+local function reach_result()
+    event_index, elapsed = #state.battle.events, 0
+    replay_complete, reviewing = true, false
+    set_playing(false)
 end
 
 local function replay()
-    local battle = state.battle
-    if not battle then return end
+    if not replay_pending() then return end
     set_playing(false)
-    event_index = event_index % #battle.events + 1
-    if event_index == #battle.events then replay_complete = true end
+    stop_sound()
+    event_index = event_index + 1
+    elapsed = 0
+    if event_index == #state.battle.events then reach_result() end
     draw(false)
 end
 
 local function toggle_replay()
-    if state.phase == "battle" and not replay_complete then
-        set_playing(not playing)
-        draw(false)
-    end
+    if not replay_pending() then return end
+    set_playing(not playing)
+    if not playing then stop_sound() end
+    draw(false)
+end
+
+local function toggle_speed()
+    if not replay_pending() then return end
+    replay_speed = replay_speed == 1 and 3 or 1
+    draw(false)
+end
+
+local function rewatch()
+    if not state.battle or not replay_complete or reviewing then return end
+    event_index, elapsed, reviewing = 1, 0, true
+    set_playing(true)
+    draw(false)
+end
+
+local function next_seed()
+    return state.seed % 2147483646 + 1
+end
+
+local function reset_view()
+    press, drag, selection, message = nil, nil, nil, nil
+    reward_index, event_index, elapsed = 1, 1, 0
+    replay_complete, reviewing = false, false
+    set_playing(false)
 end
 
 local function advance(new_seed)
+    if replay_pending() then
+        stop_sound()
+        reach_result()
+        draw(false)
+        return
+    end
     local old = state.phase
     local ok, error_code
     if old == "preparation" then
         ok, error_code = session:submit()
     elseif old == "battle" then
-        if not replay_complete then
-            set_playing(false)
-            event_index = #state.battle.events
-            replay_complete = true
-            draw(false)
-            return
-        end
         ok, error_code = session:settle()
-        if ok then event_index = #state.battle.events end
     elseif old == "settlement" then
         ok, error_code = session:advance()
     else
         ok, error_code = session:restart(new_seed)
     end
     if ok then
-        drag, consumed_gestures = nil, {}
-        selection, message = nil, nil
-        reward_index = 1
-        if old ~= "battle" then event_index, replay_complete = 1, false end
-        set_playing(old == "preparation")
+        if old == "battle" then
+            reach_result()
+            play_sound(result_sounds[state.battle.outcome])
+        else
+            reset_view()
+            set_playing(old == "preparation")
+        end
     else
         message = errors[error_code] or error_code
     end
@@ -613,44 +713,79 @@ local function advance(new_seed)
     if ok then log_state() end
 end
 
-local function show_restart(visible)
-    if state.phase ~= "preparation" then return end
+local function open_menu()
+    menu_open, drag = true, nil
+    stop_sound()
+    sync_updates()
+    draw(false)
+end
+
+local function continue_game()
+    has_started, menu_open = true, false
+    sync_updates()
+    draw(false)
+end
+
+local function toggle_audio()
+    muted = not muted
+    if muted then stop_sound() end
+    draw_menu()
+end
+
+local function show_restart(context)
+    if context == "board" and state.phase ~= "preparation" then return end
+    if context == "menu" and (not has_started or state.phase == "ended") then return end
     drag = nil
-    confirming_restart = visible
+    confirming_restart = context
     draw(false)
 end
 
 local function confirm_restart()
-    if not confirming_restart or state.phase ~= "preparation" then return end
-    confirming_restart = false
-    local ok, error_code = session:restart()
-    if ok then
-        drag, consumed_gestures = nil, {}
-        selection, message = nil, nil
-        reward_index, event_index, replay_complete = 1, 1, false
+    if not confirming_restart then return end
+    local in_menu = confirming_restart == "menu"
+    confirming_restart = nil
+    if in_menu then
+        session = run.new(next_seed())
+        menu_open = false
     else
-        message = errors[error_code] or error_code
+        local ok, error_code = session:restart()
+        if not ok then
+            message = errors[error_code] or error_code
+            draw()
+            return
+        end
     end
+    stop_sound()
+    reset_view()
     draw()
-    if ok then log_state() end
+    log_state()
 end
 
 function OnUpdate(dt)
-    if not playing or state.phase ~= "battle" then return end
+    if not playing or menu_open then return end
     local battle = state.battle
     local event = battle.events[event_index]
     local delay = event.type == "damage" and 0.55 or 0.4
-    elapsed = elapsed + dt
+    elapsed = elapsed + dt * replay_speed
     if elapsed < delay then
         if event.type == "attack" or event.type == "damage" then draw_battle_cue(event, elapsed) end
         return
     end
     event_index, elapsed = event_index + 1, 0
-    if event_index == #battle.events then
-        replay_complete = true
-        set_playing(false)
-    end
+    local upcoming = battle.events[event_index]
+    if upcoming.type == "damage" then play_sound(upcoming.amount > 0 and 50936 or 51044) end
+    if event_index == #battle.events then reach_result() end
     draw(false)
+end
+
+local function allows_input(path)
+    if confirming_restart then return path:match("^Restart/") ~= nil end
+    if menu_open then return path:match("^Menu/") ~= nil end
+    return not path:match("^Menu/") and not path:match("^Restart/")
+end
+
+local function pressed_here(path, event)
+    return event and press and press.touch == event.touchId and press.path == path
 end
 
 local function bind(path, callback, on_drag)
@@ -659,19 +794,26 @@ local function bind(path, callback, on_drag)
     hit:SetVisible(true)
     local bound = {
         [Enum.CursorEventType.CursorDown] = function(event)
-            consumed_gestures[event.touchId] = nil
-            if drag and drag.touch == event.touchId then
+            if not allows_input(path) then return end
+            press = {touch = event.touchId, path = path}
+            if drag then
                 drag = nil
                 draw(false)
             end
         end,
         [Enum.CursorEventType.CursorClick] = function(event)
-            if confirming_restart and not path:match("^Restart/") then return end
-            if not event or not consumed_gestures[event.touchId] then callback() end
+            if not pressed_here(path, event) then return end
+            local moved = press.moved
+            press = nil
+            if not moved and allows_input(path) then callback() end
         end,
     }
     if on_drag then
-        bound[Enum.CursorEventType.CursorBeginDrag] = on_drag
+        bound[Enum.CursorEventType.CursorBeginDrag] = function(event)
+            if not allows_input(path) or not pressed_here(path, event) then return end
+            press.moved = true
+            on_drag(event)
+        end
         bound[Enum.CursorEventType.CursorDrag] = update_drag
         bound[Enum.CursorEventType.CursorEndDrag] = end_drag
     end
@@ -693,7 +835,32 @@ local function bind_button(path, callback)
     bind(path, callback)
 end
 
+local function release_view()
+    set_playing(false)
+    stop_sound()
+    for hit, bound in pairs(listeners) do
+        if hit.alive then
+            for event, handler in pairs(bound) do hit:RemoveCursorEventListener(event, handler) end
+        end
+    end
+    local old_portrait = lunging and controls[lunging .. "/Portrait"]
+    if old_portrait and old_portrait.alive then old_portrait:SetAnchoredPosition(0, 27) end
+    root, session, state = nil, nil, nil
+    press, drag, selection, message = nil, nil, nil, nil
+    listeners, controls, portraits = {}, {}, {}
+    visibility, displayed_text, displayed_colour = {}, {}, {}
+    preparing_layout, lunging = nil, nil
+end
+
 function OnStart()
+    if session then release_view() end
+    root = script.object
+    menu_open, has_started, confirming_restart = true, false, nil
+    muted, replay_speed = false, 1
+    reset_view()
+    for id, layers in pairs(art) do
+        assert(#layers <= portrait_layers, "portrait exceeds the native pool: " .. id)
+    end
     session = run.new(assert(math.tointeger(script:GetParam("seed")), "seed must be an integer"))
     for index = 1, rules.team_size do bind_card("Team" .. index, "team", index) end
     for index = 1, rules.pet_shop_slots do bind_card("Shop/Pet" .. index, "pet", index) end
@@ -707,17 +874,23 @@ function OnStart()
     bind_button("Shop/RewardNext", next_reward)
     bind_button("Battle/Replay", replay)
     bind_button("Battle/Auto", toggle_replay)
+    bind_button("Battle/Fast", toggle_speed)
+    bind_button("Battle/Rewatch", rewatch)
     bind_button("Battle/NewSeed", function()
-        if state.phase == "ended" then advance(state.seed % 2147483646 + 1) end
+        if state.phase == "ended" then advance(next_seed()) end
     end)
     bind_button("Primary", function() advance() end)
-    bind_button("Reset", function() show_restart(true) end)
-    bind_button("Restart/Cancel", function() show_restart(false) end)
+    bind_button("OpenMenu", open_menu)
+    bind_button("Menu/Continue", continue_game)
+    bind_button("Menu/NewGame", function() show_restart("menu") end)
+    bind_button("Menu/Audio", toggle_audio)
+    bind_button("Reset", function() show_restart("board") end)
+    bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
-    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Seed", "Field", "Field/Meadow", "Field/Bank",
-        "Field/Water", "Field/Current", "Field/Ripple1", "Field/Ripple2", "Field/Ripple3", "Field/Reed-1A", "Field/Reed-1B",
-        "Field/Reed-1C", "Field/Reed1A", "Field/Reed1B", "Field/Reed1C", "Shop/Paper", "Shop/Rail", "Shop/Rule",
-        "TeamCaption", "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule"}) do
+    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Divider",
+        "Shop/Paper", "Shop/Rail", "Shop/Rule", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
+        "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
+        "Menu/Rule", "Menu/Heading"}) do
         show(path, true)
     end
     for _, name in ipairs({"Shade", "Rim", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
@@ -734,11 +907,5 @@ function OnStart()
 end
 
 function OnDestroy()
-    set_playing(false)
-    for hit, bound in pairs(listeners) do
-        if hit.alive then
-            for event, handler in pairs(bound) do hit:RemoveCursorEventListener(event, handler) end
-        end
-    end
-    listeners = {}
+    release_view()
 end

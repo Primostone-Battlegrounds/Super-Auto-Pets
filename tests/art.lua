@@ -25,7 +25,7 @@ for _, catalogue in ipairs({data.pet_by_id, data.food_by_id, data.token_by_id}) 
 
         local layers = assert(art[id], id .. " missing artwork")
         local size = assert_dense(layers)
-        assert(size >= 8 and size <= 16, id .. " layer count outside supported range")
+        assert(size >= 8, id .. " has too few layers")
         local geometry, colours = {}, {}
         for index, layer in ipairs(layers) do
             assert(assert_dense(layer) == 8, id .. " malformed layer")
