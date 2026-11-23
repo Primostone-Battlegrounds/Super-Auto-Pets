@@ -156,12 +156,30 @@ assert(bot.advance_to_round(digest_fixture, 2, 64))
 local first_training = bot.trace(digest_fixture).rounds[1].training.result
 assert(first_training.event_count == 48 and first_training.event_digest == "e6b2ec74c3ad5ef5")
 
+local standard = bot.new_pool(-17, "swarm", "standard")
+assert(bot.advance_to_round(standard, 7, 512))
+assert(same(bot.trace(standard), bot.trace(single)), "explicit standard changed the default trace")
+for _, style in ipairs(styles) do
+    local beginner = bot.new_pool(-17, style, "beginner")
+    assert(bot.advance_to_round(beginner, 7, 512))
+    local beginner_trace = assert(bot.trace(beginner))
+    local snapshot = assert(bot.snapshot(beginner))
+    assert(beginner_trace.difficulty == "beginner")
+    inspect(beginner_trace, snapshot, 7)
+    assert(same(snapshot, bot.generate(7, -17, style, "beginner")))
+    assert(not same(snapshot, bot.generate(7, -17, style, "standard")))
+    beginner_trace.difficulty = nil
+    local result, reason = bot.replay(beginner_trace)
+    assert(result == nil and reason == "invalid_trace", tostring(reason))
+end
+
 local different_rules = bot.trace(single)
 different_rules.rules_hash = "different"
 local _, version_error = bot.replay(different_rules)
 assert(version_error == "trace_version_mismatch")
 assert(not pcall(bot.generate, 0, 17))
 assert(not pcall(bot.generate, 1, 17, "unknown"))
+assert(not pcall(bot.generate, 1, 17, "guardian", "unknown"))
 assert(not pcall(bot.generate, 1, "bad seed"))
 
 print("bot tests passed")

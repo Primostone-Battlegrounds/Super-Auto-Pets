@@ -4,7 +4,7 @@ title: Release · 六阶内容、策略机器人与正式候选
 status: To Do
 assignee: []
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-23 09:02'
+updated_date: '2026-11-23 09:21'
 labels: []
 milestone: m-4
 dependencies:
@@ -29,4 +29,6 @@ ordinal: 29000
 
 <!-- SECTION:NOTES:BEGIN -->
 现有三阶练习目录的 AI 基线已在种子 1–128 上对照合法随机购物。双方共用起始店铺种子，每轮交换席位，各策略 3072 场。三种策略得分率为 89.4%、87.6%、88.9%，第 12 轮共 137 种阵容组合。复验命令为 lua5.4 scripts/audit-balance.lua versus-random 128。六阶目录、强度梯度和多人运行仍待验。
+
+入门与标准档共用商店合法动作。128 个配对种子、三种流派的换边对战中，标准对入门得分率 82.2%–85.9%。入门对合法随机购物得分率 64.2%–71.2%，第 12 轮共 80 组阵容。Lua 5.3/5.4 输出一致。难度当前由规则 API 选择，六阶与客户端入口待验。
 <!-- SECTION:NOTES:END -->

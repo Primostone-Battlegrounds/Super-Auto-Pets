@@ -125,7 +125,9 @@ local function front_value(unit, style)
     return stats(unit, style) + front_bonus
 end
 
-local function choose_action(state, style, actions_taken)
+-- Beginner develops weaker slots and waits for clearer reasons to trade up.
+-- Standard uses front-line ability value and invests in a stronger lead unit.
+local function choose_action(state, style, actions_taken, beginner)
     if actions_taken >= max_actions_per_turn then
         return nil, "action_limit"
     end
@@ -169,7 +171,11 @@ local function choose_action(state, style, actions_taken)
             if offer then
                 local food = data.food_by_id[offer.id]
                 for target, unit in ipairs(state.team) do
-                    local score = 43 + stats(food, style) + math.min(20, front_value(unit, style) // 8)
+                    local priority = math.min(20, front_value(unit, style) // 8)
+                    if beginner then
+                        priority = 20 - math.min(20, stats(unit, style) // 8)
+                    end
+                    local score = 43 + stats(food, style) + priority
                     consider(score, {action = "feed", offer = slot, target = target})
                 end
             end
@@ -178,18 +184,20 @@ local function choose_action(state, style, actions_taken)
 
     if available_pet then
         local recruit_value = value(available_pet, style)
+        local trade_gain = beginner and 32 or 12
         for target, unit in ipairs(state.team) do
             local definition = data.pet_by_id[unit.id]
             local gain = recruit_value - value(unit, style)
             local uninvested = unit.level == 1 and unit.xp == 0
                 and unit.attack == definition.attack and unit.health == definition.health
-            if uninvested and available_pet.tier > definition.tier and gain >= 12 then
+            if uninvested and available_pet.tier > definition.tier and gain >= trade_gain then
                 consider(62 + gain // 3, {action = "sell", target = target})
             end
             for from, donor in ipairs(state.team) do
                 if from ~= target and donor.id == unit.id and unit.level < rules.max_level
                     and unit.xp + donor.xp + 1 >= rules.level_xp[unit.level + 1]
-                    and recruit_value > value(donor, style) + 8 then
+                    and recruit_value > value(donor, style) + 8
+                    and (not beginner or available_pet.tier > definition.tier) then
                     consider(74 + (recruit_value - value(donor, style)) // 4,
                         {action = "merge", from = from, to = target})
                 end
@@ -230,9 +238,10 @@ local function choose_action(state, style, actions_taken)
         end
     end
 
+    local position_value = beginner and stats or front_value
     local front = 1
     for slot = 2, #state.team do
-        if front_value(state.team[slot], style) > front_value(state.team[front], style) then
+        if position_value(state.team[slot], style) > position_value(state.team[front], style) then
             front = slot
         end
     end
@@ -252,9 +261,10 @@ local function open_turn(pool)
     pool.phase = "prepare"
 end
 
-function bot.new_pool(seed, requested_style)
+function bot.new_pool(seed, requested_style, difficulty)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
     assert(requested_style == nil or weights[requested_style], "unknown bot style")
+    assert(difficulty == nil or difficulty == "standard" or difficulty == "beginner", "unknown bot difficulty")
     local selector = rng.new(seed ~ 0x424f54504f4f4c)
     local selected = selector:int(1, 2)
     local style_index = selector:int(1, #styles)
@@ -262,6 +272,7 @@ function bot.new_pool(seed, requested_style)
     local pool = {
         seed = seed,
         requested_style = requested_style,
+        difficulty = difficulty == "beginner" and difficulty or nil,
         selected = selected,
         battle_random = rng.new(seed ~ 0x545241494e),
         sessions = {},
@@ -281,7 +292,7 @@ local function prepare_step(pool, expected)
     local session, frame = pool.sessions[index], pool.turn.sessions[index]
     local store = session.store
     local state = store:snapshot()
-    local command, stop = choose_action(state, session.style, #frame.commands)
+    local command, stop = choose_action(state, session.style, #frame.commands, pool.difficulty == "beginner")
     if expected then
         local recorded = expected.sessions[index].commands[#frame.commands + 1]
         assert(equal(command, recorded and recorded.command), "command_mismatch")
@@ -369,6 +380,7 @@ function bot.trace(pool)
         rules_hash = assert(data.rules_hash),
         seed = pool.seed,
         requested_style = pool.requested_style,
+        difficulty = pool.difficulty,
         selected = pool.selected,
         sessions = {},
         rounds = {},
@@ -385,7 +397,7 @@ function bot.trace(pool)
 end
 
 local function replay(trace)
-    local pool = bot.new_pool(trace.seed, trace.requested_style)
+    local pool = bot.new_pool(trace.seed, trace.requested_style, trace.difficulty)
     for index, frame in ipairs(trace.rounds) do
         while pool.phase == "prepare" do
             step(pool, frame)
@@ -410,8 +422,8 @@ function bot.replay(trace)
     return opponent
 end
 
-function bot.generate(round, seed, requested_style)
-    local pool = bot.new_pool(seed, requested_style)
+function bot.generate(round, seed, requested_style, difficulty)
+    local pool = bot.new_pool(seed, requested_style, difficulty)
     assert(bot.advance_to_round(pool, round, math.maxinteger))
     return bot.snapshot(pool)
 end
