@@ -23,6 +23,7 @@ store:snapshot() --> state -- 现有字段 + rng_state, phase, last_outcome
 store:finish_turn() --> front_first_team | nil, error_code
 battle.resolve(player, enemy, seed) --> result -- 现有字段 + seed, rng_state
 store:record_battle(result, side) --> true | nil, error_code
+store:abort_turn(result, side) --> true | nil, error_code
 store:advance_round() --> true | nil, error_code
 bot.new_pool(seed, requested_style) --> pool
 bot.advance_to_round(pool, round, budget) --> ready_boolean
@@ -30,6 +31,7 @@ bot.snapshot(pool) --> opponent -- round, tier, style, team
 bot.trace(pool) --> trace
 bot.replay(trace) --> opponent | nil, error_code
 bot.generate(round, seed, requested_style) --> opponent
+run:opponent_trace() --> trace
 ```
 
 `command.action` 及字段：
@@ -44,21 +46,21 @@ bot.generate(round, seed, requested_style) --> opponent
 | freeze | kind（pet 或 food），offer，frozen 可省略以切换 |
 | reroll | 无 |
 
-购买、合成、售出、重排、喂食、冻结与刷新在准备阶段可用。沿用小写错误码。非法操作保持整个状态与 RNG。收轮生成独立战前快照，结算接受实际 `battle.resolve` 结果和 `player` 或 `enemy` 一侧。训练两侧共用结算，战斗临时值不得回写。准备、收轮、结算、下一轮各只执行一次。玩家入口保留 `run:shop_action(name, ...)` 及既有快照字段。
+购买、合成、售出、重排、喂食、冻结与刷新在准备阶段可用。沿用小写错误码。非法操作保持整个状态与 RNG。收轮生成独立战前快照，结算接受实际 `battle.resolve` 结果和 `player` 或 `enemy` 一侧。训练两侧共用结算，战斗临时值不得回写。步数上限触发时用该场凭据返回准备阶段并恢复本次玩家战斗 RNG。准备、收轮、结算、下一轮各只执行一次。玩家入口保留 `run:shop_action(name, ...)` 及既有快照字段。
 
-训练池至少两场独立商店会话。所有会话先完成同轮准备，随后冻结战前快照并实际交战。预算对推进步骤设上限，下一次调用可继续。轨迹含规则哈希、策略版本、初始种子、合法商店命令、收轮、战斗双方输入和种子、结果与状态/RNG 核对值。重放从零队伍重算商店与战斗并拒绝篡改。由赛前快照选择同轮玩家对手，选取独立于玩家指令。
+训练池至少两场独立商店会话。所有会话先完成同轮准备，随后冻结战前快照并实际交战。预算对推进步骤设上限，下一次调用可继续。轨迹含规则哈希、策略版本、初始种子、合法商店命令、收轮、战斗双方输入和种子、结果与状态/RNG 核对值。重放从零队伍重算商店与战斗并拒绝篡改。每局从独立对手种子的第一次抽样一次创建训练池，随后复用。由赛前快照选择同轮玩家对手，选取独立于玩家指令。
 
 ## S · 文件所有权
 
 | 角色 | 负责文件 |
 | --- | --- |
 | P0 | 工程文档、覆盖表、Backlog、接口协调、集成 |
-| P1 | `src/autopets/{data,shop,battle,run}.lua` 和对应领域测试 |
+| P1 | `src/autopets/{data,shop,battle,battle_receipt,run}.lua` 和对应领域测试 |
 | P2 | `src/autopets/bot.lua`、AI 回放与压力入口、`tests/bot.lua` |
 | P3 | `src/autopets/art.lua`、`platform/{m1-ui.mjs,m1_ui.lua}`、表现测试 |
 | P4 | `platform/m1-bundle.mjs`、`tests/native/`、原生验证、候选包与验收文档 |
 
-依赖方向为平台 → run → bot/shop/battle，bot → shop/battle，shop 和 battle 只依赖通用领域模块。策略与 UI 只读目录、快照和事件。
+依赖方向为平台 → run → bot/shop/battle，bot → shop/battle，shop 和 battle 共用结算凭据模块，并只依赖通用领域模块。策略与 UI 只读目录、快照和事件。
 
 ## O · 集成验收
 
