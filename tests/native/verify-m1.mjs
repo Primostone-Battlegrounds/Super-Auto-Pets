@@ -153,8 +153,13 @@ try {
   assert.deepEqual(baseline.clientTemplates, []);
   assert.deepEqual((await call('scene_list_client_scripts', { mapPath: input })).scripts, []);
 
+  const cleaned = await call('scene_remove_entities', { mapPath: input, names: ['积木样本'], outputName: 'm1-clean-scene' });
+  const singlePlayer = await call('scene_set_player_count', {
+    mapPath: cleaned.mapPath, min: 1, max: 1, outputName: 'm1-single-player',
+  });
   const scripted = await call('scene_set_client_script', {
-    mapPath: input, name: nativeRun.script, source, variables: [{ name: 'seed', type: 'integer', value: seed, public: true }],
+    mapPath: singlePlayer.mapPath, name: nativeRun.script, source,
+    variables: [{ name: 'seed', type: 'integer', value: seed, public: true }],
     outputName: 'm1-run-script',
   });
   assert.deepEqual(scripted.callbacks, ['OnStart', 'OnUpdate', 'OnDestroy']);
@@ -169,6 +174,10 @@ try {
   const inspected = await call('inspect_map', { mapPath });
   assert.equal(inspected.sha256, sha256(fs.readFileSync(mapPath)));
   assert.deepEqual(inspected.graphs, []);
+  const { players } = await call('scene_list_respawn_points', { mapPath });
+  assert.deepEqual(players, { min: 1, max: 1 });
+  const { entities } = await call('scene_list_entities', { mapPath });
+  assert.ok(entities.every(({ name }) => ['关卡实体', '默认模版', '默认模版(角色编辑)'].includes(name)));
 
   const decoded = await call('scene_get_client_ui', { mapPath, ui: nativeRun.name });
   assert.deepEqual(decoded.interface.scripts, [mounted]);
@@ -227,6 +236,7 @@ try {
   report = {
     toolRevision: toolHead, fixture: { file: fixtureName, sha256: fixtureHash, originalsUnchanged: true },
     gil: { mapPath, sha256: inspected.sha256, bytes: inspected.bytes, schema: inspected.schema },
+    players,
     binding: { layoutId: layouts.layouts[0].layoutId, containerId: decoded.containerId, rootId: decoded.rootId,
       scriptId: embedded.scriptId, sourceSha256: sha256(source), sourceBytes: Buffer.byteLength(source), controls: records.length },
     offline: { status: 'passed', checkProblems: checked.problems },
@@ -248,6 +258,7 @@ if (packageDir) {
     toolRevision: report.toolRevision,
     fixture: { file: report.fixture.file, sha256: report.fixture.sha256 },
     gil: { file: mapFile, sha256: report.gil.sha256, bytes: report.gil.bytes, schema: report.gil.schema },
+    players: report.players,
     offline: report.offline.status,
     simulation: { status: report.simulation.status, seed: report.simulation.seed },
     officialClient: report.officialClient,
@@ -260,6 +271,7 @@ if (packageDir) {
     fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     fs.writeFileSync(path.join(packageDir, 'SHA256SUMS'), `${manifest.gil.sha256}  ${mapFile}\n`);
     fs.writeFileSync(path.join(packageDir, 'simulated-run.log'), report.simulation.logs.join('\n') + '\n');
+    fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(packageDir, 'MCP-FIXTURE-LICENSE.txt'));
     const guide = `# 小动物自走棋 M1 真机验收候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
       `先在本目录运行 \`sha256sum -c SHA256SUMS\`。使用获授权的官方隔离关卡导入 \`${mapFile}\`。\n` +
       `在 PC 与手机分别核对画面、操作和完整单局，留存客户端版本与 AUTO_PETS_M1 日志。\n\n` +
