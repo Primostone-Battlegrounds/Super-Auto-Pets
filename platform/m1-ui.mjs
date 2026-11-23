@@ -37,8 +37,8 @@ function card(name, position, width, type, interactive = true, visible = true) {
   const size = [width, 154];
   const market = type === 'market';
   const children = [
-    ellipse('Rim', [0, -6], [94, 32], pigment.edge),
-    ellipse('Face', [0, -3], [88, 24], pigment[type]),
+    ellipse('Rim', [0, 7], [94, 32], pigment.edge),
+    ellipse('Face', [0, 10], [88, 24], pigment[type]),
     portrait(),
     label('Name', [0, -24], [width - 4, 24], '', market ? 19 : 17),
     image('StatsPaper', [0, -47], [width - 8, 23], market ? '#f6ecd0' : '#edf0d9'),
