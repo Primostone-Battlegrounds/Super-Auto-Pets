@@ -1,5 +1,6 @@
 local controls = {}
-for _, name in ipairs({"Status", "Refresh", "Ready", "Advance"}) do
+for _, name in ipairs({"Status", "Refresh", "Ready", "Advance", "MarketGold", "Team",
+    "OfferLabel1", "OfferLabel2", "OfferLabel3", "Buy1", "Buy2", "Buy3"}) do
     controls[name] = {
         alive = true,
         AddCursorEventListener = function(self, event, callback)
@@ -15,6 +16,7 @@ end
 
 Enum = {CursorEventType = {CursorClick = 1}}
 local sent = {}
+local handlers = {}
 game = {
     ServerSignal = function(name)
         assert(name == "AP_DuelRequest")
@@ -32,43 +34,129 @@ game = {
 }
 script = {
     object = {GetChild = function(_, name) return assert(controls[name]) end},
-    RegisterServerSignalHandler = function(self, name, callback)
-        assert(name == "AP_DuelSnapshot" and self.receive == nil)
-        self.receive = callback
+    RegisterServerSignalHandler = function(_, name, callback)
+        assert((name == "AP_DuelSnapshot" or name == "AP_DuelMarket") and handlers[name] == nil)
+        handlers[name] = callback
     end,
-    UnregisterServerSignalHandler = function(self, name)
-        assert(name == "AP_DuelSnapshot" and self.receive ~= nil)
-        self.receive = nil
+    UnregisterServerSignalHandler = function(_, name)
+        assert(handlers[name])
+        handlers[name] = nil
     end,
 }
-local function receive(players, round, phase, ready, continued, settlements, version)
-    script.receive("AP_DuelSnapshot", {players, 1, round, phase, ready, continued, settlements, version})
+local function receive_status(players, round, phase, ready, continued, settlements, version)
+    local seat = players == 2 and 1 or 0
+    handlers.AP_DuelSnapshot("AP_DuelSnapshot", {players, seat, round, phase, ready, continued, settlements, version})
+end
+
+local function receive_market(round, version, gold, offers, team)
+    handlers.AP_DuelMarket("AP_DuelMarket", {round, version, gold, offers, team})
+end
+
+local function assert_text(name, text)
+    assert(controls[name].text:find(text, 1, true), name .. " should show " .. text)
+end
+
+local function click_expect(name, action, round)
+    local before = #sent
+    controls[name].callback()
+    if action then
+        assert(#sent == before + 1 and sent[#sent][1] == action and sent[#sent][2] == round)
+    else
+        assert(#sent == before, name .. " should have ignored click")
+    end
 end
 
 dofile(assert(arg[1]))
 OnStart()
 assert(sent[1][1] == 0 and sent[1][2] == 0)
-receive(1, 1, 0, false, false, 0, 1)
-assert(controls.Status.text:find("等待第 2 位玩家", 1, true))
-controls.Ready.callback()
-assert(sent[2][1] == 1 and sent[2][2] == 1)
-receive(2, 1, 1, true, false, 1, 4)
+assert_text("MarketGold", "同步商店中")
+click_expect("Buy1")
+
+local empty_team = {0, 0, 0, 0, 0}
+receive_status(1, 1, 0, false, false, 0, 1)
+receive_market(1, 1, 0, {0, 0, 0}, empty_team)
+assert_text("Status", "等待第 2 位玩家")
+assert_text("Team", "阵容 0 / 5")
+click_expect("Buy1")
+click_expect("Ready", 1, 1)
+
+-- Status arrives first. Older market data cannot make the shop interactive.
+receive_status(2, 1, 0, false, false, 0, 2)
+receive_market(1, 1, 10, {1, 2, 3}, empty_team)
+click_expect("Buy1")
+receive_market(1, 2, 10, {1, 2, 3}, empty_team)
+assert_text("MarketGold", "金币 10")
+assert_text("OfferLabel1", "芦纹龟  攻1 / 生4")
+assert_text("OfferLabel2", "烟尾雨燕")
+assert_text("OfferLabel3", "棉尾兔")
+assert_text("OfferLabel1", "购买 3 金")
+assert_text("Team", "先购买动物")
+click_expect("Buy1", 3, 1)
+click_expect("Buy2", 4, 1)
+click_expect("Buy3", 5, 1)
+assert_text("MarketGold", "金币 10")
+assert_text("Team", "阵容 0 / 5")
+
+-- Market arrives first. Repeated packets must not undo the server purchase.
+receive_market(1, 3, 7, {0, 2, 3}, {1, 0, 0, 0, 0})
+assert_text("Team", "阵容 1 / 5\n芦纹龟")
+assert_text("OfferLabel1", "售罄")
+assert_text("OfferLabel2", "等待同步")
+click_expect("Buy2")
+receive_status(2, 1, 0, false, false, 0, 3)
+receive_market(1, 3, 10, {1, 2, 3}, empty_team)
+receive_market(1, 2, 10, {1, 2, 3}, empty_team)
+assert_text("MarketGold", "金币 7")
+click_expect("Buy1")
+click_expect("Buy2", 4, 1)
+
+receive_market(1, 4, 7, {0, 2, 3}, {1, 0, 0, 0, 0})
+receive_status(2, 1, 0, true, false, 0, 4)
+assert_text("OfferLabel2", "本轮已锁定")
+click_expect("Buy2")
+receive_status(2, 1, 1, true, false, 1, 5)
+receive_market(1, 5, 7, {0, 2, 3}, {1, 0, 0, 0, 0})
 local settlement = controls.Status.text
-assert(settlement:find("本轮已结算", 1, true))
-receive(2, 1, 0, true, false, 0, 3)
+assert_text("Status", "本轮已结算")
+receive_status(2, 1, 0, true, false, 0, 3)
 assert(controls.Status.text == settlement)
-controls.Advance.callback()
-assert(sent[3][1] == 2 and sent[3][2] == 1)
-receive(2, 2, 0, false, false, 1, 6)
-controls.Refresh.callback()
-assert(sent[4][1] == 0 and sent[4][2] == 2)
-receive(2, 2, 2, true, false, 2, 10)
-assert(controls.Status.text:find("验证完成", 1, true))
+click_expect("Buy3")
+click_expect("Advance", 2, 1)
+
+receive_market(2, 6, 10, {3, 2, 1}, {1, 2, 0, 0, 0})
+assert_text("MarketGold", "同步商店中")
+click_expect("Buy3")
+receive_status(2, 2, 0, false, false, 1, 6)
+receive_market(1, 7, 0, {0, 0, 0}, empty_team)
+receive_status(2, 1, 0, false, false, 0, 7)
+assert_text("MarketGold", "金币 10")
+assert_text("Team", "阵容 2 / 5\n芦纹龟  ·  烟尾雨燕")
+click_expect("Buy3", 5, 2)
+click_expect("Refresh", 0, 2)
+
+receive_status(2, 2, 0, false, false, 1, 8)
+receive_market(2, 8, 2, {3, 0, 1}, {1, 2, 2, 0, 0})
+assert_text("OfferLabel1", "金币不足")
+click_expect("Buy1")
+receive_market(2, 9, 4, {0, 0, 1}, {1, 2, 3, 1, 3})
+receive_status(2, 2, 0, false, false, 1, 9)
+assert_text("OfferLabel3", "阵容已满")
+click_expect("Buy3")
+receive_status(2, 2, 2, true, false, 2, 10)
+assert_text("Status", "验证完成")
+click_expect("Buy3")
+
 OnDestroy()
-assert(script.receive == nil)
+assert(next(handlers) == nil)
 for _, control in pairs(controls) do
     assert(control.callback == nil)
 end
 OnStart()
-assert(sent[5][1] == 0 and sent[5][2] == 0)
+assert(sent[#sent][1] == 0 and sent[#sent][2] == 0)
+assert_text("MarketGold", "同步商店中")
+click_expect("Buy3")
+receive_market(1, 1, 10, {1, 2, 3}, empty_team)
+receive_status(2, 1, 0, false, false, 0, 1)
+click_expect("Buy3", 5, 1)
 OnDestroy()
+assert(next(handlers) == nil)

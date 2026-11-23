@@ -13,6 +13,39 @@ assert.ok(checkoutArg && scratch && lua,
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0', 'Set MILIASTRA_ALLOW_LIVE_WRITE=0');
 const luaVersion = execFileSync(lua, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim();
 assert.match(luaVersion, /^Lua 5\.3\./, 'Use the Miliastra client Lua version');
+const project = fileURLToPath(new URL('../../', import.meta.url));
+const exportShop = executable => execFileSync(executable, ['-E', 'platform/m2_shop_data.lua'], {
+  cwd: project, encoding: 'utf8', timeout: 10_000,
+});
+const shopData = exportShop(lua);
+assert.equal(exportShop(process.env.LUA54 || 'lua5.4'), shopData);
+const catalog = [];
+const shelves = [];
+let shopFixture;
+for (const line of shopData.trimEnd().split('\n')) {
+  const [kind, ...fields] = line.split('\t');
+  if (kind === 'config') {
+    const [gold, price, teamSize, offerSlots] = fields.map(Number);
+    assert.equal(fields.length, 4);
+    assert.ok([gold, price, teamSize, offerSlots].every(value => Number.isSafeInteger(value) && value > 0));
+    assert.equal(teamSize, 5, 'The existing UI has five team slots');
+    assert.equal(offerSlots, 3, 'The existing UI has three pet offers');
+    shopFixture = { gold, price, teamSize, offerSlots, shelves };
+  } else if (kind === 'pet') {
+    const [code, id, name, attack, health] = fields;
+    assert.equal(Number(code), catalog.length + 1);
+    assert.ok(/^[a-z0-9_]+$/.test(id) && name && /^\d+$/.test(attack) && /^\d+$/.test(health));
+    catalog.push({ code: Number(code), id, name, attack: Number(attack), health: Number(health) });
+  } else {
+    assert.equal(kind, 'offers');
+    const [seat, round, ...offers] = fields.map(Number);
+    assert.equal((round - 1) * 2 + seat - 1, shelves.length);
+    assert.equal(offers.length, shopFixture.offerSlots);
+    assert.ok(offers.every(pet => Number.isInteger(pet) && pet >= 1 && pet <= catalog.length));
+    shelves.push(offers);
+  }
+}
+assert.ok(shopFixture && catalog.length && shelves.length === 4);
 
 const checkout = fs.realpathSync(checkoutArg);
 const revision = execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -58,34 +91,72 @@ async function stage(name, args) {
 }
 
 const script = 'm2_probe';
-const source = fs.readFileSync(new URL('../../platform/m2_probe.lua', import.meta.url), 'utf8');
+const catalogLua = catalog.map(({ code, name, attack, health }) =>
+  `[${code}] = {name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
+const source = fs.readFileSync(new URL('../../platform/m2_probe.lua', import.meta.url), 'utf8')
+  .replace('-- AP_DUEL_CATALOG', catalogLua)
+  .replace('0 -- AP_DUEL_PET_COST', String(shopFixture.price));
+assert.ok(source.includes(catalogLua) && !source.includes('AP_DUEL_PET_COST'));
 const signals = {
   AP_DuelRequest: [['action', 'integer'], ['round', 'integer']],
   AP_DuelSnapshot: [
     ['players', 'integer'], ['seat', 'integer'], ['round', 'integer'], ['phase', 'integer'],
     ['ready', 'boolean'], ['continued', 'boolean'], ['settlements', 'integer'], ['version', 'integer'],
   ],
+  AP_DuelMarket: [
+    ['round', 'integer'], ['version', 'integer'], ['gold', 'integer'],
+    ['offers', 'integerList'], ['team', 'integerList'],
+  ],
 };
-const variables = ['AP_readyRound', 'AP_continueRound'];
+const variables = ['AP_readyRound', 'AP_continueRound', 'AP_shopSeat', 'AP_teamCount', 'AP_shopRound', 'AP_gold'];
 const buttons = [
-  { name: 'AP_NativeRefresh', placeholder: '1073741901', position: [-285, -185], key: 1 },
-  { name: 'AP_NativeReady1', placeholder: '1073741902', position: [-95, -185], key: 2 },
-  { name: 'AP_NativeNext1', placeholder: '1073741903', position: [95, -185], key: 3 },
-  { name: 'AP_NativeReady2', placeholder: '1073741904', position: [285, -185], key: 4 },
-];
+  { name: 'AP_NativeRefresh', label: '1 刷新', position: [-285, -185] },
+  { name: 'AP_NativeReady1', label: '2 第一轮准备', position: [-95, -185] },
+  { name: 'AP_NativeNext1', label: '3 确认下一轮', position: [95, -185] },
+  { name: 'AP_NativeReady2', label: '4 第二轮准备', position: [285, -185] },
+  ...Array.from({ length: 6 }, (_, index) => {
+    const round = Math.floor(index / 3) + 1;
+    const slot = index % 3 + 1;
+    return {
+      name: `AP_NativeBuy${round}_${slot}`, label: `${(index + 5) % 10} · 第${round}轮货位${slot}`,
+      position: [(index - 2.5) * 144, -277],
+    };
+  }),
+].map((button, index) => ({ ...button, placeholder: String(1073741901 + index), key: index + 1 }));
 const ui = {
   name: 'AP_DuelProbe',
   script,
   showCursor: true,
   blockCursor: false,
   controls: [
-    { name: 'Background', kind: 'image', position: [0, 0], size: [640, 250], image: 100001, colour: '#193931' },
+    { name: 'Background', kind: 'image', position: [0, 55], size: [720, 450], image: 100001, colour: '#193931' },
     {
-      name: 'Status', kind: 'text', position: [0, 42], size: [600, 110],
+      name: 'Status', kind: 'text', position: [0, 214], size: [660, 100],
       text: { content: '等待服务端响应', fontSize: 29, colour: '#fff3d7', align: 'centre', valign: 'middle' },
     },
+    {
+      name: 'MarketGold', kind: 'text', position: [0, 137], size: [660, 42],
+      text: { content: '', fontSize: 26, colour: '#ffd887', align: 'centre', valign: 'middle' },
+    },
+    ...Array.from({ length: shopFixture.offerSlots }, (_, index) => index).flatMap(index => {
+      const position = [(index - 1) * 230, 71];
+      const size = [210, 77];
+      const slot = index + 1;
+      return [
+        { name: `OfferFace${slot}`, kind: 'image', position, size, image: 100001, colour: '#335b44' },
+        {
+          name: `OfferLabel${slot}`, kind: 'text', position, size,
+          text: { content: '', fontSize: 23, colour: '#fff3d7', align: 'centre', valign: 'middle' },
+        },
+        { name: `Buy${slot}`, kind: 'cursorArea', position, size },
+      ];
+    }),
+    {
+      name: 'Team', kind: 'text', position: [0, -10], size: [680, 76],
+      text: { content: '', fontSize: 21, colour: '#fff3d7', align: 'centre', valign: 'middle' },
+    },
     ...[['Refresh', '刷新状态'], ['Ready', '准备'], ['Advance', '下一轮']].flatMap(([name, content], index) => {
-      const position = [(index - 1) * 192, -65];
+      const position = [(index - 1) * 192, -98];
       const size = [176, 65];
       return [
         { name: `${name}Face`, kind: 'image', position, size, image: 100001, colour: '#286452' },
@@ -96,12 +167,16 @@ const ui = {
         { name, kind: 'cursorArea', position, size },
       ];
     }),
-    ...['1 刷新', '2 第一轮准备', '3 确认下一轮', '4 第二轮准备'].map((content, index) => ({
-      name: `NativeLegend${index + 1}`, kind: 'text', position: [buttons[index].position[0], -238], size: [180, 34],
-      text: { content, fontSize: 22, colour: '#fff3d7', align: 'centre', valign: 'middle' },
+    ...buttons.map(({ label, position }, index) => ({
+      name: `NativeLegend${index + 1}`, kind: 'text', position: [position[0], position[1] - 50], size: [140, 30],
+      text: { content: label, fontSize: 18, colour: '#fff3d7', align: 'centre', valign: 'middle' },
     })),
   ],
 };
+for (const control of [...ui.controls, ...buttons.map(button => ({ ...button, size: [72, 72] }))]) {
+  assert.ok(control.position.every((coordinate, axis) =>
+    Math.abs(coordinate) + control.size[axis] / 2 <= [640, 360][axis]), `${control.name} outside the shared canvas`);
+}
 
 try {
   await client.connect(transport);
@@ -126,8 +201,16 @@ try {
   assert.equal(new Set(registeredButtons.map(({ id }) => id)).size, buttons.length);
   const graph = await stage('scene_add_graph', { name: 'AP_DuelProbe', attachTo: 'stage' });
   const buttonGraph = await stage('scene_add_graph', { name: 'AP_DuelButtons', attachToPrefab: 'player' });
-  const graphSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
-    .replace('id: 1073741825,', `id: ${graph.graphId},`);
+  let graphSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
+    .replace('id: 1073741825,', `id: ${graph.graphId},`)
+    .replace("[0n], 'int'); // AP_DUEL_OPENING_OFFERS", `[${shelves.flat().map(value => `${value}n`).join(', ')}], 'int');`);
+  const configMarkers = {
+    ROUND_GOLD: shopFixture.gold, PET_COST: shopFixture.price, OFFER_SLOTS: shopFixture.offerSlots, TEAM_SIZE: shopFixture.teamSize,
+  };
+  for (const [marker, value] of Object.entries(configMarkers)) {
+    graphSource = graphSource.replace(`0n; // AP_DUEL_${marker}`, `${value}n;`);
+  }
+  assert.ok(!graphSource.includes('// AP_DUEL_'));
   let buttonSource = fs.readFileSync(new URL('../../platform/m2_probe_buttons.ts', import.meta.url), 'utf8')
     .replace('id: 1073741826,', `id: ${buttonGraph.graphId},`);
   for (const [index, { placeholder }] of buttons.entries()) {
@@ -181,7 +264,7 @@ try {
   assert.ok(readUi.interface.controls.every(control => control.active !== false && control.visible !== false));
   const checked = await call('scene_check_client', { mapPath, scripts: [script] });
   assert.deepEqual(checked.problems, []);
-  const graphSimulation = verifyGraph(graphSource, buttonSource, registeredButtons, toolRequire('typescript'));
+  const graphSimulation = verifyGraph(graphSource, buttonSource, registeredButtons, toolRequire('typescript'), shopFixture);
   const extracted = path.join(workspace, `${script}.lua`);
   fs.writeFileSync(extracted, readSource);
   const clientSimulation = execFileSync(lua, [
@@ -199,7 +282,7 @@ try {
   fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(candidate, 'MCP-FIXTURE-LICENSE.txt'));
   fs.writeFileSync(path.join(candidate, 'evidence.json'), JSON.stringify({
     revision, fixtureHash, players, graph: readGraph, buttonGraph: readButtonGraph,
-    buttons: registeredButtons, signals: registered.parameters,
+    buttons: registeredButtons, signals: registered.parameters, shopFixture, shopDataSha256: sha256(shopData),
     attachments: { stageGraph: graph.graphId, playerPrefab: playerTemplate.prefabId, playerGraph: buttonGraph.graphId },
     clientScriptSha256: sha256(readSource), graphSourceSha256: sha256(graphSource), buttonSourceSha256: sha256(buttonSource),
     clientDiagnostics: checked.problems, graphSimulation, clientSimulation: clientSimulation.trimEnd().split('\n'),

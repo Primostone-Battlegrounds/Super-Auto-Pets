@@ -4,12 +4,13 @@ title: Multiplayer · 好友 1v1 完整对局
 status: To Do
 assignee: []
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-23 09:16'
+updated_date: '2026-11-23 09:37'
 labels: []
 milestone: m-2
 dependencies:
   - TASK-32
   - TASK-36
+  - TASK-37
 priority: high
 type: feature
 ordinal: 27000
