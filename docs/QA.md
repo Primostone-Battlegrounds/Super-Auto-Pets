@@ -45,3 +45,5 @@ python3 scripts/render-native-previews.py /path/to/frames.json /tmp/auto-pets-pc
 | 画布 | 在 1600×900 和 1280×720 的回读模拟帧分别检查文字、图标和命中区域，无跨区遮挡或出界。 |
 
 独立评审者用同一候选的图鉴、商店、有效伤害、胜利和落败画面逐项给出结论，并附对应帧、提交 SHA 与完整单局日志。官方设备的输入和实际渲染另行验收。
+
+[移动画布六个实跑状态](media/m1-visual-proof.webp) · [PC 画布五对五](media/m1-desktop-battle.webp)。两组画面均由 GIL 回读和模拟输入生成。
