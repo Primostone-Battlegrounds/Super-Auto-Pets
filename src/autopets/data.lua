@@ -30,32 +30,32 @@ data.pets = {
         ability = {trigger = "start", effect = "hit_random", power = 1, targets = 1, name = "烟羽"},
     },
     {
-        id = "lantern_moth", name = "灯囊蛾", tier = 1, attack = 2, health = 1, style = "swarm",
-        ability = {trigger = "faint", effect = "summon", power = 1, token = "mothling", name = "幼蛾破茧"},
+        id = "cottontail_rabbit", name = "棉尾兔", tier = 1, attack = 2, health = 1, style = "swarm",
+        ability = {trigger = "faint", effect = "summon", power = 1, token = "rabbit_kit", name = "兔窝接力"},
     },
     {
         id = "alder_marmot", name = "赤桤旱獭", tier = 2, attack = 2, health = 5, style = "guardian",
         ability = {trigger = "faint", effect = "buff_front", power = 2, name = "筑垒"},
     },
     {
-        id = "copper_kestrel", name = "铜斑红隼", tier = 2, attack = 4, health = 2, style = "striker",
-        ability = {trigger = "start", effect = "hit_random", power = 2, targets = 1, name = "铜羽"},
+        id = "maple_fox", name = "枫耳小狐", tier = 2, attack = 4, health = 2, style = "striker",
+        ability = {trigger = "start", effect = "hit_random", power = 2, targets = 1, name = "枫尾先声"},
     },
     {
-        id = "drift_crayfish", name = "漂木螯虾", tier = 2, attack = 3, health = 3, style = "swarm",
-        ability = {trigger = "faint", effect = "summon", power = 1, token = "crayling", name = "幼螯出巢"},
+        id = "river_otter", name = "河岸水獭", tier = 2, attack = 3, health = 3, style = "swarm",
+        ability = {trigger = "faint", effect = "summon", power = 1, token = "otter_pup", name = "水獭结伴"},
     },
     {
         id = "slate_muskdeer", name = "岩釉麝", tier = 3, attack = 3, health = 7, style = "guardian",
         ability = {trigger = "start", effect = "shield_front", power = 2, targets = 2, name = "岩衣"},
     },
     {
-        id = "aurora_tern", name = "霞翼燕鸥", tier = 3, attack = 5, health = 3, style = "striker",
-        ability = {trigger = "start", effect = "hit_random", power = 2, targets = 2, name = "霞羽"},
+        id = "sunset_cat", name = "暖霞猫", tier = 3, attack = 5, health = 3, style = "striker",
+        ability = {trigger = "start", effect = "hit_random", power = 2, targets = 2, name = "猫步突袭"},
     },
     {
-        id = "cloud_ostrich", name = "卷云鸵鸟", tier = 3, attack = 4, health = 4, style = "swarm",
-        ability = {trigger = "faint", effect = "summon", power = 2, token = "cloud_chick", name = "云雏离巢"},
+        id = "cloud_sheep", name = "卷云绵羊", tier = 3, attack = 4, health = 4, style = "swarm",
+        ability = {trigger = "faint", effect = "summon", power = 2, token = "lambkin", name = "绵羊小队"},
     },
 }
 
@@ -69,9 +69,9 @@ data.foods = {
 }
 
 data.token_by_id = {
-    mothling = {id = "mothling", name = "灯囊幼蛾", attack = 1, health = 1},
-    crayling = {id = "crayling", name = "漂木幼螯", attack = 2, health = 1},
-    cloud_chick = {id = "cloud_chick", name = "卷云雏鸟", attack = 1, health = 2},
+    rabbit_kit = {id = "rabbit_kit", name = "兔宝宝", attack = 1, health = 1},
+    otter_pup = {id = "otter_pup", name = "水獭宝宝", attack = 2, health = 1},
+    lambkin = {id = "lambkin", name = "卷毛小羊", attack = 1, health = 2},
 }
 
 local function by_id(catalog)
