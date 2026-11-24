@@ -4,13 +4,15 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { nativeShop, shopExport } from '../../platform/versus-shop.mjs';
 import { shopFlow, verifyShop } from './versus-shop-parity.mjs';
 
-const [checkoutArg, scratch, lua, outputArg] = process.argv.slice(2);
+const [checkoutArg, scratch, lua, outputArg, profile = 'compatibility'] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua && outputArg,
-  'Usage: node tests/native/verify-versus-shop.mjs <MCP checkout> <scratch> <Lua 5.3> <new candidate directory>');
+  'Usage: node tests/native/verify-versus-shop.mjs <MCP checkout> <scratch> <Lua 5.3> <new candidate directory> [release]');
+assert.ok(profile === 'compatibility' || profile === 'release');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0');
 const candidate = path.resolve(outputArg);
 assert.ok(!fs.existsSync(candidate), 'Use a new candidate directory');
@@ -19,15 +21,19 @@ const lua54 = process.env.LUA54 || 'lua5.4';
 assert.match(execFileSync(lua, ['-E', '-v'], { encoding: 'utf8' }), /^Lua 5\.3\./);
 const revision = execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 assert.equal(revision, '59c576e41632a6bf6781bbca83a676d0da0374ec', 'Use the pinned Miliastra MCP revision');
+const project = fileURLToPath(new URL('../../', import.meta.url));
+const sourceRevision = execFileSync('git', ['-C', project, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const projectRequire = createRequire(path.join(checkout, 'package.json'));
 const ts = projectRequire('typescript');
 const { Client } = projectRequire('@modelcontextprotocol/sdk/client/index.js');
 const { StdioClientTransport } = projectRequire('@modelcontextprotocol/sdk/client/stdio.js');
-const shop = nativeShop(lua, lua54);
-const graphParity = verifyShop(ts, shop.source, lua, lua54);
-const trace = shopExport(lua, 'trace');
+const shop = nativeShop(lua, lua54, profile);
+assert.equal(shop.rules.MAX_TIER, profile === 'release' ? 6 : 3);
+const graphParity = verifyShop(ts, shop.source, lua, lua54, profile);
+const trace = shopExport(lua, 'trace', profile);
 const fixture = trace.split('\ninit\t', 1)[0].split('\n');
 const packed = fixture[0].split('\t').slice(1).map(BigInt);
+if (profile === 'release') assert.equal(packed[1], 6n);
 const script = fixture.slice(1).map(line => {
   const [kind, ...values] = line.split('\t');
   const fields = values.map(BigInt);
@@ -137,16 +143,17 @@ try {
   assert.equal(sha256(fs.readFileSync(mapPath)), inspect.sha256);
 
   fs.mkdirSync(candidate);
-  const gil = path.join(candidate, 'versus-shop-proof.gil');
+  const name = profile === 'release' ? 'versus-shop-release-proof.gil' : 'versus-shop-proof.gil';
+  const gil = path.join(candidate, name);
   fs.copyFileSync(mapPath, gil);
   fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(candidate, 'MCP-FIXTURE-LICENSE.txt'));
   fs.copyFileSync(new URL('../../platform/VERSUS-SHOP.md', import.meta.url), path.join(candidate, 'README.md'));
   fs.writeFileSync(path.join(candidate, 'evidence.json'), `${JSON.stringify({
-    revision, graph, players, fixtureSha256, sha256: inspect.sha256, graphParity,
+    sourceRevision, revision, graph, players, profile, fixtureSha256, sha256: inspect.sha256, graphParity,
     catalogSha256: sha256(shop.definition), sourceSha256: sha256(source), traceSha256: sha256(trace),
     probe: { steps: script.length, ticks, logs }, officialClient: 'pending',
   }, null, 2)}\n`);
-  const files = ['versus-shop-proof.gil', 'README.md', 'MCP-FIXTURE-LICENSE.txt', 'evidence.json'];
+  const files = [name, 'README.md', 'MCP-FIXTURE-LICENSE.txt', 'evidence.json'];
   fs.writeFileSync(path.join(candidate, 'SHA256SUMS'), `${files.map(name =>
     `${sha256(fs.readFileSync(path.join(candidate, name)))}  ${name}`).join('\n')}\n`);
   console.log(`Versus shop parity ${JSON.stringify(graphParity)}. Candidate ${gil}`);

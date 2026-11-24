@@ -17,8 +17,10 @@ sha256sum -c SHA256SUMS
 
 CI 产物 `versus-shop-proof-<SHA>` 记录编译读回、节点数、两种 Lua 导出散列和源图离线模拟。`maxExplicitCalls` 为每种操作在离线轨迹中调用节点接口的实测峰值。算术降级节点和循环开销需用官方客户端另测。当前 GIL 为单人隔离技术样本。它自动执行预先导出的合法和拒绝操作，分批核对服务端状态。好友 1v1 与八席关卡的实机经营使用场景单独验收。
 
+在验证命令末尾加 `release` 并指定另一个输出目录，构建 `versus-shop-release-proof.gil`。六阶样本从合法经营所得的三人阵容和第 11 轮货架开始，首个动作对中间席喂星果盘，再试重复喂同一货位。回归也核对喂两端只影响实有的相邻队员。CI 产物 `versus-shop-release-proof-<SHA>` 含相同的证据字段和六阶标签。
+
 ## 官方客户端观测
 
-1. 导入隔离样本 `versus-shop-proof.gil`。订阅 `_GSTS_AP_VersusShopProof`，开始一次单人试玩。
+1. 导入隔离样本 `versus-shop-proof.gil` 或 `versus-shop-release-proof.gil`。订阅 `_GSTS_AP_VersusShopProof`，开始一次单人试玩。
 2. 等待约一分钟，不进行任何输入。日志应依次记录 `AUTO_PETS_SHOP confirmed_step` 及 1 至 8 的序号，最后记录 `AUTO_PETS_SHOP verified`。
 3. 记录客户端版本、GIL SHA-256 和图日志。任何 `acceptance_mismatch`、`state_mismatch`、节点预算终止或超过 90 秒仍缺最后标记均保留为失败证据。离线读回及源图模拟结果见随包 `evidence.json`。
