@@ -7,6 +7,7 @@ local rules = rules_data.rules
 
 local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
 local styles = {guardian = "守护", striker = "强攻", swarm = "群战"}
+local difficulty_names = {standard = "标准", beginner = "入门"}
 local phases = {preparation = "准备", battle = "战斗", settlement = "结算", ended = "终局"}
 local primary = {preparation = "开战", battle = "结算", settlement = "下一轮", ended = "再挑战本局"}
 local events = {
@@ -23,6 +24,7 @@ local errors = {
 local session, state, selection, message
 local press, drag
 local menu_open, has_started = true, false
+local difficulty
 local confirming_restart
 local reward_index, event_index = 1, 1
 local listeners, controls, portraits = {}, {}, {}
@@ -365,13 +367,16 @@ end
 local function draw_menu()
     show("Menu", menu_open)
     if not menu_open then return end
-    text("Menu/Continue/Title", has_started and "继续本局" or "开始游戏")
-    show("Menu/NewGame", has_started and state.phase ~= "ended")
+    text("Menu/Continue/Title", has_started and "继续本局" or "单人练习")
+    show("Menu/NewGame", has_started)
+    show("Menu/Difficulty", not has_started)
     if has_started then
-        text("Menu/Progress", string.format("第 %d 轮 · %s · %d 胜 · 剩余 %d 命",
-            state.round, phases[state.phase], state.wins, state.lives))
+        text("Menu/Progress", string.format("%s · 第 %d 轮 · %s · %d 胜 · 剩余 %d 命",
+            difficulty_names[difficulty], state.round, phases[state.phase], state.wins, state.lives))
+        text("Menu/NewGame/Title", state.phase == "ended" and "新一局" or "放弃并开新局")
     else
         show("Menu/Progress", false)
+        text("Menu/Difficulty/Title", "练习难度：" .. difficulty_names[difficulty])
     end
     text("Menu/Audio/Title", muted and "音效：关闭" or "音效：开启")
 end
@@ -727,6 +732,13 @@ local function continue_game()
     draw(false)
 end
 
+local function choose_difficulty()
+    if has_started then return end
+    difficulty = difficulty == "standard" and "beginner" or "standard"
+    session = run.new(state.seed, difficulty)
+    draw()
+end
+
 local function toggle_audio()
     muted = not muted
     if muted then stop_sound() end
@@ -741,12 +753,25 @@ local function show_restart(context)
     draw(false)
 end
 
+local function new_game_from_menu()
+    if not has_started then return end
+    if state.phase ~= "ended" then
+        show_restart("menu")
+        return
+    end
+    session = run.new(next_seed(), difficulty)
+    has_started = false
+    reset_view()
+    draw()
+    log_state()
+end
+
 local function confirm_restart()
     if not confirming_restart then return end
     local in_menu = confirming_restart == "menu"
     confirming_restart = nil
     if in_menu then
-        session = run.new(next_seed())
+        session = run.new(next_seed(), difficulty)
         menu_open = false
     else
         local ok, error_code = session:restart()
@@ -863,12 +888,14 @@ function OnStart()
     if session then release_view() end
     root, view_enabled = script.object, true
     menu_open, has_started, confirming_restart = true, false, nil
+    difficulty = "standard"
     muted, replay_speed = false, 1
     reset_view()
     for id, layers in pairs(art) do
         assert(#layers <= portrait_layers, "portrait exceeds the native pool: " .. id)
     end
-    session = run.new(assert(math.tointeger(script:GetParam("seed")), "seed must be an integer"))
+    local seed = assert(math.tointeger(script:GetParam("seed")), "seed must be an integer")
+    session = run.new(seed, difficulty)
     for index = 1, rules.team_size do bind_card("Team" .. index, "team", index) end
     for index = 1, rules.pet_shop_slots do bind_card("Shop/Pet" .. index, "pet", index) end
     for index = 1, rules.food_shop_slots do bind_card("Shop/Food" .. index, "food", index) end
@@ -889,7 +916,8 @@ function OnStart()
     bind_button("Primary", function() advance() end)
     bind_button("OpenMenu", open_menu)
     bind_button("Menu/Continue", continue_game)
-    bind_button("Menu/NewGame", function() show_restart("menu") end)
+    bind_button("Menu/NewGame", new_game_from_menu)
+    bind_button("Menu/Difficulty", choose_difficulty)
     bind_button("Menu/Audio", toggle_audio)
     bind_button("Reset", function() show_restart("board") end)
     bind_button("Restart/Cancel", function() show_restart(nil) end)

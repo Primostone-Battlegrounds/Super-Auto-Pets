@@ -34,15 +34,15 @@ local function reset(self, seed)
     -- Salt each RNG with its domain so shop activity cannot influence later battles.
     self.shop = shop.new(seed ~ 0x53484f50) -- SHOP
     local opponent_random = rng.new(seed ~ 0x424f54) -- BOT
-    self.opponents = bot.new_pool(opponent_random:next())
+    self.opponents = bot.new_pool(opponent_random:next(), nil, self.difficulty)
     self.battle_random = rng.new(seed ~ 0x4649474854) -- FIGHT
     assert(bot.advance_to_round(self.opponents, 1, opponent_turn_budget))
     prepare(self)
 end
 
-function run.new(seed)
+function run.new(seed, difficulty)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
-    local self = setmetatable({}, run)
+    local self = setmetatable({difficulty = difficulty}, run)
     reset(self, seed)
     return self
 end
