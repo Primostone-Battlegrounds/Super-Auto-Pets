@@ -11,6 +11,7 @@ export function lowerCombatMath(luaSource, parse) {
   }
   const fields = new Map([
     ['target.shield', 'targetShield'], ['target.health', 'targetHealth'], ['target.max_health', 'targetMaxHealth'],
+    ['target.attack', 'targetAttack'],
     ['ability.power', 'power'], ['unit.level', 'level'], ['token.attack', 'tokenAttack'],
     // Miliastra node integers are signed 32-bit.
     ['math.maxinteger', '2147483647n'],
@@ -79,8 +80,14 @@ export function lowerCombatMath(luaSource, parse) {
     `const summonAttack = ${expression(attack.value, new Set())};`,
   ].join('\n      ');
 
+  const rally = findFunction('effects.rally_summon');
+  fields.set('ability.power', 'effectPower');
+  const rallyCode = compileAssignments(rally.body,
+    ['power', 'attack', 'health', 'targetAttack', 'targetHealth', 'targetMaxHealth'], new Set());
+  fields.set('ability.power', 'power');
+
   const limit = body.find(node => node.type === 'LocalStatement' && node.variables[0]?.name === 'strike_limit');
   assert.ok(limit?.init[0]?.type === 'NumericLiteral' && Number.isSafeInteger(limit.init[0].value)
     && limit.init[0].value > 0, 'Expected a positive integer strike limit');
-  return { damageCode, buffCode, summonCode, strikeLimit: limit.init[0].value };
+  return { damageCode, buffCode, summonCode, rallyCode, strikeLimit: limit.init[0].value };
 }
