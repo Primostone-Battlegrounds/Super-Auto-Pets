@@ -27,6 +27,8 @@ const preparationTime = 60n;
 const settlementTime = 10n;
 const roomTime = 2700n;
 const recoveryTime = 15n;
+const fightRetryTime = 5n;
+const fightStrikeLimit = 0n; // AP_DUEL_STRIKE_LIMIT
 const startingLives = 0n; // AP_DUEL_LIVES
 const clock = 'AP_DuelClock';
 
@@ -54,7 +56,7 @@ g.server({
     present: 0n, due: 0n, roomDue: 0n, absentDue: 0n, winner: 0n, reason: 0n,
     absentWinner: 0n,
     livesOne: startingLives, livesTwo: startingLives,
-    battleAttempt: 0n, battleSeed: 0n, battleOutcome: 0n,
+    battleAttempt: 0n, battleSeed: 0n, battleOutcome: 0n, fightRetryDue: 0n,
     replayOne: [0n], replayTwo: [0n],
     shopOne: [0n], // AP_DUEL_START_ONE
     shopTwo: [0n], // AP_DUEL_START_TWO
@@ -199,6 +201,10 @@ g.server({
       f.set('phase', 3n);
       f.set('battleSeed', seed);
       f.set('battleAttempt', attempt);
+      f.set('fightRetryDue', now + fightRetryTime);
+      // Each opening slot and strike can use one timer tick. Leave time for
+      // retransmission and delivery of the completion receipt.
+      f.set('due', now + 2n * shopTeamSize + fightStrikeLimit + 3n * fightRetryTime);
       f.sendSignal(fightStart, previousRound, attempt, seed, f.get('shopOne'), f.get('shopTwo'));
       changed = true;
     }
@@ -213,7 +219,9 @@ g.server({
 
   // The separate combat graph advances one bounded step per timer. The room
   // may already have ended while that graph was computing its previous attempt.
-  if (mayProgress && action === -2n && previousPhase === 3n && event.params.round === previousRound
+  const fightExpired = mayProgress && previousPhase === 3n && now >= phaseDue;
+  let restorePreparation = fightExpired && roomReady;
+  if (mayProgress && !fightExpired && action === -2n && previousPhase === 3n && event.params.round === previousRound
     && event.params.sequence === f.get('battleAttempt')) {
     const outcome = event.params.from;
     if (outcome >= 1n && outcome <= 3n) {
@@ -239,16 +247,25 @@ g.server({
       changed = true;
       f.printString('AUTO_PETS_M2 settled');
       f.printString(f.dataTypeConversion(previousRound, 'str'));
-    } else if (outcome === 4n) {
-      f.set('phase', 0n);
-      f.set('due', now + preparationTime);
-      for (const player of players) f.setCustomVariable(player, 'AP_readyRound', 0n, false);
-      changed = true;
-      f.printString('AUTO_PETS_M2 strike_limit');
-    }
+    } else if (outcome === 4n && roomReady) restorePreparation = true;
+  }
+  if (restorePreparation) {
+    f.set('phase', 0n);
+    f.set('due', now + preparationTime);
+    for (const player of players) f.setCustomVariable(player, 'AP_readyRound', 0n, false);
+    f.sendSignal(fightCancel, f.get('battleAttempt'));
+    changed = true;
+    if (fightExpired) f.printString('AUTO_PETS_M2 fight_timeout');
+    else f.printString('AUTO_PETS_M2 strike_limit');
   }
 
-  if (fromStage && !changed) return;
+  if (fromStage && !changed) {
+    if (action === -1n && mayProgress && roomReady && previousPhase === 3n && now >= f.get('fightRetryDue')) {
+      f.set('fightRetryDue', now + fightRetryTime);
+      f.sendSignal(fightStart, previousRound, f.get('battleAttempt'), f.get('battleSeed'), f.get('shopOne'), f.get('shopTwo'));
+    }
+    return;
+  }
   const round = f.get('round');
   const phase = f.get('phase');
   const settlements = f.get('settlements');
