@@ -312,10 +312,15 @@ function room:join(player, now)
     return available
 end
 
-local function forfeit(match, seat)
+local function forfeit(match, leaving)
     local active = active_seats(match)
-    eliminate({seat}, #active, "forfeit")
-    if #active == 2 then
+    local remaining = #active - #leaving
+    if remaining == 0 then
+        end_match(match, active, "all_forfeit")
+        return
+    end
+    eliminate(leaving, remaining + 1, "forfeit")
+    if remaining == 1 then
         end_match(match, active_seats(match), "last_player")
     elseif match.phase == "preparation" then
         pair_round(match)
@@ -327,31 +332,82 @@ local function forfeit(match, seat)
     end
 end
 
-function room:leave(player, now)
-    local index = self.seat_by_player[player]
-    if not index then
+local function leave_players(match, players, now, scheduled)
+    if type(players) ~= "table" then
+        return nil, "invalid_players"
+    end
+    local selected = {}
+    local seen = {}
+    for _, player in ipairs(players) do
+        local index = match.seat_by_player[player]
+        if not index then
+            return nil, "unknown_player"
+        end
+        if seen[index] then
+            return nil, "duplicate_player"
+        end
+        seen[index] = true
+        selected[#selected + 1] = match.seats[index]
+    end
+    if #selected == 0 then
         return nil, "unknown_player"
     end
-    local ok, err = self:tick(now)
-    if not ok then
-        return nil, err
-    end
-    local seat = self.seats[index]
-    if self.phase == "lobby" then
-        self.seats[index] = false
-        self.seat_by_player[player] = nil
-        if next(self.seat_by_player) == nil then
-            self.deadline = nil
+    if scheduled then
+        if math.type(now) ~= "integer" or now < match.clock then
+            return nil, "invalid_clock"
         end
-    elseif self.phase == "ended" then
-        return nil, "wrong_phase"
-    elseif not seat.active then
-        return nil, "inactive_player"
+        local deadline = match:next_deadline()
+        if (deadline and now > deadline) or (match.match_deadline and now >= match.match_deadline) then
+            return nil, "phase_due"
+        end
+        match.clock = now
     else
-        forfeit(self, seat)
+        local ok, err = match:tick(now)
+        if not ok then
+            return nil, err
+        end
     end
-    self.revision = self.revision + 1
+    if match.phase == "lobby" then
+        for _, seat in ipairs(selected) do
+            match.seats[seat.index] = false
+            match.seat_by_player[seat.player] = nil
+        end
+        if next(match.seat_by_player) == nil then
+            match.deadline = nil
+        end
+    elseif match.phase == "ended" then
+        return nil, "wrong_phase"
+    else
+        local leaving = {}
+        for _, seat in ipairs(selected) do
+            if seat.active then
+                leaving[#leaving + 1] = seat
+            end
+        end
+        if #leaving == 0 then
+            return nil, "inactive_player"
+        end
+        forfeit(match, leaving)
+    end
+    match.revision = match.revision + 1
     return true
+end
+
+function room:leave(player, now)
+    return leave_players(self, {player}, now, false)
+end
+
+-- The host processes earlier phase deadlines before removing due sessions.
+-- At the same timestamp, remove the group before any deadline-triggered combat.
+function room:expire_players(players, now)
+    return leave_players(self, players, now, true)
+end
+
+function room:next_deadline()
+    if self.phase == "preparation" and all_active(self, "ready") then
+        return self.clock
+    end
+    return self.deadline
 end
 
 function room:request(player, request, now)
@@ -360,7 +416,7 @@ function room:request(player, request, now)
         return nil, err
     end
     if request.action == "forfeit" then
-        forfeit(self, seat)
+        forfeit(self, {seat})
     elseif self.phase == "preparation" and all_active(self, "ready") then
         resolve_round(self)
     elseif self.phase == "settlement" and all_active(self, "continued") then

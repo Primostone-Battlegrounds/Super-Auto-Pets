@@ -5,11 +5,13 @@ status: In Progress
 assignee:
   - '@rules-core'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-24 01:01'
+updated_date: '2026-11-24 01:14'
 labels: []
 milestone: m-3
 dependencies:
   - TASK-33
+documentation:
+  - platform/M3-host.md
 priority: high
 type: feature
 ordinal: 28000
@@ -39,4 +41,6 @@ ordinal: 28000
 
 <!-- SECTION:NOTES:BEGIN -->
 纯 Lua 领域层已覆盖 1 至 8 名真人及空余房位机器人补位。tests/room.lua 验证空阵经营、机器人实际交战、准备超时、奇数轮空、同轮淘汰、退出、序号拒绝、共享回放与全局名次。千星原生完整对局和官方房间匹配均待验。
+
+离线八席宿主验证连接请求路由、商店定向回执、同身份恢复、主动退出及并发到期；真实千星连接事件和恢复语义仍待验。
 <!-- SECTION:NOTES:END -->
