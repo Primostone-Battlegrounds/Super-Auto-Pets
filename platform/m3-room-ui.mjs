@@ -34,9 +34,9 @@ export const m3RoomLayout = {
       group('Shop', [0, 10], [832, 370], [
         label('Money', [0, 160], [810, 36], '', 22, pigment.ink, 'left'),
         ...slots.flatMap(slot => [
-          button(`Offer${slot}`, slotX(slot), 80, 154, 80, ''),
-          button(`Freeze${slot}`, slotX(slot), 14, 154, 48, '冻结'),
-          button(`Team${slot}`, -slotX(slot), -55, 154, 64, ''),
+          button(`Offer${slot}`, slotX(slot), -7, 154, 80, ''),
+          button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
+          button(`Team${slot}`, -slotX(slot), 94, 154, 76, ''),
         ]),
         ...browse.map(([name, text], index) => button(name, slotX(index + 1), -135, 154, 52, text)),
       ], false),

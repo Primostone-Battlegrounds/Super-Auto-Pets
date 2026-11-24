@@ -105,7 +105,7 @@ end
 
 function OnUpdate(dt)
     if not active then return end
-    if section == "Lobby" then
+    if section == "Lobby" and mode == 0 then
         elapsed = elapsed + dt
         if elapsed >= 2 then
             elapsed = 0

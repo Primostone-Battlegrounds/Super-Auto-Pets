@@ -235,3 +235,12 @@ jobs:
           path: ${{ runner.temp }}/m3-release-room
           if-no-files-found: error
           retention-days: 30
+      - name: Verify the unified six-tier game
+        if: hashFiles('tests/native/verify-game.mjs') != ''
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          package="$RUNNER_TEMP/verified-game"
+          node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" \
+            "$RUNNER_TEMP/native-validation" lua5.3 "$package"
+          (cd "$package" && sha256sum --strict -c SHA256SUMS)

@@ -16,6 +16,8 @@ local function simulate()
             SetVisible = function(self, value) assert(type(value) == "boolean"); self.visible = value end,
             SetAnchoredPosition = function(self, px, py) self.x, self.y = px, py end,
             SetSizeDelta = function(self, w, h) self.width, self.height = w, h end,
+            GetAnchoredPosition = function(self) return tonumber(self.x), tonumber(self.y) end,
+            GetSizeDelta = function(self) return tonumber(self.width), tonumber(self.height) end,
             SetImage = function(self, _, image) self.image = image end,
             AddCursorEventListener = function(self, event, callback) assert(not self.events[event]); self.events[event] = callback end,
             RemoveCursorEventListener = function(self, event, callback)
@@ -40,7 +42,7 @@ local function simulate()
         Color = colour,
         Enum = {
             CursorEventType = {CursorDown = 1, CursorClick = 2, CursorBeginDrag = 3, CursorDrag = 4, CursorEndDrag = 5},
-            ImageSource = {StaticReference = 1},
+            ImageSource = {StaticReference = 1}, ImageType = {Stretch = 1},
             KeyEventType = {KeyboardCharacterSkill1KeyDown = 1, KeyboardInteractKeyDown = 2, KeyboardCharacterSkill2KeyDown = 3},
         },
         script = {
@@ -74,7 +76,7 @@ local function simulate()
             local c = get(path)
             local text = c.text and c.text:gsub("[^%w ._-]", function(char) return string.format("%%%02X", char:byte()) end) or "~"
             output:write(table.concat({name, path, c.active and 1 or 0, c.visible and 1 or 0, c.x, c.y,
-                c.width, c.height, c.image or "", c.color or "", c.fontColor or "", text}, "\t"), "\n")
+                c.width, c.height, c.image or "", c.imageColor or c.color or "", c.fontColor or "", text}, "\t"), "\n")
         end
     end
     local function destroy()
@@ -107,11 +109,45 @@ practice.view(0, 1)
 practice.capture("menu")
 practice.press("Lobby/Choices/Practice/Hit")
 practice.press("Practice/Menu/Continue/Hit")
-practice.press("Practice/Shop/Pet1/Hit")
-practice.press("Practice/Shop/Buy/Hit")
-practice.capture("practice_shop")
-practice.press("Practice/Primary/Hit")
-practice.capture("practice_battle")
+local function practice_press(path) practice.press("Practice/" .. path .. "/Hit") end
+local function shop(action, from, to)
+    if action == "buy" or action == "combine" then
+        practice_press("Shop/Pet" .. from)
+        practice_press(to and "Team" .. to or "Shop/Buy")
+    elseif action == "feed" then
+        practice_press("Shop/Food" .. from)
+        practice_press("Team" .. to)
+    elseif action == "move" or action == "sell" then
+        practice_press("Team" .. from)
+        practice_press(to and "Team" .. to or "Shop/Sell")
+    elseif action == "reward" then
+        practice_press("Shop/Reward")
+        practice_press("Shop/Buy")
+    else
+        assert(action == "reroll")
+        practice_press("Shop/Reroll")
+    end
+end
+local rounds = dofile("tests/native/release-practice-rounds.lua")
+local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
+for round, actions in ipairs(rounds) do
+    assert(practice.get("Practice/Shop/Caption").text == ("商店 · %d 阶"):format(math.min(6, (round + 1) // 2)))
+    for index = 2, #actions do shop(table.unpack(actions[index])) end
+    if round == 1 then practice.capture("practice_shop") end
+    if round == 11 then practice.capture("practice_tier_six") end
+    practice_press("Primary")
+    assert(practice.get("Practice/Primary/Title").text == "跳过回放")
+    if round == 1 then practice.capture("practice_battle") end
+    practice_press("Primary")
+    assert(practice.get("Practice/Battle/Outcome").text == "本轮" .. outcomes[actions[1]])
+    practice_press("Primary")
+    if round < #rounds then practice_press("Primary") end
+end
+assert(practice.get("Practice/Primary/Title").text == "再挑战本局")
+assert(practice.get("Practice/Wins/Value").text == "10" and practice.get("Practice/Lives/Value").text == "1")
+practice.capture("practice_result")
+practice_press("Primary")
+assert(practice.get("Practice/Round/Value").text == "第 1 轮 · 准备")
 practice.press("Practice/OpenMenu/Hit")
 practice.press("Practice/Menu/Back/Hit")
 practice.expect("AP_GameChooseMode:0")
@@ -131,7 +167,7 @@ duel.expect("AP_DuelRequest:0,0,0,0,0,0,0")
 duel.receive("AP_DuelSnapshot", duel_snapshot(1, 0, false))
 duel.receive("AP_DuelMarket", {1, 1, market(1)})
 duel.press("Duel/MarketOffers/Buy1")
-duel.expect("AP_DuelRequest:10,1,1,1,1,0,0")
+duel.expect("AP_DuelRequest:11,1,1,1,1,0,0")
 duel.capture("duel_shop")
 duel.receive("AP_DuelSnapshot", duel_snapshot(2, 2, false, 2, 1))
 assert(duel.get("Duel/Status").text:find("告负"))
@@ -163,4 +199,4 @@ room.expect("AP_GameChooseMode:0")
 assert(room.get("Lobby").active and not room.get("Room").active)
 room.destroy()
 output:close()
-print("Game readback controls: local practice to battle and return; two-player and eight-seat choice, shop, terminal and return.")
+print("Game readback controls: six-tier practice to victory, restart and return; two-player and eight-seat choice, shop, terminal and return.")

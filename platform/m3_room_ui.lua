@@ -1,6 +1,8 @@
 local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
 local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
 local battle = require("autopets.battle")
+local decode_shop = require("autopets.shop_wire")
+local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
@@ -61,20 +63,6 @@ local function send(action, from, to, flag)
     transmit(table.unpack(pending))
 end
 
-local function parse_market(raw)
-    if #raw < 41 then return nil end
-    local view = {round = raw[1], tier = raw[2], gold = raw[3], pets = {}, foods = {}, team = {}, rewards = {}}
-    for slot = 1, 3 do view.pets[slot] = raw[6 + slot] end
-    for slot = 1, 2 do view.foods[slot] = raw[9 + slot] end
-    for slot = 1, math.min(raw[6], 5) do
-        local offset = 12 + (slot - 1) * 6
-        view.team[slot] = {code = raw[offset], uid = raw[offset + 1], attack = raw[offset + 2],
-            health = raw[offset + 3], level = raw[offset + 4], xp = raw[offset + 5]}
-    end
-    for offset = 42, #raw do view.rewards[#view.rewards + 1] = raw[offset] end
-    return view
-end
-
 local function chosen()
     if preview and selected then
         for slot, unit in ipairs(preview.team) do
@@ -97,7 +85,7 @@ local function paint_shop()
         local unit = preview.team[slot]
         local prefix = slot == picked and "已选 · " or ""
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
-        local stats = unit and string.format("\n%d 攻 · %d 命 / L%d  经验%d", unit.attack, unit.health, unit.level, unit.xp) or ""
+        local stats = unit and string.format("\n%d攻 %d命 · L%d\n经验 %d", unit.attack, unit.health, unit.level, unit.xp) or ""
         text("Shop/Team" .. slot .. "/Text", prefix .. name .. stats)
     end
     reward = math.min(reward, math.max(#preview.rewards, 1))
@@ -212,7 +200,7 @@ local function receive_view(_, values)
     latest, forfeiting = revision, false
     match = {phase = phase, round = round, seat = seat, sequence = sequence, ready = ready, lives = lives,
         places = places, opponents = opponents, results = results}
-    preview = parse_market(raw)
+    preview = decode_shop(raw, shop_rules)
     local playing_seats = phase >= 1
     local view = {revision = revision, phase = phase == 0 and "lobby" or phase == 5 and "ended" or "preparation",
         phase_name = phase_names[phase], round = round, seat = seat, human_count = humans,

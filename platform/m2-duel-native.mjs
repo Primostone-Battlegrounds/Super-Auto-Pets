@@ -33,7 +33,7 @@ export const duelProbeButtons = [
 function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
   return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle' } };
 }
-function card(action, label, position, size, content, colour, fontSize = 22) {
+function card(action, label, position, size, content, colour, fontSize = 18) {
   return [
     { name: `${action}Face`, kind: 'image', position, size, image: 100001, colour },
     text(label, position, size, content, fontSize),
@@ -48,9 +48,9 @@ export function duelLayout(rule, includeProbeButtons = false) {
     const slot = index + 1 - (pet ? 0 : rule.PET_SLOTS);
     const name = pet ? 'Pet' : 'Food';
     return [
-      ...card(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 149], [174, 66], '',
+      ...card(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 42], [174, 66], '',
         pet ? '#335b44' : '#605432'),
-      ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, 92], [174, 44], '冻结', '#286452', 19),
+      ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, -13], [174, 44], '冻结', '#286452', 19),
     ];
   }).flat();
   return {
@@ -65,11 +65,11 @@ export function duelLayout(rule, includeProbeButtons = false) {
       ...(includeProbeButtons ? stock : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
       ]),
-      text('Team', [0, 50], [900, 28], '', 21),
+      text('Team', [0, 170], [900, 28], '', 21),
       ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => card(`Team${index + 1}`, `TeamLabel${index + 1}`,
-        [(index - 2) * 190, 6], [174, 54], '', '#335b44', 20)).flat(),
+        [(index - 2) * 190, 120], [174, 56], '', '#335b44', 20)).flat(),
       ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
-        .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -55], [174, 52], content, '#286452')),
+        .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452')),
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -115], [208, 52], content, '#286452')),
       text('ReplayStatus', [-75, -170], [774, 44], '', 18),

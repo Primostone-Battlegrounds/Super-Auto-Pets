@@ -77,7 +77,9 @@ export function nativeGame(lua53, lua54, parse, ids) {
   const roomSource = gated(room.roomSource, [
     ".on('whenTimerIsTriggered', (event, f) => {", '.onSignal(roomRequest, (event, f) => {',
   ], 8);
-  const duelSource = gated(duel, ['.onSignal(request, (event, f) => {'], 2);
+  const duelSource = gated(duel, [
+    ".on('whenTimerIsTriggered', (event, f) => {", '.onSignal(request, (event, f) => {',
+  ], 2);
   const lobbySource = read('./game_lobby.ts').replace('id: 1073741825,', `id: ${ids.lobby},`);
   const source = bundleRun(parse, true, convert => {
     const wrap = (name, code, callbacks, argument = '') => [

@@ -10,6 +10,7 @@ local replay_label = child("ReplayLabel")
 local replay_status = child("ReplayStatus")
 local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
+local decode_shop = require("autopets.shop_wire")
 local pets = {
     -- AP_DUEL_PETS
 }
@@ -114,13 +115,13 @@ local function render_market()
     for slot, label in ipairs(pet_labels) do
         local code = view.pets[slot]
         local pet = pets[math.abs(code)]
-        label.text = pet and string.format("%s  攻%d / 生%d\n%s", pet.name, pet.attack, pet.health, footer) or "售罄"
+        label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
         pet_freeze_labels[slot].text = code < 0 and "解冻动物" or "冻结动物"
     end
     for slot, label in ipairs(food_labels) do
         local code = view.foods[slot]
         local food = foods[math.abs(code)]
-        label.text = food and string.format("%s  +%d攻 / +%d生\n喂食 %d 金",
+        label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
             food.name, food.attack, food.health, rules.food_cost) or "售罄"
         food_freeze_labels[slot].text = code < 0 and "解冻食物" or "冻结食物"
     end
@@ -130,7 +131,7 @@ local function render_market()
             local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
             local prefix = slot == picked and "已选 · " or ""
-            label.text = string.format("%s%s  %d/%d\nLv%d  经验 %d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
+            label.text = string.format("%s%s\n%d/%d · Lv%d 经验%d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
         else
             label.text = string.format("阵位 %d  ·  空", slot)
         end
@@ -329,26 +330,10 @@ end
 local function receive_market(_, parameters)
     local market_round, version, raw = table.unpack(parameters)
     if market_round < round or version < latest_version or (market and version <= market.version) then return end
-    if #raw == 1 then
-        market = nil
-        render_market()
-        return
-    end
-    local view = {round = market_round, version = version, tier = raw[2], gold = raw[3], pets = {}, foods = {}, team = {}, rewards = {}}
-    local cursor = 7
-    for _, shelf in ipairs({{view.pets, rules.pet_slots}, {view.foods, rules.food_slots}}) do
-        for slot = 1, shelf[2] do
-            shelf[1][slot] = raw[cursor]
-            cursor = cursor + 1
-        end
-    end
-    for slot = 1, raw[6] do
-        local at = cursor + (slot - 1) * 6
-        view.team[slot] = {code = raw[at], uid = raw[at + 1], attack = raw[at + 2], health = raw[at + 3],
-            level = raw[at + 4], xp = raw[at + 5]}
-    end
-    for at = cursor + rules.team_size * 6, #raw do view.rewards[#view.rewards + 1] = raw[at] end
+    local view = decode_shop(raw, rules)
     market = view
+    if not view then render_market(); return end
+    view.round, view.version = market_round, version
     print(string.format("AUTO_PETS_M2 market round=%d gold=%d team=%d version=%d", market_round, view.gold, #view.team, version))
     render_market()
 end
