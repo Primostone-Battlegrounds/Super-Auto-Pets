@@ -123,6 +123,16 @@ function shop:abort_turn(result, side)
     return true
 end
 
+-- A vacant pairing settles the economy without a battle receipt or outcome.
+function shop:skip_battle()
+    if self.phase ~= "preparation" then
+        return nil, "wrong_phase"
+    end
+    self.last_outcome = nil
+    self.phase = "settlement"
+    return true
+end
+
 function shop:advance_round()
     if self.phase ~= "settlement" then
         return nil, "wrong_phase"

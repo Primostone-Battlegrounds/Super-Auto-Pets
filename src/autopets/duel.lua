@@ -2,37 +2,10 @@ local battle = require("autopets.battle")
 local data = require("autopets.data")
 local rng = require("autopets.rng")
 local shop = require("autopets.shop")
+local versus = require("autopets.versus")
 
 local duel = {}
 duel.__index = duel
-
-local function positive_integer(value)
-    return math.type(value) == "integer" and value > 0
-end
-
-local function player_id(value)
-    return (type(value) == "string" and value ~= "") or positive_integer(value)
-end
-
--- Use the SplitMix64 finalizer before reducing each domain to the shop RNG's
--- range. Successive Park–Miller states would create shifted shop streams.
-local function stream_seed(seed, domain)
-    local mixed = seed ~ domain
-    mixed = (mixed ~ (mixed >> 30)) * 0xbf58476d1ce4e5b9
-    mixed = (mixed ~ (mixed >> 27)) * 0x94d049bb133111eb
-    return mixed ~ (mixed >> 31)
-end
-
-local function copy(value)
-    if type(value) ~= "table" then
-        return value
-    end
-    local result = {}
-    for key, field in pairs(value) do
-        result[key] = copy(field)
-    end
-    return result
-end
 
 local function end_match(match, winner, reason)
     match.phase = "ended"
@@ -100,7 +73,7 @@ end
 -- server clock in integer milliseconds. Configuration is chosen by the host.
 function duel.new(seed, player_one, player_two, options)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
-    assert(player_id(player_one) and player_id(player_two) and player_one ~= player_two,
+    assert(versus.player_id(player_one) and versus.player_id(player_two) and player_one ~= player_two,
         "duel needs two distinct player IDs")
     options = options or {}
     local preparation_ms = options.preparation_ms or 60000
@@ -108,15 +81,15 @@ function duel.new(seed, player_one, player_two, options)
     local match_ms = options.match_ms or 2700000
     local lives = options.starting_lives or data.rules.start_lives
     local now = options.now or 0
-    assert(positive_integer(preparation_ms) and positive_integer(settlement_ms)
-        and positive_integer(match_ms) and positive_integer(lives),
+    assert(versus.positive_integer(preparation_ms) and versus.positive_integer(settlement_ms)
+        and versus.positive_integer(match_ms) and versus.positive_integer(lives),
         "duel configuration must use positive integers")
     assert(math.type(now) == "integer" and now >= 0 and now <= math.maxinteger - match_ms, "invalid duel clock")
 
     local seats = {}
     for index = 1, 2 do
         seats[index] = {
-            shop = shop.new(stream_seed(seed, 0x53484f50 + index)), -- SHOP
+            shop = shop.new(versus.stream_seed(seed, 0x53484f50 + index)), -- SHOP
             lives = lives,
             sequence = 0,
             ready = false,
@@ -126,7 +99,7 @@ function duel.new(seed, player_one, player_two, options)
     return setmetatable({
         seats = seats,
         seat_by_player = {[player_one] = 1, [player_two] = 2},
-        battle_random = rng.new(stream_seed(seed, 0x4649474854)), -- FIGHT
+        battle_random = rng.new(versus.stream_seed(seed, 0x4649474854)), -- FIGHT
         phase = "preparation",
         round = 1,
         revision = 0,
@@ -181,81 +154,14 @@ function duel:abandon(now)
     return true
 end
 
-local actions = {}
-
-function actions.shop(match, seat, request)
-    if match.phase ~= "preparation" then
-        return nil, "wrong_phase"
-    end
-    if seat.ready then
-        return nil, "already_ready"
-    end
-    return seat.shop:apply(request.command)
-end
-
-function actions.ready(match, seat)
-    if match.phase ~= "preparation" then
-        return nil, "wrong_phase"
-    end
-    if seat.ready then
-        return nil, "already_ready"
-    end
-    if #seat.shop.team == 0 then
-        return nil, "empty_team"
-    end
-    seat.ready = true
-    return true
-end
-
-function actions.next(match, seat)
-    if match.phase ~= "settlement" then
-        return nil, "wrong_phase"
-    end
-    if seat.continued then
-        return nil, "already_continued"
-    end
-    seat.continued = true
-    return true
-end
-
-function actions.forfeit(match, _seat, _request, index)
-    end_match(match, 3 - index, "forfeit")
-    return true
-end
-
 function duel:request(player, request, now)
-    local index = self.seat_by_player[player]
-    if not index then
-        return nil, "unknown_player"
+    local seat, index_or_error = versus.accept(self, player, request, now)
+    if not seat then
+        return nil, index_or_error
     end
-    if type(request) ~= "table" or not positive_integer(request.round)
-        or not positive_integer(request.sequence) or not actions[request.action] then
-        return nil, "invalid_request"
-    end
-    local clock_ok, clock_error = self:tick(now)
-    if not clock_ok then
-        return nil, clock_error
-    end
-    if request.round ~= self.round then
-        return nil, "stale_round"
-    end
-    local seat = self.seats[index]
-    if request.sequence <= seat.sequence then
-        return nil, "duplicate_request"
-    end
-    if request.sequence ~= seat.sequence + 1 then
-        return nil, "sequence_gap"
-    end
-    if self.phase == "ended" then
-        return nil, "wrong_phase"
-    end
-
-    local accepted, err = actions[request.action](self, seat, request, index)
-    if not accepted then
-        return nil, err
-    end
-    seat.sequence = request.sequence
-    if self.phase == "preparation" and self.seats[1].ready and self.seats[2].ready then
+    if request.action == "forfeit" then
+        end_match(self, 3 - index_or_error, "forfeit")
+    elseif self.phase == "preparation" and self.seats[1].ready and self.seats[2].ready then
         resolve_round(self)
     elseif self.phase == "settlement" and self.seats[1].continued and self.seats[2].continued then
         open_next_round(self)
@@ -270,9 +176,6 @@ function duel:snapshot(player)
         return nil, "unknown_player"
     end
     local seat, opponent = self.seats[index], self.seats[3 - index]
-    local private_shop = seat.shop:snapshot()
-    private_shop.rng_state = nil
-    private_shop.next_uid = nil
     return {
         seat = index,
         phase = self.phase,
@@ -280,14 +183,14 @@ function duel:snapshot(player)
         revision = self.revision,
         deadline = self.deadline,
         next_sequence = seat.sequence + 1,
-        shop = private_shop,
+        shop = versus.private_shop(seat.shop),
         lives = seat.lives,
         opponent_lives = opponent.lives,
         ready = seat.ready,
         opponent_ready = opponent.ready,
         continued = seat.continued,
         opponent_continued = opponent.continued,
-        battle = copy(self.battle),
+        battle = versus.copy(self.battle),
         battle_error = self.battle_error,
         outcome = seat.outcome,
         winner = self.winner,

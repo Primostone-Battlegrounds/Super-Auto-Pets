@@ -1,9 +1,11 @@
 ---
 id: TASK-34
 title: Multiplayer · 八席淘汰赛和 AI 补位
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@rules-core'
 created_date: '2026-11-23 08:53'
+updated_date: '2026-11-24 01:01'
 labels: []
 milestone: m-3
 dependencies:
@@ -24,3 +26,17 @@ ordinal: 28000
 - [ ] #1 覆盖 1 至 8 名真人的入场、奇数存活、机器人对战、退出、淘汰和最终名次。
 - [ ] #2 用官方环境记录匹配等待和实际开局。
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. 复用双人权威请求契约，建立八席状态、补位和回合结算。
+2. 运行真人席数、超时、退出、轮空及固定种子回归，再构建隔离千星候选。
+3. 在官方客户端记录身份、房间能力、等待和完整对局。
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+纯 Lua 领域层已覆盖 1 至 8 名真人及空余房位机器人补位。tests/room.lua 验证空阵经营、机器人实际交战、准备超时、奇数轮空、同轮淘汰、退出、序号拒绝、共享回放与全局名次。千星原生完整对局和官方房间匹配均待验。
+<!-- SECTION:NOTES:END -->
