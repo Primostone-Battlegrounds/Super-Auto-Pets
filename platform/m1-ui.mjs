@@ -176,8 +176,9 @@ export const nativeRun = {
       image('Rule', [0, 88], [336, 2], pigment.shelfRule),
       label('Heading', [0, 134], [500, 63], '小动物自走棋', 43),
       label('Progress', [0, 55], [496, 28], '', 21, pigment.muted),
-      button('Continue', [0, 0], [334, 56], '开始游戏', true),
+      button('Continue', [0, 0], [334, 56], '单人练习', true),
       button('NewGame', [0, -68], [334, 52], '放弃并开新局'),
+      button('Difficulty', [0, -68], [334, 52], '练习难度：标准'),
       button('Audio', [0, -139], [334, 48], '音效：开启'),
     ], false), blockCursor: true },
     { ...group('Restart', [0, 0], [1202, 684], [

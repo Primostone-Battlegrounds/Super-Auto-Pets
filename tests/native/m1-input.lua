@@ -234,7 +234,7 @@ local function restart_script(new_seed)
     destroy_script()
     configured_seed = new_seed or configured_seed
     sandbox.OnStart()
-    assert(nodes.Menu.active and label("Menu/Continue/Title") == "开始游戏")
+    assert(nodes.Menu.active and label("Menu/Continue/Title") == "单人练习")
 end
 
 local function shop(action, first, second)
@@ -442,7 +442,7 @@ local function opening(expected_seed)
     assert(label("Shop/Sell/Title") == "出售 · +1 金/级")
 end
 
-assert(nodes.Menu.active and label("Menu/Continue/Title") == "开始游戏")
+assert(nodes.Menu.active and label("Menu/Continue/Title") == "单人练习")
 capture("menu")
 local menu_x, menu_y = hit_centre("Menu/Audio")
 local menu_edge = hit_area("Menu/Audio").height / 2
@@ -489,7 +489,10 @@ shop("buy", 1)
 for round = 1, 5 do finish("loss", round == 5) end
 assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=5 wins=0 lives=0 final=loss seed=1")
 capture("defeat")
-click("Battle/NewSeed")
+click("OpenMenu")
+assert(label("Menu/NewGame/Title") == "新一局")
+click("Menu/NewGame")
+assert(not nodes.Restart.active and label("Menu/Difficulty/Title") == "练习难度：标准")
 opening(seed + 1)
 
 local interaction_seed = 7
@@ -668,6 +671,24 @@ sandbox.OnEnable()
 assert(ticking and label("Battle/Event") == suspended_event)
 sandbox.OnUpdate(0.6)
 assert(label("Battle/Event") ~= suspended_event)
+
+restart_script(interaction_seed)
+assert(label("Menu/Difficulty/Title") == "练习难度：标准")
+click("Menu/Difficulty")
+assert(label("Menu/Difficulty/Title") == "练习难度：入门")
+opening(interaction_seed)
+click("OpenMenu")
+assert(not nodes["Menu/Difficulty"].active and label("Menu/Progress"):match("^入门"))
+click("Menu/Continue")
+shop("buy", 1)
+click("Primary")
+assert(label("Enemy1/Name") == "芦纹龟", "beginner policy did not reach the native session")
+click("OpenMenu")
+click("Menu/NewGame")
+click("Restart/Confirm")
+opening(interaction_seed + 1)
+click("OpenMenu")
+assert(label("Menu/Progress"):match("^入门"), "a new run discarded the practice difficulty")
 
 destroy_script()
 assert(capture_file:close())

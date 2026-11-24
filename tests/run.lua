@@ -84,6 +84,18 @@ assert(opening.phase == "preparation" and opening.round == 1)
 assert(opening.wins == 0 and opening.lives == rules.start_lives and opening.shop.gold == rules.gold_per_round)
 assert(#opening.shop.team == 0 and not opening.final and not opening.battle)
 
+assert_same(run.new(seed, "standard"):snapshot(), opening, "explicit and default standard")
+assert(not pcall(run.new, seed, "unknown"))
+local beginner = run.new(seed, "beginner")
+local beginner_opening = beginner:snapshot()
+local beginner_trace = assert(beginner:opponent_trace())
+assert(beginner_trace.difficulty == "beginner")
+assert_same(beginner_opening.shop, opening.shop, "difficulty only affects the opponent")
+assert_same(assert(bot.replay(beginner_trace)), beginner_opening.opponent)
+assert(beginner:restart(-19))
+assert(beginner:opponent_trace().difficulty == "beginner")
+assert_same(beginner:snapshot(), run.new(-19, "beginner"):snapshot(), "restart preserves difficulty")
+
 local function feed_all(first, after_roll)
     return {{"feed", first, 1}, {"feed", 3 - first, 1}, {"reroll"}, {"feed", after_roll, 1}}
 end
