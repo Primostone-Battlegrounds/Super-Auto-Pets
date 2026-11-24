@@ -5,7 +5,10 @@ local team_label = root:GetChild("Team")
 local leave_label = root:GetChild("LeaveLabel")
 local merge_label = root:GetChild("MergeLabel")
 local reward_label = root:GetChild("RewardLabel")
+local replay_label = root:GetChild("ReplayLabel")
+local replay_status = root:GetChild("ReplayStatus")
 local click = Enum.CursorEventType.CursorClick
+local battle = require("autopets.battle")
 local pets = {
     -- AP_DUEL_PETS
 }
@@ -28,6 +31,7 @@ local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
+local playback
 local bindings = {}
 local pet_labels, food_labels, team_labels = {}, {}, {}
 local pet_freeze_labels, food_freeze_labels = {}, {}
@@ -205,6 +209,74 @@ local function bind(name, callback)
     bindings[#bindings + 1] = {object = root:GetChild(name), callback = callback}
 end
 
+local event_text = {start = "入场", skill = "技能", attack = "攻击", damage = "受击", shield = "护盾",
+    faint = "退场", buff = "强化", summon = "召唤", result = "结算"}
+
+local function show_replay()
+    if not playback then
+        replay_status.text = "等待战斗回放"
+        replay_label.text = "回放"
+        return
+    end
+    local event = playback.events[playback.position]
+    local step = event_text[event.type] or event.type
+    local side = event.side == "player" and "席1" or event.side == "enemy" and "席2" or "双方"
+    if event.board then playback.board = event.board end
+    local names = {}
+    for _, key in ipairs({"player", "enemy"}) do
+        local units = {}
+        for _, unit in ipairs(playback.board[key]) do
+            local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
+            units[#units + 1] = string.format("%s%d", definition.name, unit.health)
+        end
+        names[#names + 1] = #units > 0 and table.concat(units, " ") or "空"
+    end
+    replay_status.text = string.format("第 %d 轮  %d/%d  %s · %s\n席1 %s  |  席2 %s", playback.round,
+        playback.position, #playback.events, side, step, names[1], names[2])
+    replay_label.text = playback.playing and "暂停" or playback.position == #playback.events and "重播" or "继续"
+end
+
+local function decode_formation(wire)
+    if #wire % 5 ~= 0 or #wire > 5 * rules.team_size then return nil end
+    local team = {}
+    for at = 1, #wire, 5 do
+        local definition = native_catalog.pets[wire[at]]
+        if not definition then return nil end
+        team[#team + 1] = {id = definition.id, uid = wire[at + 1], attack = wire[at + 2],
+            health = wire[at + 3], level = wire[at + 4]}
+    end
+    return team
+end
+
+local function receive_replay(_, parameters)
+    local battle_round, seed, outcome, first, second = table.unpack(parameters)
+    if (playback and battle_round <= playback.round) or battle_round < round - 1 then return end
+    local left, right = decode_formation(first), decode_formation(second)
+    if not left or not right then return end
+    local ok, result = pcall(battle.resolve, left, right, seed, native_catalog)
+    local codes = {win = 1, loss = 2, draw = 3}
+    if not ok or result.status ~= "resolved" or codes[result.outcome] ~= outcome then
+        replay_status.text = "回放校验失败"
+        print(string.format("AUTO_PETS_M2 replay_mismatch round=%d", battle_round))
+        return
+    end
+    playback = {round = battle_round, events = result.events, position = 1, elapsed = 0, playing = true}
+    print(string.format("AUTO_PETS_M2 replay round=%d events=%d outcome=%d", battle_round, #result.events, outcome))
+    show_replay()
+end
+
+bind("Replay", function()
+    if not playback then return end
+    if playback.position == #playback.events then
+        playback.position = 1
+        playback.elapsed = 0
+        playback.playing = true
+    else
+        playback.playing = not playback.playing
+    end
+    show_replay()
+end)
+
 bind("Refresh", request_snapshot)
 bind("Ready", submit_ready)
 bind("Advance", request_advance)
@@ -282,7 +354,7 @@ end
 
 local function receive_snapshot(_, parameters)
     local players, seat, new_round, phase, is_ready, continued, settlements, version,
-        next_sequence, winner, reason, remaining, ack = table.unpack(parameters)
+        next_sequence, winner, reason, remaining, ack, lives, opponent_lives, outcome = table.unpack(parameters)
     if pending and pending.token == ack then pending = nil end
     if new_round < round or version <= latest_version then return end
     if pending and (new_round > pending.round or next_sequence > pending.sequence or phase == 2) then pending = nil end
@@ -297,24 +369,25 @@ local function receive_snapshot(_, parameters)
     can_leave = seat > 0 and phase ~= 2
     local message = "等待第 2 位玩家"
     if phase == 2 then
-        if reason == 1 then
-            message = "两轮同步验证完成"
-        elseif winner == 0 then
-            message = "房间已结束"
+        if winner == 0 then
+            message = "对局平局"
         else
-            message = winner == seat and "对手离开，本席获胜" or "对局已结束，本席告负"
+            message = winner == seat and "本席获胜" or "对局已结束，本席告负"
         end
     elseif seat > 0 and players < 2 then
         message = "等待原席位返回"
     elseif players == 2 then
         if phase == 0 then
             message = is_ready and "已准备，等待对手" or "双方已入场"
+        elseif phase == 3 then
+            message = "双方已锁定 · 战斗计算中"
         else
-            message = continued and "已确认，等待对手" or "本轮已结算，请确认下一轮"
+            local round_result = outcome == 3 and "本轮平局" or outcome == seat and "本轮获胜" or "本轮失利"
+            message = round_result .. (continued and " · 已确认" or " · 确认下一轮")
         end
     end
     local seat_text = seat > 0 and string.format("席位 %d", seat) or "等候席位"
-    status.text = string.format("%s  ·  第 %d 轮  ·  结算 %d 次\n%s", seat_text, round, settlements, message)
+    status.text = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
     print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
@@ -324,19 +397,33 @@ end
 function OnStart()
     script:RegisterServerSignalHandler("AP_DuelSnapshot", receive_snapshot)
     script:RegisterServerSignalHandler("AP_DuelMarket", receive_market)
+    script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
     for _, binding in ipairs(bindings) do binding.object:AddCursorEventListener(click, binding.callback) end
     render_market()
+    show_replay()
     request_snapshot()
+end
+
+function OnUpdate(dt)
+    if not playback or not playback.playing then return end
+    playback.elapsed = playback.elapsed + dt
+    if playback.elapsed < 0.18 then return end
+    playback.elapsed = 0
+    playback.position = playback.position + 1
+    if playback.position == #playback.events then playback.playing = false end
+    show_replay()
 end
 
 function OnDestroy()
     script:UnregisterServerSignalHandler("AP_DuelSnapshot")
     script:UnregisterServerSignalHandler("AP_DuelMarket")
+    script:UnregisterServerSignalHandler("AP_DuelReplay")
     for _, binding in ipairs(bindings) do
         if binding.object.alive then binding.object:RemoveCursorEventListener(click, binding.callback) end
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
+    playback = nil
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

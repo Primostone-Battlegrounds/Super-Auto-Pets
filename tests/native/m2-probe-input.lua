@@ -1,6 +1,6 @@
 local controls = {}
-local names = {"Status", "MarketGold", "Team", "LeaveLabel", "MergeLabel", "RewardLabel",
-    "Refresh", "Ready", "Advance", "Leave", "Reroll", "Sell", "Merge", "Reward", "RewardNext"}
+local names = {"Status", "MarketGold", "Team", "LeaveLabel", "MergeLabel", "RewardLabel", "ReplayLabel", "ReplayStatus",
+    "Refresh", "Ready", "Advance", "Leave", "Reroll", "Sell", "Merge", "Reward", "RewardNext", "Replay"}
 for _, pair in ipairs({{"OfferLabel", 3}, {"Buy", 3}, {"FreezePet", 3}, {"FreezePetLabel", 3},
     {"FoodLabel", 2}, {"Food", 2}, {"FreezeFood", 2}, {"FreezeFoodLabel", 2}, {"Team", 5}, {"TeamLabel", 5}}) do
     for slot = 1, pair[2] do names[#names + 1] = pair[1] .. slot end
@@ -37,7 +37,7 @@ game = {
 script = {
     object = {GetChild = function(_, name) return assert(controls[name], name) end},
     RegisterServerSignalHandler = function(_, name, callback)
-        assert((name == "AP_DuelSnapshot" or name == "AP_DuelMarket") and handlers[name] == nil)
+        assert((name == "AP_DuelSnapshot" or name == "AP_DuelMarket" or name == "AP_DuelReplay") and handlers[name] == nil)
         handlers[name] = callback
     end,
     UnregisterServerSignalHandler = function(_, name)
@@ -49,7 +49,8 @@ local function status(version, sequence, options)
     options = options or {}
     local parameters = {options.players or 2, options.seat or 1, options.round or 1, options.phase or 0,
         options.ready or false, options.continued or false, options.settlements or 0,
-        version, sequence, options.winner or 0, options.reason or 0, options.remaining or 60, options.ack or 0}
+        version, sequence, options.winner or 0, options.reason or 0, options.remaining or 60, options.ack or 0,
+        options.lives or 5, options.opponent_lives or 5, options.outcome or 0}
     handlers.AP_DuelSnapshot("AP_DuelSnapshot", parameters)
 end
 local function market(version, gold, offers, team, options)
@@ -183,9 +184,23 @@ press("Reroll", 10, 0, 0, 0, 1, 12)
 status(16, 12, {ack = sent[#sent][4]}) -- An insufficient-gold rejection does not consume the sequence.
 market(16, 0, {0, 0, 3}, {swift, {5, 24, 4, 2, 1, 0}, {1, 23, 3, 6, 2, 2}})
 press("Ready", 1, 0, 0, 0, 1, 12)
-status(17, 13, {ready = true, phase = 1, settlements = 1})
+status(17, 13, {ready = true, phase = 1, settlements = 1, outcome = 1})
 market(17, 0, {0, 0, 3}, {swift})
-assert_text("Status", "本轮已结算")
+assert_text("Status", "本轮获胜")
+handlers.AP_DuelReplay("AP_DuelReplay", {1, 17, 1, {1, 11, 1, 4, 1}, {}})
+assert_text("ReplayStatus", "1/2")
+assert_text("ReplayLabel", "暂停")
+press("Replay")
+OnUpdate(0.5)
+assert_text("ReplayStatus", "1/2")
+press("Replay")
+OnUpdate(0.18)
+assert_text("ReplayStatus", "2/2")
+assert_text("ReplayLabel", "重播")
+handlers.AP_DuelReplay("AP_DuelReplay", {1, 17, 1, {1, 11, 1, 4, 1}, {}})
+assert_text("ReplayLabel", "重播")
+press("Replay")
+assert_text("ReplayStatus", "1/2")
 press("Buy3")
 press("Advance", 2, 0, 0, 0, 1, 13)
 market(18, 10, {3, 1, 3}, {swift}, {round = 2})
@@ -206,5 +221,6 @@ OnStart()
 assert(sent[#sent][1] == 0 and sent[#sent][2] == 0 and sent[#sent][3] == 0)
 assert_text("MarketGold", "同步商店中")
 assert_text("MergeLabel", "合并模式")
+assert_text("ReplayStatus", "等待战斗回放")
 close()
-print("M2 readback input passed: shop command controls, packet ordering, private retries, selection and teardown")
+print("M2 readback input passed: shop commands, packet ordering, private retries, canonical replay, and teardown")

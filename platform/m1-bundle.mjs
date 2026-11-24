@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { portraitLayers } from './m1-ui.mjs';
 
-const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art'];
-export function bundleRun(parse, release = false) {
+function bundleModules(parse, names, entry, release, prefix = []) {
   const modules = release ? [...names, 'release_data'] : names;
   const validModules = new Set(modules.map(name => `autopets.${name}`));
   const catalog = release ? 'autopets.release_data' : 'autopets.data';
@@ -31,7 +30,7 @@ export function bundleRun(parse, release = false) {
     `factories['autopets.${name}'] = function()\n${convert(`../src/autopets/${name}.lua`)}\nend`,
   );
   return [
-    `local portrait_layers = ${portraitLayers}`,
+    ...prefix,
     'local factories, loaded, loading = {}, {}, {}',
     'local function loadAutoPetsModule(name)',
     '    if loaded[name] == nil then',
@@ -44,6 +43,15 @@ export function bundleRun(parse, release = false) {
     'end',
     ...factories,
     `local native_catalog = loadAutoPetsModule('${catalog}')`,
-    convert('./m1_ui.lua'),
+    convert(entry),
   ].join('\n\n');
+}
+
+export function bundleRun(parse, release = false) {
+  const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art'];
+  return bundleModules(parse, names, './m1_ui.lua', release, [`local portrait_layers = ${portraitLayers}`]);
+}
+
+export function bundleBattleReplay(parse, entry, release = false) {
+  return bundleModules(parse, ['data', 'rng', 'battle_receipt', 'battle'], entry, release);
 }

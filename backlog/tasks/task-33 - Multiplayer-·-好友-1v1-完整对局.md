@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-24 00:57'
+updated_date: '2026-11-24 01:49'
 labels: []
 milestone: m-2
 dependencies:
@@ -42,4 +42,6 @@ ordinal: 27000
 
 <!-- SECTION:NOTES:BEGIN -->
 已实现复用双人权威规则的宿主连接与定向快照，离线覆盖请求重试、平局、超时、共享回放、终局及同身份恢复。千星需独立核对实际连接身份和原生执行，TASK-32 继续记录官方实测。
+
+千星双人候选已离线实现独立经营、原生计时、权威战斗、共享回放与扣命终局。隔离 GIL 读回和 Lua 5.3/5.4 终局棋盘对照均通过。双设备官方整局、实际连接身份和恢复窗口保持待验。
 <!-- SECTION:NOTES:END -->

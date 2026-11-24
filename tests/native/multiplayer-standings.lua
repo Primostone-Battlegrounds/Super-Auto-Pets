@@ -75,6 +75,11 @@ if mode == "duel" then
     callback(signal, {2, 2, 2, 2, true, false, 2, 4, 3, 0, 1, 0, 2})
     assert(value("Phase") == "第 2 轮 · 两轮同步验证完成")
     assert(value("Opponent") == "" and value("Seat2Detail") == "真人")
+    callback(signal, {2, 2, 3, 3, true, false, 2, 5, 2, 0, 0, 0, 0, 4, 5, 0})
+    assert(value("Phase") == "第 3 轮 · 战斗计算")
+    assert(value("Opponent") == "本轮对手 · 席位 1" and value("Seat2Detail") == "真人 · 4 命")
+    callback(signal, {2, 2, 3, 2, true, false, 3, 6, 2, 2, 5, 0, 0, 4, 0, 2})
+    assert(value("Opponent") == "获胜席位 2" and value("Seat2Detail") == "真人 · 冠军")
 else
     local empty = {0, 0, 0, 0, 0, 0, 0, 0}
     callback(signal, {1, 1, 0, 5, 0, empty, empty})
