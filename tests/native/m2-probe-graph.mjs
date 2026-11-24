@@ -17,6 +17,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   let variables, handler, onPress;
   let events, updates, now, lastVersion, combatVariables, combatEvents, combatSignals, randomCount;
   let advancedSkills;
+  let droppedWork, droppedReceipts, droppedWorkRemaining, droppedReceiptsRemaining, combatStarts, submittedWork;
   let totalResolved = 0;
   let apiCalls = 0;
   let maximumApiCalls = 0;
@@ -52,9 +53,20 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
     sendSignal(signal, target, ...values) {
       if (signal === 'AP_DuelRequest') {
         const [round, sequence, token, from, to, flag] = values;
+        if (target === -2n && droppedReceiptsRemaining > 0) {
+          droppedReceiptsRemaining -= 1;
+          droppedReceipts += 1;
+          return;
+        }
         handler({ signalSourceEntity: 'stage', params: { action: target, round, sequence, token, from, to, flag } }, flow);
       } else if (signal === 'AP_DuelFightStart') {
         const [attempt, seed, first, second] = values;
+        submittedWork.push([target, attempt, seed, Array.from(first), Array.from(second)]);
+        if (droppedWorkRemaining > 0) {
+          droppedWorkRemaining -= 1;
+          droppedWork += 1;
+          return;
+        }
         combatSignals.get(signal)({ signalSourceEntity: 'stage', params: { round: target, attempt, seed, first, second } }, combatFlow);
       } else if (signal === 'AP_DuelFightCancel') {
         combatSignals.get(signal)({ signalSourceEntity: 'stage', params: { attempt: target } }, combatFlow);
@@ -77,6 +89,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
       assert.equal(name, 'AP_DuelFightClock');
       assert.equal(repeat, true);
       assert.deepEqual(Array.from(delays), [1]);
+      combatStarts += 1;
     },
     stopTimer: (target, name) => assert.deepEqual([target, name], ['stage', 'AP_DuelFightClock']),
   });
@@ -98,6 +111,8 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
     combatSignals = new Map();
     combatEvents = new Map();
     advancedSkills = [];
+    droppedWork = droppedReceipts = droppedWorkRemaining = droppedReceiptsRemaining = combatStarts = 0;
+    submittedWork = [];
     randomCount = 0n;
     now = 0n;
     lastVersion = 0n;
@@ -466,6 +481,70 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   assert.equal(views.get('A').winner, 1n);
   assert.equal(views.get('B').reason, 3n);
 
+  reset();
+  players.push('B');
+  tick(1);
+  buy('A', 1n);
+  press('A', 2);
+  droppedWorkRemaining = 1;
+  droppedReceiptsRemaining = 1;
+  const prepareUntil = variables.due;
+  tick(prepareUntil);
+  assert.equal(views.get('A').phase, 3n);
+  assert.equal(combatStarts, 0);
+  assert.deepEqual(tick(prepareUntil + 4n), []);
+  assert.equal(submittedWork.length, 1);
+  assert.deepEqual(tick(prepareUntil + 5n), []);
+  assert.equal(combatStarts, 1);
+  assert.equal(combatVariables.active, true);
+  assert.deepEqual(tick(prepareUntil + 10n), []);
+  assert.equal(combatStarts, 1, 'retry must not restart an active attempt');
+  resolveFight();
+  assert.equal(views.get('A').phase, 3n);
+  assert.equal(views.get('B').lives, BigInt(startingLives));
+  assert.deepEqual(tick(prepareUntil + 15n), ['A', 'B']);
+  assert.equal(views.get('A').phase, 1n);
+  assert.equal(views.get('A').settlements, 1n);
+  assert.equal(views.get('B').lives, BigInt(startingLives) - 1n);
+  assert.deepEqual(replays.get('A'), replays.get('B'));
+  assert.equal(combatStarts, 1, 'a lost receipt must not rerun combat');
+  assert.equal(submittedWork.length, 4);
+  assert.ok(submittedWork.every(work => work[0] === 1n));
+  for (const work of submittedWork) assert.deepEqual(work, submittedWork[0]);
+  assert.deepEqual(request('stage', -2n, 1n, variables.battleAttempt, 0n, 1n), []);
+  const recovery = { droppedWork, droppedReceipts, submittedWork: submittedWork.length, combatStarts,
+    settlements: Number(views.get('A').settlements) };
+  assert.equal(recovery.droppedWork, 1);
+  assert.equal(recovery.droppedReceipts, 1);
+
+  reset();
+  players.push('B');
+  tick(1);
+  buy('A', 1n);
+  press('A', 2);
+  const lockedShop = markets.get('A').raw.slice();
+  droppedWorkRemaining = 3;
+  tick(variables.due);
+  tick(variables.fightRetryDue);
+  const battleUntil = variables.due;
+  tick(battleUntil);
+  assert.equal(views.get('A').phase, 0n);
+  assert.equal(views.get('A').ready, false);
+  assert.equal(views.get('B').ready, false);
+  assert.equal(views.get('A').settlements, 0n);
+  assert.equal(views.get('B').lives, BigInt(startingLives));
+  assert.deepEqual(markets.get('A').raw, lockedShop);
+  assert.ok(logs.includes('AUTO_PETS_M2 fight_timeout'));
+  assert.deepEqual(request('stage', -2n, 1n, variables.battleAttempt, 0n, 1n), []);
+  droppedWorkRemaining = 0;
+  press('A', 2);
+  tick(variables.due);
+  resolveFight();
+  assert.equal(views.get('A').round, 1n);
+  assert.equal(views.get('A').settlements, 1n);
+  assert.equal(views.get('B').lives, BigInt(startingLives) - 1n);
+  recovery.timedOutWithoutSettlement = true;
+
   let releaseBattle;
   if (release) {
     reset();
@@ -515,6 +594,6 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   }
   return {
     summary: '完整双人经营、定向隔离、权威战斗与同一回放、平局、扣命终局、阶段超时、恢复和认输',
-    maximumApiCalls, maximumMessages, totalResolved, releaseBattle,
+    maximumApiCalls, maximumMessages, totalResolved, releaseBattle, recovery,
   };
 }

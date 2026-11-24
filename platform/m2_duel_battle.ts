@@ -36,12 +36,20 @@ g.server({
   id: 1073741827,
   name: '_GSTS_AP_DuelBattle',
   variables: {
-    attempt: 0n, active: false, round: 0n, openingDone: false, board: [0n], openingState: [0n],
+    attempt: 0n, active: false, round: 0n, outcome: 0n, openingDone: false, board: [0n], openingState: [0n],
     fainting: [0n], // AP_DUEL_FAINT
     metadata: [0n], // AP_DUEL_OPENING
   },
 }).onSignal(fightStart, (event, f) => {
-  if (!f.equal(f.getSelfEntity(), event.signalSourceEntity) || event.params.attempt <= f.get('attempt')) return;
+  const priorAttempt = f.get('attempt');
+  if (!f.equal(f.getSelfEntity(), event.signalSourceEntity) || event.params.attempt < priorAttempt) return;
+  if (event.params.attempt === priorAttempt) {
+    const outcome = f.get('outcome');
+    if (event.params.round === f.get('round') && outcome > 0n) {
+      f.sendSignal(request, -2n, event.params.round, priorAttempt, 0n, outcome, 0n, 0n);
+    }
+    return;
+  }
   // A new attempt can only be sent by the stage's match controller.
   const board = gstsServerDuelBoard(f, event.params.first, event.params.second);
   const opening = gstsServerOpeningState(f, board, event.params.seed);
@@ -50,11 +58,14 @@ g.server({
   f.set('board', board);
   f.set('openingState', opening);
   f.set('openingDone', false);
+  f.set('outcome', 0n);
+  if (f.get('active')) f.stopTimer(f.getSelfEntity(), fightClock);
   f.set('active', true);
   f.startTimer(f.getSelfEntity(), fightClock, true, [1]);
 }).onSignal(fightCancel, (event, f) => {
   if (!f.equal(f.getSelfEntity(), event.signalSourceEntity) || event.params.attempt < f.get('attempt')) return;
   f.set('attempt', event.params.attempt);
+  f.set('outcome', 0n);
   if (f.get('active')) f.stopTimer(f.getSelfEntity(), fightClock);
   f.set('active', false);
 }).on('whenTimerIsTriggered', (event, f) => {
@@ -78,6 +89,7 @@ g.server({
   if (outcome !== 0n) {
     f.stopTimer(f.getSelfEntity(), fightClock);
     f.set('active', false);
+    f.set('outcome', outcome);
     f.sendSignal(request, -2n, f.get('round'), f.get('attempt'), 0n, outcome, 0n, 0n);
   }
 });

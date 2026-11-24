@@ -236,6 +236,7 @@ try {
   const literals = list => `[${list.map(value => `${value}n`).join(', ')}]`;
   const stageSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
     .replace('id: 1073741825,', `id: ${graph.graphId},`)
+    .replace('0n; // AP_DUEL_STRIKE_LIMIT', `${battleGraph.strikeLimit}n;`)
     .replace('0n; // AP_DUEL_LIVES', `${startingLives}n;`)
     .replace('[0n], // AP_DUEL_START_ONE', `${literals(resource.start[0])},`)
     .replace('[0n], // AP_DUEL_START_TWO', `${literals(resource.start[1])},`);
