@@ -64,16 +64,17 @@ g.server({
   if (flags === 3n) outcome = 3n;
   else if (flags === 1n) outcome = 2n;
   else if (flags === 2n) outcome = 1n;
-  else if (f.queryIfDictionaryContainsSpecificKey(openers, pair)) {
+  else {
     const openingState = f.copyList(f.queryDictionaryValueByKey(openers, pair));
-    if (gstsServerOpeningStep(f, board, f.get('petEffects'), f.get('startEffects'), openingState, false)) {
-      f.removeKeyValuePairsFromDictionaryByKey(openers, pair);
+    if (f.getCorrespondingValueFromList(openingState, openingCursorAt) < 2n * battleSlots) {
+      if (gstsServerOpeningStep(f, board, f.get('petEffects'), f.get('startEffects'), openingState, false)) {
+        f.modifyValueInList(openingState, openingCursorAt, 2n * battleSlots);
+      }
     } else {
-      f.setOrAddKeyValuePairsToDictionary(openers, pair, openingState);
+      outcome = gstsServerBattleOutcome(f, board);
+      if (outcome === 0n) outcome = gstsServerCollisionStep(f, board, f.get('petEffects'), false); // AP_ROOM_COLLISION
     }
-  } else {
-    outcome = gstsServerBattleOutcome(f, board);
-    if (outcome === 0n) outcome = gstsServerCollisionStep(f, board, f.get('petEffects'), false);
+    f.setOrAddKeyValuePairsToDictionary(openers, pair, openingState);
   }
   f.setOrAddKeyValuePairsToDictionary(fights, pair, board);
   f.set('fights', fights);

@@ -15,6 +15,15 @@ local weights = {
     swarm = {attack = 8, health = 8},
 }
 
+function bot.style_weights()
+    local result = {}
+    for index, style in ipairs(styles) do
+        local weight = weights[style]
+        result[index] = {style = style, attack = weight.attack, health = weight.health}
+    end
+    return result
+end
+
 local function copy(value)
     if type(value) ~= "table" then
         return value

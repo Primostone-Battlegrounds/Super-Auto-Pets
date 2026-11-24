@@ -216,3 +216,22 @@ jobs:
           path: ${{ runner.temp }}/m3-compatibility-room
           if-no-files-found: error
           retention-days: 30
+      - name: Verify the complete six-tier eight-seat native room
+        if: hashFiles('tests/native/verify-m3-room.mjs') != ''
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          node tests/native/verify-m3-room.mjs "$RUNNER_TEMP/miliastra-mcp" \
+            "$RUNNER_TEMP/native-validation" lua5.3 "$RUNNER_TEMP/m3-release-room" 1 1 5 --release
+          (cd "$RUNNER_TEMP/m3-release-room" && sha256sum -c SHA256SUMS)
+          node tests/native/verify-m3-room.mjs "$RUNNER_TEMP/miliastra-mcp" \
+            "$RUNNER_TEMP/native-validation" lua5.3 "$RUNNER_TEMP/m3-release-alt" -17 3 0 --release --headless
+          (cd "$RUNNER_TEMP/m3-release-alt" && sha256sum -c SHA256SUMS)
+      - name: Upload verified six-tier eight-seat native room
+        if: hashFiles('tests/native/verify-m3-room.mjs') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m3-release-room-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/m3-release-room
+          if-no-files-found: error
+          retention-days: 30

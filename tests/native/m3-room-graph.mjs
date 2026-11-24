@@ -26,6 +26,8 @@ function session(sources, ts, count, settings, delayedSignals = false) {
   const internal = [];
   const messages = {};
   const logs = [];
+  const completed = [];
+  const positions = [];
   let dropped = false;
   let deferred;
   let deliveredLate = false;
@@ -132,10 +134,29 @@ function session(sources, ts, count, settings, delayedSignals = false) {
     });
   }
   assert.ok(controller && worker);
+  function formation(seat) {
+    const market = controller.stocks.get(seat);
+    return [market[5], ...market.slice(11, 11 + Number(market[5]) * 6)];
+  }
   function dispatch({ name, params, actor }) {
     const entry = signalHandlers.get(name);
     assert.ok(entry, 'no native graph listens to ' + name);
+    const before = controller.acceptedFrame;
+    const botMove = name === requestSignal && actor === stage && params.action === 14n;
+    const seat = botMove ? params.sequence - 1n : undefined;
+    const beforeMove = botMove ? formation(seat) : undefined;
     entry.handler({ signalSourceEntity: actor, params }, entry.flow);
+    if (name === receiptSignal && controller.acceptedFrame > before && params.outcome > 0n && params.flags === 0n) {
+      const pair = Number(params.pair);
+      completed.push([params.round, controller.fightSeeds[pair], params.outcome, formation(controller.pairs[pair * 2]),
+        formation(controller.pairs[pair * 2 + 1]), params.board]);
+    }
+    if (botMove) {
+      const afterMove = formation(seat);
+      assert.equal(afterMove[0], beforeMove[0]);
+      assert.equal(afterMove[2], beforeMove[Number((params.from - 1n) * 6n + 2n)]);
+      positions.push([seat, params.from, params.to, beforeMove]);
+    }
   }
   function flush() {
     let pending = 0;
@@ -176,7 +197,7 @@ function session(sources, ts, count, settings, delayedSignals = false) {
   assert.ok(running && ticket > 0n);
 
   return {
-    enrolled, field, controller, worker, stage, logs, messages,
+    enrolled, field, controller, worker, stage, logs, messages, completed, positions,
     recoveredSignals: () => dropped && deliveredLate && staleBotDelivered,
     peak: () => maxCalls,
     clock: () => now,
@@ -223,12 +244,13 @@ function read(rows, target) {
   return { revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, market, ack };
 }
 
-function checkRounds(run, settings, receiptChecks = []) {
+function checkRounds(run, settings, receiptChecks = [], positionChecks = []) {
   const { controller: state, worker, stage, enrolled } = run;
   let round = 0n;
   let firstBuy = 0n;
   let replayFrames = 0;
   let replays = 0;
+  let highestTier = 0;
   let botEliminations = 0;
   let humanDepartures = 0;
   let timeouts = 0;
@@ -265,7 +287,7 @@ function checkRounds(run, settings, receiptChecks = []) {
       }
       const frame = deliveries.find(item => item.name === battleSignal && item.values[4] === outcome);
       assert.ok(frame);
-      receiptChecks.push([battleRound, seed, outcome, first, secondTeam, frame.values[5]]);
+      assert.deepEqual(run.completed.at(-1), [battleRound, seed, outcome, first, secondTeam, frame.values[5]]);
       replays += 1;
     }
     if (state.phase === 3n && state.round !== lastPairRound) {
@@ -277,6 +299,7 @@ function checkRounds(run, settings, receiptChecks = []) {
     }
     if (state.phase === 2n && state.round !== round) {
       round = state.round;
+      for (const market of state.stocks.values()) highestTier = Math.max(highestTier, Number(market[1]));
       for (const [index, actor] of enrolled.entries()) {
         let view = read(run.request(actor, 0n), actor);
         if (view.lives[index] === 0n) continue;
@@ -293,6 +316,11 @@ function checkRounds(run, settings, receiptChecks = []) {
         }
         assert.equal(view.seat, BigInt(index + 1));
         assert.equal(view.humans, BigInt(enrolled.length));
+        const releaseOffer = view.market.slice(6, 9).findIndex(code => code > 9n || code < -9n);
+        if (releaseOffer >= 0 && view.market[5] === 5n) {
+          view = read(run.request(actor, 13n, round, view.sequence, 0n, 5n), actor);
+          assert.equal(view.market[5], 4n);
+        }
         if (view.market[5] < 5n) {
           const baseline = view.market;
           let rejected = read(run.request(actor, 11n, round, view.sequence + 1n, 1n), actor);
@@ -302,7 +330,8 @@ function checkRounds(run, settings, receiptChecks = []) {
           assert.deepEqual(run.request(null, 11n, round, view.sequence, 1n), []);
           assert.deepEqual(run.request(stage, 11n, round, 8n, 1n, 0n, 0n), [], 'invalid stage ticket');
           const sequence = view.sequence;
-          view = read(run.request(actor, 11n, round, sequence, 1n, 0n, 0n, 192n), actor);
+          const buy = releaseOffer < 0 ? 1n : BigInt(releaseOffer + 1);
+          view = read(run.request(actor, 11n, round, sequence, buy, 0n, 0n, 192n), actor);
           assert.equal(view.ack, 192n);
           assert.equal(view.market[2], baseline[2] - 3n);
           assert.equal(view.market[5], baseline[5] + 1n);
@@ -332,21 +361,26 @@ function checkRounds(run, settings, receiptChecks = []) {
   for (let seat = enrolled.length; seat < 8; seat += 1) if (state.table[seat] === 0n) botEliminations += 1;
   assert.ok(worker.fights.size > 0 && firstBuy > 0n && replayFrames > 0 && replays > 0);
   assert.ok(run.messages[workSignal] > 0 && run.messages[receiptSignal] > 0);
+  receiptChecks.push(...run.completed);
+  positionChecks.push(...run.positions);
+  const releaseBattles = run.completed.filter(([, , , first, second]) =>
+    [first, second].some(team => team.some((code, at) => at % 6 === 1 && code > 9n))).length;
   return {
     humans: enrolled.length, botEliminations, humanDepartures, timeouts, byes, frames: replayFrames, replays,
+    completedBattles: run.completed.length, releaseBattles, highestTier, positioningMoves: run.positions.length,
     round: Number(state.round), winner: Number(state.winner), places: state.table.slice(8, 16).map(Number),
     clock: Number(run.clock()), ticks, peakExplicitCalls: run.peak(), messages: run.messages, transcript,
   };
 }
 
-export function verifyRoom(sources, ts, settings, receiptChecks) {
+export function verifyRoom(sources, ts, settings, receiptChecks, positionChecks) {
   const combinations = [];
   for (let humans = 1; humans <= 8; humans += 1) {
-    combinations.push(checkRounds(session(sources, ts, humans, settings), settings, receiptChecks));
+    combinations.push(checkRounds(session(sources, ts, humans, settings), settings, receiptChecks, positionChecks));
   }
   assert.deepEqual(checkRounds(session(sources, ts, 1, settings), settings), combinations[0], 'fixed-seed replay differs');
   const delayed = session(sources, ts, 1, settings, true);
-  const recoveredMatch = checkRounds(delayed, settings, receiptChecks);
+  const recoveredMatch = checkRounds(delayed, settings, receiptChecks, positionChecks);
   assert.ok(delayed.recoveredSignals());
   assert.deepEqual(recoveredMatch.places, combinations[0].places, 'one lost request and delayed receipt altered final placement');
   const recovering = session(sources, ts, 2, settings);
