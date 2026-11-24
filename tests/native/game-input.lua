@@ -204,6 +204,9 @@ assert(room.get("Room/Standings/Count").text:find("7 机器人"))
 room.press("Room/Match/Shop/Offer1/Hit")
 room.expect("AP_RoomRequest:11,1,1,1,0,0,1")
 room.capture("room_shop")
+local future_frame = {}
+for index = 1, 66 do future_frame[index] = 0 end
+room.receive("AP_RoomBattle", {11, 2, 1, 2, 0, future_frame})
 room.receive("AP_RoomView", room_snapshot(2, 5, 1, {3,0,0,0,0,0,0,0}, {1,2,3,4,5,6,7,8}, 1, 1))
 assert(room.get("Room/Match/Hint").text:find("第 1 名"))
 for _, name in ipairs({"Previous", "Forward", "Follow"}) do

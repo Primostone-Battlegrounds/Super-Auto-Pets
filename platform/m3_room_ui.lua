@@ -96,7 +96,7 @@ end
 
 local function paint_battle()
     local frame = frame_round == match.round and frames[frame_index]
-    local has_frame = frame ~= nil and (frame.left == match.seat or frame.right == match.seat)
+    local has_frame = frame and (frame.left == match.seat or frame.right == match.seat) or false
     for _, name in ipairs({"Previous", "Forward", "Follow", "Ally", "Enemy"}) do
         visible("Replay/" .. name, has_frame)
     end
