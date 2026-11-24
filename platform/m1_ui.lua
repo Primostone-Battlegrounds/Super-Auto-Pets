@@ -1,4 +1,4 @@
-local rules_data = require("autopets.data")
+local rules_data = native_catalog
 local run = require("autopets.run")
 local art = require("autopets.art")
 local root
@@ -8,6 +8,7 @@ local rules = rules_data.rules
 local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
 local styles = {guardian = "守护", striker = "强攻", swarm = "群战"}
 local difficulty_names = {standard = "标准", beginner = "入门"}
+local trigger_names = {start = "开场", faint = "退场", hurt = "首次受伤存活", attack = "出击", summon = "友方召唤"}
 local phases = {preparation = "准备", battle = "战斗", settlement = "结算", ended = "终局"}
 local primary = {preparation = "开战", battle = "结算", settlement = "下一轮", ended = "再挑战本局"}
 local events = {
@@ -242,7 +243,7 @@ end
 local function pet_ability(pet, level)
     local skill = pet.ability
     local heading = pet.name .. " · " .. skill.name
-    local trigger = skill.trigger == "start" and "开场" or "退场"
+    local trigger = assert(trigger_names[skill.trigger])
     local power = skill.power * level
     if skill.effect == "shield_front" then
         return heading, string.format("%s · 前排 %d 名队员各获得 %d 盾", trigger, skill.targets, power)
@@ -250,8 +251,20 @@ local function pet_ability(pet, level)
         return heading, string.format("%s · 随机 %d 名对手各受 %d 伤", trigger, skill.targets, power)
     elseif skill.effect == "buff_front" then
         return heading, string.format("%s · 前排队员获得 %d 命", trigger, power)
+    elseif skill.effect == "shield_next" then
+        return heading, string.format("%s · 身后首位加 %d 盾", trigger, power)
+    elseif skill.effect == "hit_front" then
+        return heading, string.format("%s · 对手前排受 %d 伤", trigger, power)
+    elseif skill.effect == "hit_back" then
+        return heading, string.format("%s · 对手末位受 %d 伤", trigger, power)
+    elseif skill.effect == "splash" then
+        return heading, string.format("%s · 对手第 2 位受 %d 伤", trigger, power)
+    elseif skill.effect == "rally_summon" then
+        return heading, string.format("%s · 新单位加 %d 攻和 %d 命", trigger, power, power)
     elseif skill.effect == "summon" then
-        return heading, string.format("%s · 召唤 %d 只%s", trigger, skill.power, rules_data.token_by_id[skill.token].name)
+        local token = rules_data.token_by_id[skill.token]
+        return heading, string.format("%s · 召唤 %d 只%s，%d攻 %d命",
+            trigger, skill.power, token.name, token.attack + level - 1, token.health)
     end
     return heading, trigger
 end
@@ -265,6 +278,10 @@ local function selected_info(picked)
     local item = offer(kind, index)
     if kind == "food" then
         local food = rules_data.food_by_id[item.id]
+        if food.adjacent_attack or food.adjacent_health then
+            return food.name .. " · 食物", string.format("目标 +%d攻 +%d命 · 邻位 +%d攻 +%d命",
+                food.attack, food.health, food.adjacent_attack or 0, food.adjacent_health or 0)
+        end
         local stats = {}
         if food.attack > 0 then stats[#stats + 1] = string.format("攻击 +%d", food.attack) end
         if food.health > 0 then stats[#stats + 1] = string.format("生命 +%d", food.health) end
@@ -305,6 +322,9 @@ local function battle_event(event)
     end
     if event.ability then return summary .. "「" .. event.ability .. "」" end
     if event.target_name then return summary .. " → " .. event.target_name end
+    if event.attack_amount then
+        return string.format("%s %s · +%d攻 +%d命", side, event.name, event.attack_amount, event.amount)
+    end
     if event.amount then return summary .. " " .. event.amount end
     return summary
 end
@@ -735,7 +755,7 @@ end
 local function choose_difficulty()
     if has_started then return end
     difficulty = difficulty == "standard" and "beginner" or "standard"
-    session = run.new(state.seed, difficulty)
+    session = run.new(state.seed, difficulty, rules_data)
     draw()
 end
 
@@ -759,7 +779,7 @@ local function new_game_from_menu()
         show_restart("menu")
         return
     end
-    session = run.new(next_seed(), difficulty)
+    session = run.new(next_seed(), difficulty, rules_data)
     has_started = false
     reset_view()
     draw()
@@ -771,7 +791,7 @@ local function confirm_restart()
     local in_menu = confirming_restart == "menu"
     confirming_restart = nil
     if in_menu then
-        session = run.new(next_seed(), difficulty)
+        session = run.new(next_seed(), difficulty, rules_data)
         menu_open = false
     else
         local ok, error_code = session:restart()
@@ -895,7 +915,7 @@ function OnStart()
         assert(#layers <= portrait_layers, "portrait exceeds the native pool: " .. id)
     end
     local seed = assert(math.tointeger(script:GetParam("seed")), "seed must be an integer")
-    session = run.new(seed, difficulty)
+    session = run.new(seed, difficulty, rules_data)
     for index = 1, rules.team_size do bind_card("Team" .. index, "team", index) end
     for index = 1, rules.pet_shop_slots do bind_card("Shop/Pet" .. index, "pet", index) end
     for index = 1, rules.food_shop_slots do bind_card("Shop/Food" .. index, "food", index) end

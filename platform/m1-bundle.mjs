@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import { portraitLayers } from './m1-ui.mjs';
 
 const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art'];
-const validModules = new Set(names.map(name => `autopets.${name}`));
-
-export function bundleRun(parse) {
+export function bundleRun(parse, release = false) {
+  const modules = release ? [...names, 'release_data'] : names;
+  const validModules = new Set(modules.map(name => `autopets.${name}`));
+  const catalog = release ? 'autopets.release_data' : 'autopets.data';
   function convert(relativePath) {
     let source = fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8');
     const references = [];
@@ -26,7 +27,7 @@ export function bundleRun(parse) {
     return source;
   }
 
-  const factories = names.map(name =>
+  const factories = modules.map(name =>
     `factories['autopets.${name}'] = function()\n${convert(`../src/autopets/${name}.lua`)}\nend`,
   );
   return [
@@ -42,6 +43,7 @@ export function bundleRun(parse) {
     '    return loaded[name]',
     'end',
     ...factories,
+    `local native_catalog = loadAutoPetsModule('${catalog}')`,
     convert('./m1_ui.lua'),
   ].join('\n\n');
 }

@@ -13,9 +13,14 @@ const revision = '59c576e41632a6bf6781bbca83a676d0da0374ec';
 const fixtureName = 'editor-2026-10-26-shapes.gil';
 const fixtureHash = 'b8aa63c8e6c5c24964784842329a37adeb60d50c2f56272f6cc512907baf3706';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const [checkoutArg, scratch, lua, packageDir] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const release = args.at(-1) === '--release';
+if (release) args.pop();
+const [checkoutArg, scratch, lua, packageDir] = args;
+const profile = release ? 'release' : 'compatibility';
+const candidateName = release ? 'm4-single-practice' : 'm1-auto-pets';
 assert.ok(checkoutArg && scratch && lua,
-  'Usage: node tests/native/verify-m1.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable> [new package directory]');
+  'Usage: node tests/native/verify-m1.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable> [new package directory] [--release]');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0', 'Set MILIASTRA_ALLOW_LIVE_WRITE=0');
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 const git = args => execFileSync('git', args, { cwd: projectRoot, encoding: 'utf8' }).trim();
@@ -37,8 +42,8 @@ assert.match(versions.lua54, /^Lua 5\.4\./);
 const replayScript = fileURLToPath(new URL('./m1-replay.lua', import.meta.url));
 const replayOptions = { cwd: projectRoot, timeout: 30_000, maxBuffer: 64 * 1024 * 1024 };
 const startedAt = performance.now();
-const source54 = execFileSync(lua54, ['-E', replayScript, 'source'], replayOptions);
-const source53 = execFileSync(lua, ['-E', replayScript, 'source'], replayOptions);
+const source54 = execFileSync(lua54, ['-E', replayScript, 'source', profile], replayOptions);
+const source53 = execFileSync(lua, ['-E', replayScript, 'source', profile], replayOptions);
 const replayHash = sha256(source54);
 assert.equal(sha256(source53), replayHash, 'Source replay differs between Lua 5.3 and Lua 5.4');
 const replayPrelude = source54.subarray(0, 200).toString('utf8');
@@ -46,12 +51,14 @@ const rulesHash = replayPrelude.match(/^rules_hash ((?:sha256:)?[a-f0-9]{64})\n/
 const assets = replayPrelude.match(/\nassets (\d+) (\d+) (\d+)\n/);
 assert.ok(rulesHash && assets, 'Replay must identify its runtime catalog and enumerate presentation assets');
 assert.ok(Number(assets[3]) <= portraitLayers, 'The GIL portrait pool cannot display the whole runtime catalog');
-const catalog = fs.readFileSync(path.join(projectRoot, 'src/autopets/data.lua'));
-const normalizedCatalog = catalog.toString('utf8').replace(/\r\n/g, '\n').replace(/^data\.rules_hash = "[^"]*"\n/m, '');
+const catalogFiles = release ? ['data.lua', 'release_data.lua'] : ['data.lua'];
+const catalog = catalogFiles.map(file => fs.readFileSync(path.join(projectRoot, 'src/autopets', file)));
+const normalizedCatalog = catalog.map(bytes =>
+  bytes.toString('utf8').replace(/\r\n/g, '\n').replace(/^data\.rules_hash = "[^"]*"\n/m, '')).join('');
 assert.equal(rulesHash, `sha256:${sha256(normalizedCatalog)}`, 'The runtime catalog hash is stale');
 const sources = {
-  revision: sourceRevision, dirty: sourceChanges !== '', rulesHash,
-  catalogSha256: sha256(catalog),
+  revision: sourceRevision, dirty: sourceChanges !== '', profile, rulesHash,
+  catalogSha256: sha256(Buffer.concat(catalog)),
   artSha256: sha256(fs.readFileSync(path.join(projectRoot, 'src/autopets/art.lua'))),
 };
 const sourceReplayMs = performance.now() - startedAt;
@@ -63,12 +70,12 @@ const toolRequire = createRequire(path.join(checkout, 'package.json'));
 const { parse } = toolRequire('luaparse');
 const { Client } = toolRequire('@modelcontextprotocol/sdk/client/index.js');
 const { StdioClientTransport } = toolRequire('@modelcontextprotocol/sdk/client/stdio.js');
-const source = bundleRun(parse);
+const source = bundleRun(parse, release);
 assert.ok(source.length <= 400_000, 'Lua source exceeds the MCP inline limit');
 const fixture = path.join(checkout, 'tests', 'fixtures', fixtureName);
 assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
 fs.mkdirSync(scratch, { recursive: true });
-const workspace = fs.mkdtempSync(path.join(fs.realpathSync(scratch), 'm1-run-'));
+const workspace = fs.mkdtempSync(path.join(fs.realpathSync(scratch), `${candidateName}-`));
 const input = path.join(workspace, 'input.gil');
 fs.copyFileSync(fixture, input, fs.constants.COPYFILE_EXCL);
 const client = new Client({ name: 'auto-pets-m1-native', version: '0.1.0-alpha.0' });
@@ -166,10 +173,13 @@ function readFrames(file, records) {
     assert.ok(!frame.has(key), `Duplicate frame control: ${name} ${key}`);
     frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
   }
-  assert.deepEqual([...frames.keys()].sort(), [
+  const expectedFrames = release ? [
+    'battle_full', 'menu', 'release_summon', 'tier_five', 'tier_four', 'tier_six', 'victory',
+  ] : [
     'battle_attack', 'battle_damage', 'battle_full', 'battle_summon', 'defeat', 'menu', 'menu_discard',
     'merge_preview', 'populated', 'preparation', 'restart_confirm', 'shop_tooltip', 'victory',
-  ]);
+  ];
+  assert.deepEqual([...frames.keys()].sort(), expectedFrames);
   return {
     canvas: canvases.mobile,
     canvases,
@@ -220,7 +230,7 @@ function visibleResources(frames) {
   }));
 }
 
-const seed = 1;
+const seed = release ? 8 : 1;
 const buildStartedAt = performance.now();
 let report;
 try {
@@ -249,7 +259,7 @@ try {
   assert.ok(fs.realpathSync(scripted.mapPath).startsWith(workspace + path.sep));
   const mounted = { name: nativeRun.script, values: { seed } };
   const built = await call('scene_add_client_ui', {
-    mapPath: scripted.mapPath, ...nativeRun, script: mounted, outputName: 'm1-auto-pets',
+    mapPath: scripted.mapPath, ...nativeRun, script: mounted, outputName: candidateName,
   });
   const { mapPath } = built;
   assert.ok(fs.realpathSync(mapPath).startsWith(workspace + path.sep));
@@ -275,6 +285,15 @@ try {
   verifyControls(nativeRun.controls, decoded.interface.controls, records);
   assert.equal(new Set(Object.values(decoded.ids)).size, records.length + 2);
   const byPath = new Map(records.map(item => [item.path, item]));
+  const field = byPath.get('Field');
+  const heading = byPath.get('Heading');
+  for (const name of ['OpenMenu', 'Reset']) {
+    const button = byPath.get(name);
+    assert.ok(button.position[1] - button.size[1] / 2 > field.position[1] + field.size[1] / 2,
+      `${name} overlaps the field`);
+    assert.ok(button.position[1] + button.size[1] / 2 < heading.position[1] - heading.size[1] / 2,
+      `${name} overlaps the heading`);
+  }
   const battlePanel = byPath.get('Battle');
   for (const card of records.filter(item => /^Team[1-5]$/.test(item.path))) {
     assert.ok(battlePanel.position[1] + battlePanel.size[1] / 2 < card.position[1] - card.size[1] / 2,
@@ -311,7 +330,7 @@ try {
     [record.path, record.kind, ...record.position, ...record.size].join('\t')).join('\n') + '\n');
   const buildAndReadbackMs = performance.now() - buildStartedAt;
   const replayStartedAt = performance.now();
-  const extractedReplay = execFileSync(lua, ['-E', replayScript, 'bundle', extracted], replayOptions);
+  const extractedReplay = execFileSync(lua, ['-E', replayScript, 'bundle', extracted, profile], replayOptions);
   assert.equal(sha256(extractedReplay), replayHash, 'GIL readback replay differs from tested source');
   const replayMs = performance.now() - replayStartedAt;
   const replayPath = path.join(workspace, 'domain-replay.txt');
@@ -323,7 +342,7 @@ try {
   const inputLogs = {};
   for (const [device, frameFile] of [['pc', framesRaw], ['mobile', mobileFramesRaw]]) {
     const inputStartedAt = performance.now();
-    inputLogs[device] = execFileSync(lua, ['-E', inputScript, extracted, bindings, String(decodedSeed), frameFile, device],
+    inputLogs[device] = execFileSync(lua, ['-E', inputScript, extracted, bindings, String(decodedSeed), frameFile, device, profile],
       { cwd: projectRoot, encoding: 'utf8', timeout: 30_000 });
     inputSimulationMs[device] = performance.now() - inputStartedAt;
   }
@@ -394,9 +413,9 @@ fs.writeFileSync(evidence, JSON.stringify(report, null, 2) + '\n');
 console.log(`Evidence: ${evidence}`);
 
 if (packageDir) {
-  const mapFile = 'm1-auto-pets.gil';
+  const mapFile = `${candidateName}.gil`;
   const manifest = {
-    sourceRevision,
+    sourceRevision, profile,
     rulesHash: report.sources.rulesHash,
     catalogSha256: report.sources.catalogSha256,
     artSha256: report.sources.artSha256,
@@ -426,7 +445,8 @@ if (packageDir) {
     };
     fs.writeFileSync(path.join(packageDir, 'evidence.json'), JSON.stringify(evidenceForPackage, null, 2) + '\n');
     fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(packageDir, 'MCP-FIXTURE-LICENSE.txt'));
-    fs.copyFileSync(path.join(projectRoot, 'platform/M1.md'), path.join(packageDir, 'device-acceptance.md'));
+    const acceptanceDoc = release ? 'platform/M4.md' : 'platform/M1.md';
+    fs.copyFileSync(path.join(projectRoot, acceptanceDoc), path.join(packageDir, 'device-acceptance.md'));
     const acceptanceDir = path.join(packageDir, 'acceptance-input');
     fs.mkdirSync(acceptanceDir);
     const inputs = {
@@ -438,13 +458,14 @@ if (packageDir) {
     for (const [name, inputPath] of Object.entries(inputs)) {
       fs.copyFileSync(inputPath, path.join(acceptanceDir, name));
     }
-    const guide = `# 小动物自走棋 M1 千星候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
+    const title = release ? 'M4 六阶单人练习' : 'M1 单人练习';
+    const guide = `# 小动物自走棋 ${title}千星候选\n\n游戏提交 \`${sourceRevision}\`。\n\n` +
       `运行 \`sha256sum -c SHA256SUMS\` 校验文件。设备验收步骤见 [device-acceptance.md](device-acceptance.md)。\n\n` +
       `用 Lua 5.3 复验回读快照和事件。\n\n` +
-      `\`\`\`sh\nlua5.3 -E acceptance-input/m1-replay.lua bundle acceptance-input/readback.lua > replay-check.txt\n` +
+      `\`\`\`sh\nlua5.3 -E acceptance-input/m1-replay.lua bundle acceptance-input/readback.lua ${profile} > replay-check.txt\n` +
       `cmp domain-replay.txt replay-check.txt\n` +
       `for device in pc mobile; do\n` +
-      `  lua5.3 -E acceptance-input/m1-input.lua acceptance-input/readback.lua acceptance-input/control-paths.tsv ${seed} "input-frames-$device.tsv" "$device"\n` +
+      `  lua5.3 -E acceptance-input/m1-input.lua acceptance-input/readback.lua acceptance-input/control-paths.tsv ${seed} "input-frames-$device.tsv" "$device" ${profile}\n` +
       `done\n` +
       `cmp input-frames-pc.tsv input-frames-mobile.tsv\n\`\`\`\n`;
     fs.writeFileSync(path.join(packageDir, 'README.md'), guide);

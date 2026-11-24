@@ -5,6 +5,7 @@ local configured_seed = seed
 local cursor = {CursorDown = "CursorDown", CursorClick = "CursorClick",
     CursorBeginDrag = "CursorBeginDrag", CursorDrag = "CursorDrag", CursorEndDrag = "CursorEndDrag"}
 local device = arg[5] or "pc"
+local release = arg[6] == "release"
 local canvas = assert(({pc = {1600, 900}, mobile = {1280, 720}})[device], "unknown input device")
 local main_touch = device == "pc" and -1 or 4
 local capture_file = assert(io.open(arg[4], "w"))
@@ -250,6 +251,13 @@ local function shop(action, first, second)
     elseif action == "feed" then
         click("Shop/Food" .. first)
         click("Team" .. second)
+    elseif action == "sell" then
+        click("Team" .. first)
+        click("Shop/Sell")
+    elseif action == "reward" then
+        assert(first == 1 and label("Shop/Reward/Tag"):match("^1/"))
+        click("Shop/Reward")
+        click("Shop/Buy")
     else
         assert(action == "reroll")
         click("Shop/Reroll")
@@ -303,7 +311,7 @@ local function mirrored_portrait()
     error("no matching opposing portraits to verify mirror")
 end
 
-local function finish(outcome, terminal, inspect_playback)
+local function finish(outcome, terminal, inspect_playback, observe_event)
     click("Primary")
     assert(label("Primary/Title") == "跳过回放" and ticking)
     assert(not nodes.Shop.active and nodes.Battle.active)
@@ -320,6 +328,7 @@ local function finish(outcome, terminal, inspect_playback)
         for _ = 1, 250 do
             if label("Primary/Title") == "结算" then break end
             click("Battle/Replay")
+            if observe_event then observe_event() end
         end
         assert(label("Battle/Event"):find("战斗结束", 1, true))
     elseif inspect_playback then
@@ -390,7 +399,9 @@ local function finish(outcome, terminal, inspect_playback)
     end
     assert(label("Primary/Title") == "结算" and not ticking and not nodes["Battle/Replay"].active)
     local battle_outcome = label("Battle/Outcome")
-    if outcome then assert(battle_outcome == "本轮" .. outcomes[outcome], battle_outcome) end
+    if outcome then
+        assert(battle_outcome == "本轮" .. outcomes[outcome], label("Round/Value") .. "：" .. battle_outcome)
+    end
     local result = label("Battle/Event")
     local wins, lives = label("Wins/Value"), label("Lives/Value")
     if inspect_playback then
@@ -440,6 +451,88 @@ local function opening(expected_seed)
     assert(nodes.Reset.active and nodes["Reset/Title"].visible and not nodes.Restart.active)
     assert(label("Shop/Buy/Title") == "购买 · 3 金" and label("Shop/Reroll/Title") == "刷新 · 1 金")
     assert(label("Shop/Sell/Title") == "出售 · +1 金/级")
+end
+
+local function finish_simulation()
+    destroy_script()
+    assert(capture_file:close())
+    assert(installs == removals and audio_stops <= audio_plays)
+    print(string.format("NATIVE_RESOURCES listeners_peak=%d listeners_installed=%d listeners_released=%d portrait_image_writes=%d audio_plays=%d audio_stops=%d",
+        listener_peak, installs, removals, image_writes, audio_plays, audio_stops))
+    local sounds = {}
+    for sound in pairs(sound_ids) do sounds[#sounds + 1] = sound end
+    table.sort(sounds)
+    print("NATIVE_AUDIO " .. table.concat(sounds, ","))
+    for _, line in ipairs(logs) do print(line) end
+    print(release and "Native release simulation passed 15 rounds, all six shop tiers, summon replay, terminal and restart"
+        or "Native UI simulation passed shop, desktop/mobile input, menu recovery, replay, audio lifecycle, and all outcomes")
+end
+
+local function release_run()
+    assert(seed == 8, "release candidate uses the fixed seed 8")
+    capture("menu")
+    opening(seed)
+    local rounds = {
+        {"win", {"buy", 1}, {"buy", 2}, {"buy", 3}},
+        {"draw", {"buy", 1}, {"buy", 3}, {"feed", 1, 1}},
+        {"loss", {"feed", 1, 1}, {"feed", 2, 1}, {"combine", 1, 1}},
+        {"loss", {"combine", 2, 1}, {"feed", 2, 1}, {"combine", 1, 3}, {"move", 2, 3}},
+        {"loss", {"combine", 2, 2}, {"feed", 1, 1}, {"sell", 4}, {"reward", 1}, {"move", 5, 2}},
+        {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"combine", 3, 1}},
+        {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"sell", 5}, {"buy", 1}, {"move", 5, 3}},
+        {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"sell", 5}, {"buy", 1}, {"move", 5, 2}},
+        {"win", {"feed", 2, 1}, {"sell", 3}, {"buy", 1}, {"feed", 1, 1}, {"move", 5, 3}},
+        {"loss", {"feed", 2, 3}, {"sell", 5}, {"buy", 3}, {"feed", 1, 1}, {"move", 4, 5}, {"move", 2, 4}},
+        {"win", {"feed", 1, 2}, {"feed", 2, 1}, {"sell", 4}, {"buy", 3}, {"move", 4, 5}},
+        {"win", {"feed", 2, 2}, {"feed", 1, 2}, {"reroll"}, {"feed", 1, 2}},
+        {"win", {"feed", 1, 1}, {"sell", 5}, {"buy", 1}, {"feed", 2, 1}},
+        {"win", {"feed", 2, 1}, {"combine", 1, 1}, {"feed", 1, 1}},
+        {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 2, 1}},
+    }
+    for round, fixture in ipairs(rounds) do
+        assert(label("Shop/Caption") == ("商店 · %d 阶"):format(math.min(6, (round + 1) // 2)))
+        if round == 7 then
+            assert(label("Shop/Pet2/Name") == "烬耳狞猫")
+            click("Shop/Pet2")
+            assert(label("Tooltip/Body") == "开场 · 对手前排受 3 伤")
+            capture("tier_four")
+        elseif round == 9 then
+            assert(label("Shop/Pet1/Name") == "月鬃牦牛")
+            click("Shop/Food2")
+            assert(label("Tooltip/Heading") == "茴香卷 · 食物")
+            assert(label("Tooltip/Body"):find("邻位 +1攻", 1, true))
+            capture("tier_five")
+            click("Shop/Food2")
+        elseif round == 11 then
+            assert(label("Shop/Pet3/Name") == "汐角鲸")
+            click("Shop/Pet3")
+            assert(label("Tooltip/Body"):find("潮角幼鲸，4攻 3命", 1, true))
+            capture("tier_six")
+        end
+        for command = 2, #fixture do shop(table.unpack(fixture[command])) end
+        if round == 8 then
+            finish(fixture[1], false, "manual", function()
+                local path = event_card("^入场$")
+                if path and not captured.release_summon and label(path .. "/Name") == "蕨羽雏" then
+                    assert(nodes[path .. "/Portrait/Layer1"].visible)
+                    capture("release_summon")
+                end
+            end)
+            assert(captured.release_summon)
+        else
+            finish(fixture[1], round == #rounds)
+        end
+    end
+    assert(logs[#logs] == "AUTO_PETS_M1 phase=ended round=15 wins=10 lives=1 final=win seed=8")
+    capture("victory")
+    click("Primary")
+    opening(seed)
+end
+
+if release then
+    release_run()
+    finish_simulation()
+    return
 end
 
 assert(nodes.Menu.active and label("Menu/Continue/Title") == "单人练习")
@@ -690,14 +783,4 @@ opening(interaction_seed + 1)
 click("OpenMenu")
 assert(label("Menu/Progress"):match("^入门"), "a new run discarded the practice difficulty")
 
-destroy_script()
-assert(capture_file:close())
-assert(installs == removals and audio_stops <= audio_plays)
-print(string.format("NATIVE_RESOURCES listeners_peak=%d listeners_installed=%d listeners_released=%d portrait_image_writes=%d audio_plays=%d audio_stops=%d",
-    listener_peak, installs, removals, image_writes, audio_plays, audio_stops))
-local sounds = {}
-for sound in pairs(sound_ids) do sounds[#sounds + 1] = sound end
-table.sort(sounds)
-print("NATIVE_AUDIO " .. table.concat(sounds, ","))
-for _, line in ipairs(logs) do print(line) end
-print("Native UI simulation passed shop, desktop/mobile input, menu recovery, replay, audio lifecycle, and all outcomes")
+finish_simulation()
