@@ -145,7 +145,7 @@ for round, actions in ipairs(rounds) do
     if round < #rounds then practice_press("Primary") end
 end
 assert(practice.get("Practice/Primary/Title").text == "再挑战本局")
-assert(practice.get("Practice/Wins/Value").text == "10" and practice.get("Practice/Lives/Value").text == "1")
+assert(practice.get("Practice/Wins/Value").text == "10 / 10" and practice.get("Practice/Lives/Value").text == "1 / 5")
 practice.capture("practice_result")
 practice_press("Primary")
 assert(practice.get("Practice/Round/Value").text == "第 1 轮 · 准备")
