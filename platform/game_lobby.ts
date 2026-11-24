@@ -1,7 +1,7 @@
 /// <reference types="genshin-ts" />
 import { defineSignal, g } from 'genshin-ts/runtime/core';
 
-const chooseMode = defineSignal('AP_GameChooseMode', [['mode', 'int']] as const);
+const chooseMode = defineSignal('AP_GameChooseMode', [['mode', 'int'], ['fill', 'bool']] as const);
 const lobbyView = defineSignal('client:AP_GameLobby', [
   ['player', 'entity'], ['mode', 'int'], ['present', 'int'], ['waiting', 'int'],
 ] as const);
@@ -26,7 +26,7 @@ g.server({
   const stage = f.getSelfEntity();
   let mode = f.getCustomVariable(stage, 'AP_GameMode').asType('int');
   const canStartDuel = requested === 2n && present === 2n && expected === 2n;
-  const canStartRoom = requested === 8n && present >= 1n && present <= 8n && expected === present;
+  const canStartRoom = requested === 8n && present >= 1n && present <= 8n && (expected === present || event.params.fill);
   if (mode === 0n && (canStartDuel || canStartRoom)) {
     mode = requested;
     f.setCustomVariable(stage, 'AP_GameMode', mode, false);

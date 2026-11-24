@@ -35,6 +35,7 @@ local function simulate()
                 local args = {}
                 return {
                     AddInt = function(_, value) args[#args + 1] = assert(math.tointeger(value)) end,
+                    AddBool = function(_, value) assert(type(value) == "boolean"); args[#args + 1] = tostring(value) end,
                     SendSignal = function() commands[#commands + 1] = name .. ":" .. table.concat(args, ",") end,
                 }
             end,
@@ -55,7 +56,7 @@ local function simulate()
     }, {__index = _G})
     assert(loadfile(source, "t", env))()
     env.OnStart()
-    assert(commands[#commands] == "AP_GameChooseMode:0")
+    assert(commands[#commands] == "AP_GameChooseMode:0,false")
     local function press(path)
         local target = get(path)
         local ancestor = path
@@ -150,13 +151,13 @@ practice_press("Primary")
 assert(practice.get("Practice/Round/Value").text == "第 1 轮 · 准备")
 practice.press("Practice/OpenMenu/Hit")
 practice.press("Practice/Menu/Back/Hit")
-practice.expect("AP_GameChooseMode:0")
+practice.expect("AP_GameChooseMode:0,false")
 practice.destroy()
 
 local duel = simulate()
 duel.view(0, 1, 1)
 duel.press("Lobby/Choices/Duel/Hit")
-duel.expect("AP_GameChooseMode:2")
+duel.expect("AP_GameChooseMode:2,false")
 duel.view(0, 1, 1)
 assert(duel.get("Lobby/Status").text:find("加载中"))
 duel.capture("waiting_friend")
@@ -180,9 +181,11 @@ assert(duel.get("Duel").active)
 duel.destroy()
 
 local room = simulate()
-room.view(0, 1)
+room.view(0, 1, 1)
 room.press("Lobby/Choices/Room/Hit")
-room.expect("AP_GameChooseMode:8")
+room.expect("AP_GameChooseMode:0,false")
+room.press("Lobby/Choices/Room/Hit")
+room.expect("AP_GameChooseMode:8,true")
 room.view(8, 1)
 room.expect("AP_RoomRequest:0,0,0,0,0,0,0")
 room.receive("AP_RoomView", room_snapshot(1, 2, 1))
@@ -195,7 +198,7 @@ room.receive("AP_RoomView", room_snapshot(2, 5, 1, {3,0,0,0,0,0,0,0}, {1,2,3,4,5
 assert(room.get("Room/Match/Hint").text:find("第 1 名"))
 room.capture("room_result")
 room.press("Room/Back/Hit")
-room.expect("AP_GameChooseMode:0")
+room.expect("AP_GameChooseMode:0,false")
 assert(room.get("Lobby").active and not room.get("Room").active)
 room.destroy()
 output:close()

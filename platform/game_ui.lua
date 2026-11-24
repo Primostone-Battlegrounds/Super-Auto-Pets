@@ -1,12 +1,13 @@
 local click = Enum.CursorEventType.CursorClick
 local root, active, section, mode, practice, online, lobby
-local elapsed = 0
+local elapsed, loading, confirm_fill = 0, 0, false
 local bindings = {}
 local online_modes = {[2] = "好友 1v1", [8] = "八人吃鸡"}
 
-local function request(choice)
+local function request(choice, fill)
     local signal = game.ServerSignal("AP_GameChooseMode")
     signal:AddInt(choice)
+    signal:AddBool(fill == true)
     signal:SendSignal()
 end
 
@@ -28,7 +29,7 @@ end
 
 local function main_menu()
     show_section("Lobby")
-    elapsed = 0
+    elapsed, confirm_fill = 0, false
     request(0)
 end
 
@@ -46,14 +47,16 @@ local function receive_lobby(_, values)
     if mode ~= 0 and selected ~= mode then return end
     local label = online_modes[selected]
     local entering = mode == 0 and label
-    mode = selected
+    mode, loading = selected, waiting
+    if label or waiting == 0 then confirm_fill = false end
+    lobby:FindChild("Choices/Room/Title").text = confirm_fill and "确认开局 · 机器人补位" or "八人吃鸡"
     set_visible(lobby:GetChild("Choices"), label == nil)
     set_visible(lobby:GetChild("Continue"), label ~= nil)
     lobby:FindChild("Continue/Title").text = label and ("回到" .. label) or ""
     local count = string.format("已进入 %d 人", present)
     if waiting > 0 then count = count .. string.format(" · %d 人加载中", waiting) end
     lobby:GetChild("Status").text = label and ("当前对局 · " .. label) or count
-    lobby:GetChild("Help").text = label and "再次对战可从千星房间选择「重新挑战」。"
+    lobby:GetChild("Help").text = label and "本局结束后，房主可从千星房间选择「重新挑战」。"
         or "好友 1v1 请先通过千星好友房间邀请好友，两人进入后即可开始。"
     if entering and section == "Lobby" then show_online() end
 end
@@ -70,8 +73,18 @@ end
 function OnStart()
     root, active, mode = script.object, true, 0
     lobby = root:GetChild("Lobby")
-    bind(lobby, "Choices/Room/Hit", function() request(8) end)
-    bind(lobby, "Choices/Duel/Hit", function() request(2) end)
+    bind(lobby, "Choices/Room/Hit", function()
+        if loading > 0 and not confirm_fill then
+            confirm_fill = true
+            lobby:FindChild("Choices/Room/Title").text = "确认开局 · 机器人补位"
+            return
+        end
+        request(8, confirm_fill)
+    end)
+    bind(lobby, "Choices/Duel/Hit", function()
+        confirm_fill = false
+        request(2)
+    end)
     bind(lobby, "Choices/Practice/Hit", function()
         show_section("Practice")
         if not practice then

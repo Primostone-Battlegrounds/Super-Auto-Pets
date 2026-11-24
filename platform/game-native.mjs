@@ -13,7 +13,7 @@ const read = name => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 export const stageVariables = ['AP_GameMode', 'AP_RoomTicket'];
 export const playerVariables = duelVariables;
 export const signals = {
-  AP_GameChooseMode: [{ name: 'mode', type: 'integer' }],
+  AP_GameChooseMode: [{ name: 'mode', type: 'integer' }, { name: 'fill', type: 'boolean' }],
   AP_GameLobby: ['mode', 'present', 'waiting'].map(name => ({ name, type: 'integer' })),
   ...roomSignals,
   ...Object.fromEntries(Object.entries(duelSignals).map(([name, fields]) =>

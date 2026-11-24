@@ -45,8 +45,8 @@ function verifyLobby(source, ts) {
       replies.push([target, ...values]);
     },
   };
-  function choose(actor, requested) {
-    receive({ signalSourceEntity: actor, params: { mode: requested } }, flow);
+  function choose(actor, requested, fill = false) {
+    receive({ signalSourceEntity: actor, params: { mode: requested, fill } }, flow);
     return replies.splice(0);
   }
   assert.deepEqual(choose('intruder', 8n), []);
@@ -56,6 +56,9 @@ function verifyLobby(source, ts) {
   field.push('B');
   assert.deepEqual(choose('A', 2n), [['A', 2n, 2n, 0n], ['B', 2n, 2n, 0n]]);
   assert.deepEqual(choose('B', 8n), [['B', 2n, 2n, 0n]]);
+  mode = 0n;
+  field = ['A'];
+  assert.deepEqual(choose('A', 8n, true), [['A', 8n, 1n, 1n]]);
   for (let count = 1; count <= 8; count += 1) {
     field = Array.from({ length: count }, (_, index) => `P${index + 1}`);
     expected = BigInt(count);
