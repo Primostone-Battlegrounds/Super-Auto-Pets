@@ -140,9 +140,8 @@ end
 
 function standings.bind(root, mode)
     local capacity = assert(modes[mode])
-    local phase = assert(root:GetChild("Phase"))
-    local count = assert(root:GetChild("Count"))
-    local opponent = assert(root:GetChild("Opponent"))
+    local heading = {}
+    for _, name in ipairs({"Phase", "Count", "Opponent"}) do heading[name] = assert(root:GetChild(name)) end
     local rows = {}
     for seat = 1, capacity do
         rows[seat] = {assert(root:GetChild("Seat" .. seat)), assert(root:GetChild("Seat" .. seat .. "Detail"))}
@@ -163,11 +162,11 @@ function standings.bind(root, mode)
             caption = "第 " .. view.round .. " 轮 · " .. caption
         end
         if view.seconds and view.seconds > 0 then caption = caption .. " · " .. view.seconds .. " 秒" end
-        set(phase, caption)
+        set(heading.Phase, caption)
         local counts = string.format("%d 真人 · %d 机器人", view.human_count, view.bot_count)
         if view.alive_count and view.phase ~= "lobby" then counts = counts .. " · " .. view.alive_count .. " 存活" end
-        set(count, counts)
-        set(opponent, opponent_label(view))
+        set(heading.Count, counts)
+        set(heading.Opponent, opponent_label(view))
         for seat, controls in ipairs(rows) do
             local name, detail = row_text(view, seat)
             set(controls[1], name)
