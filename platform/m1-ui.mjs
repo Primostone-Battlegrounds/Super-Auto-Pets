@@ -1,14 +1,14 @@
 const plane = 100001;
 const disc = 106025;
 export const portraitLayers = 16;
-const pigment = {
+export const pigment = {
   edge: '#9fb2aa', canvas: '#f4f4e9', ink: '#202f35', muted: '#475f5d', cream: '#fff9e9',
   field: '#dce9e4', rail: '#c8ddd4', opposingRail: '#ecded4', rule: '#b9cec5',
   shelf: '#f3e8cf', shelfRule: '#d9c7a6', chip: '#edf2e8', primary: '#286452',
   player: '#8aaf9c', enemy: '#b79389', market: '#e9d3a0', gold: '#9b6021', ice: '#406f82',
 };
 
-function image(name, position, size, colour, options = {}) {
+export function image(name, position, size, colour, options = {}) {
   return { name, kind: 'image', position, size, image: plane, colour, ...options };
 }
 
@@ -16,14 +16,14 @@ function ellipse(name, position, size, colour, options = {}) {
   return image(name, position, size, colour, { image: disc, ...options });
 }
 
-function label(name, position, size, content = '', fontSize = 20, colour = pigment.ink, align = 'centre') {
+export function label(name, position, size, content = '', fontSize = 20, colour = pigment.ink, align = 'centre') {
   return {
     name, kind: 'text', position, size,
     text: { content, fontSize, colour, align, valign: 'middle', outline: false },
   };
 }
 
-function group(name, position, size, children, visible = true) {
+export function group(name, position, size, children, visible = true) {
   return { name, kind: 'container', position, size, children, visible };
 }
 
