@@ -36,7 +36,7 @@ jobs:
             lua5.3 -E "$suite"
           done
       - name: Prepare pinned Miliastra MCP
-        if: hashFiles('tests/native/verify-g0.mjs', 'tests/native/verify-m1.mjs', 'tests/native/verify-m2-probe.mjs', 'tests/native/verify-m3-probe.mjs', 'tests/native/verify-m3-collision.mjs') != ''
+        if: hashFiles('tests/native/verify-g0.mjs', 'tests/native/verify-m1.mjs', 'tests/native/verify-m2-probe.mjs', 'tests/native/verify-m3-probe.mjs', 'tests/native/verify-m3-collision.mjs', 'tests/native/verify-versus-shop.mjs') != ''
         run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
       - name: Verify G0 native GIL roundtrip
         if: hashFiles('tests/native/verify-g0.mjs') != ''
@@ -126,5 +126,22 @@ jobs:
         with:
           name: m3-collision-probe-${{ github.event.pull_request.head.sha }}
           path: ${{ runner.temp }}/m3-collision-probe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify the native versus shop against the Lua shop
+        if: hashFiles('tests/native/verify-versus-shop.mjs') != ''
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          node tests/native/verify-versus-shop.mjs "$RUNNER_TEMP/miliastra-mcp" \
+            "$RUNNER_TEMP/native-validation" lua5.3 "$RUNNER_TEMP/versus-shop-proof"
+          cd "$RUNNER_TEMP/versus-shop-proof"
+          sha256sum -c SHA256SUMS
+      - name: Upload verified native versus shop proof
+        if: hashFiles('tests/native/verify-versus-shop.mjs') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: versus-shop-proof-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/versus-shop-proof
           if-no-files-found: error
           retention-days: 30

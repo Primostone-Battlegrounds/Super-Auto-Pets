@@ -3,6 +3,11 @@ rng.__index = rng
 
 local modulus = 2147483647
 local range = modulus - 1
+local multiplier = 48271
+
+function rng.parameters()
+    return modulus, multiplier
+end
 
 -- Any signed Lua integer is accepted. Multiples of the modulus map to state 1.
 function rng.new(seed)
@@ -16,7 +21,7 @@ end
 
 -- Park–Miller with multiplier 48271. The intermediate product fits a Lua 5.4 integer.
 function rng:next()
-    self.state = self.state * 48271 % modulus
+    self.state = self.state * multiplier % modulus
     return self.state
 end
 
