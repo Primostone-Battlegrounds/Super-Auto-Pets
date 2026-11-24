@@ -9,10 +9,11 @@ import { nativeRoom, roomSignals } from '../../platform/m3-room-native.mjs';
 import { verifyRoom } from './m3-room-graph.mjs';
 
 const [checkoutArg, scratch, lua, outputArg, seedArg = '1', cadenceArg = '1', waitArg] =
-  process.argv.slice(2).filter(argument => argument !== '--headless');
+  process.argv.slice(2).filter(argument => argument !== '--headless' && argument !== '--release');
 const headless = process.argv.includes('--headless');
+const profile = process.argv.includes('--release') ? 'release' : 'compatibility';
 assert.ok(checkoutArg && scratch && lua && outputArg,
-  'Usage: node tests/native/verify-m3-room.mjs <MCP checkout> <scratch> <Lua 5.3> <new candidate> [seed] [cadence] [wait] [--headless]');
+  'Usage: node tests/native/verify-m3-room.mjs <MCP checkout> <scratch> <Lua 5.3> <new candidate> [seed] [cadence] [wait] [--headless] [--release]');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0');
 assert.match(seedArg, /^-?\d+$/);
 const seed = BigInt(seedArg);
@@ -68,7 +69,7 @@ for (const [name, parameters] of Object.entries(roomSignals)) await stage('scene
 const controller = await stage('scene_add_graph', { name: 'AP_EightRoom', attachTo: 'stage' });
 const worker = await stage('scene_add_graph', { name: 'AP_EightFight', attachTo: 'stage' });
 const native = nativeRoom(lua, lua54, requireTool('luaparse').parse, controller.graphId, worker.graphId, seed, cadence,
-  waitArg === undefined ? undefined : Number(waitArg));
+  waitArg === undefined ? undefined : Number(waitArg), profile);
 const graphs = [
   { graphId: controller.graphId, code: native.roomSource },
   { graphId: worker.graphId, code: native.fightSource },
@@ -76,11 +77,21 @@ const graphs = [
 const startCpu = process.cpuUsage();
 const startTime = performance.now();
 const checks = [];
-const simulation = verifyRoom(graphs.map(graph => graph.code), requireTool('typescript'), native.settings, checks);
+const positioning = [];
+const simulation = verifyRoom(graphs.map(graph => graph.code), requireTool('typescript'), native.settings, checks, positioning);
+if (seed === 1n && cadence === 1 && native.settings.WAIT === 5) {
+  assert.ok(positioning.length > 0, 'The default fixture must exercise bot positioning');
+  if (profile === 'release') {
+    assert.ok(simulation.combinations.every(match => match.highestTier === 6 && match.releaseBattles > 0),
+      JSON.stringify(simulation.combinations.map(({ humans, highestTier, releaseBattles }) => ({ humans, highestTier, releaseBattles }))));
+  }
+}
 const checkPath = path.join(workspace, 'canonical-replay-inputs.tsv');
 fs.writeFileSync(checkPath, checks.map(receipt => receipt.join('\t')).join('\n') + '\n');
+const positionPath = path.join(workspace, 'bot-positioning-inputs.tsv');
+fs.writeFileSync(positionPath, positioning.map(move => move.join('\t')).join('\n') + '\n');
 const replayTest = fileURLToPath(new URL('./m3-room-replay.lua', import.meta.url));
-const runReplay = executable => execFileSync(executable, ['-E', replayTest, checkPath], {
+const runReplay = executable => execFileSync(executable, ['-E', replayTest, checkPath, profile, positionPath], {
   cwd: project, encoding: 'utf8', timeout: 30_000,
 }).trim();
 const replayEvidence = runReplay(lua);
@@ -98,9 +109,9 @@ let client;
 if (!headless) {
   const { m3RoomLayout, m3RoomUiSource } = await import('../../platform/m3-room-ui.mjs');
   const script = m3RoomLayout.script;
-  const source = m3RoomUiSource(native.shopCatalog, requireTool('luaparse').parse);
+  const source = m3RoomUiSource(native.shopCatalog, requireTool('luaparse').parse, profile === 'release');
   await stage('scene_set_client_script', { name: script, file: `${script}.lua`, source });
-  const added = await stage('scene_add_client_ui', { ...m3RoomLayout, outputName: 'm3-compatibility-room' });
+  const added = await stage('scene_add_client_ui', { ...m3RoomLayout, outputName: `m3-${profile}-room` });
   assert.equal(added.offPhoneCanvas, undefined);
   const scripts = await call('scene_list_client_scripts', { includeSource: true });
   const readback = scripts.scripts.find(entry => entry.name === script)?.source;
@@ -174,12 +185,12 @@ assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
 assert.equal(sha256(fs.readFileSync(input)), fixtureHash);
 
 fs.mkdirSync(candidate);
-const gil = headless ? 'm3-compatibility-room-headless.gil' : 'm3-compatibility-room.gil';
+const gil = `m3-${profile}-room${headless ? '-headless' : ''}.gil`;
 fs.copyFileSync(mapPath, path.join(candidate, gil), fs.constants.COPYFILE_EXCL);
 fs.copyFileSync(new URL('../../platform/M3-native-room.md', import.meta.url), path.join(candidate, 'README.md'));
 fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(candidate, 'MCP-FIXTURE-LICENSE.txt'));
 fs.writeFileSync(path.join(candidate, 'evidence.json'), JSON.stringify({
-  sourceRevision, revision, fixtureHash, seed: String(seed), players, luaVersions, headless, client,
+  sourceRevision, revision, fixtureHash, seed: String(seed), players, luaVersions, profile, headless, client,
   settings: native.settings, workflow: readGraphs, signals: roomSignals,
   sources: graphs.map(graph => ({ id: graph.graphId, sha256: sha256(graph.code) })),
   sha256: inspected.sha256, offlineMeasurements, simulation, replayEvidence, officialClient: 'pending',

@@ -31,19 +31,21 @@ const setList = (source, marker, values) =>
 const initialize = (source, marker, length) =>
   replace(source, `[0n], 'int'); // AP_ROOM_${marker}`, `[${literals(Array(length).fill(0))}], 'int');`);
 
-export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence = 1, wait) {
+export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence = 1, wait, profile = 'compatibility') {
   assert.ok(Number.isInteger(cadence) && cadence >= 1 && cadence <= 3, 'Cadence must be 1–3 seconds');
   assert.ok(wait === undefined || Number.isInteger(wait) && wait >= 0 && wait <= 60, 'Room wait must be 0–60 seconds');
-  const sources = executable => execFileSync(executable, ['-E', 'platform/m3_room_data.lua', String(seed)], {
+  assert.ok(profile === 'compatibility' || profile === 'release');
+  const sources = executable => execFileSync(executable, ['-E', 'platform/m3_room_data.lua', String(seed), profile], {
     cwd: project, timeout: 30_000, encoding: 'utf8',
   });
   const configuration = sources(lua53);
   assert.equal(configuration, sources(lua54));
-  const shop = nativeShop(lua53, lua54);
-  const battle = nativeBattle(lua53, lua54, parse);
+  const shop = nativeShop(lua53, lua54, profile);
+  const battle = nativeBattle(lua53, lua54, parse, profile);
   const settings = {};
   const seeds = [];
   const ranks = [];
+  const weights = [];
   const names = new Map();
   let random;
   for (const row of configuration.trimEnd().split('\n')) {
@@ -60,6 +62,10 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
       assert.equal(fields.length, 2);
       seeds.push(BigInt(fields[0]));
       ranks.push(BigInt(fields[1]));
+    } else if (kind === 'weight') {
+      assert.equal(Number(key), weights.length / 2 + 1);
+      assert.equal(fields.length, 2);
+      weights.push(...fields.map(BigInt));
     } else {
       assert.equal(kind, 'pet');
       assert.equal(fields.length, 1);
@@ -69,6 +75,7 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   }
   if (wait !== undefined) settings.WAIT = wait;
   assert.ok(seeds.length === 8 && new Set(ranks).size === 8 && random?.length === 2);
+  assert.ok(weights.length > 0);
   assert.ok(names.size === battle.ids.length && battle.ids.every(id => names.has(id)));
   const battleCatalog = battle.ids.map(id => ({ name: names.get(id) }));
   let room = replace(read('./m3_room.ts'), 'id: 1073741825,', `id: ${roomId},`);
@@ -82,11 +89,17 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   room = setList(room, 'PRIORITY', ranks);
   room = setList(room, 'SEEDS', seeds);
   room = setList(room, 'RANDOM', random);
+  room = replace(room, "[0n], 'int'); // AP_ROOM_BOT_WEIGHTS", `[${literals(weights)}], 'int');`);
   room = initialize(room, 'EMPTY_STOCK', 6 + shop.rules.PET_SLOTS + shop.rules.FOOD_SLOTS + 6 * shop.rules.TEAM_SIZE);
   let fight = replace(read('./m3_room_fight.ts'), 'id: 1073741826,', `id: ${fightId},`);
   fight = setList(fight, 'EFFECTS', battle.faintMetadata);
   fight = setList(fight, 'START_EFFECTS', battle.openingMetadata);
   fight = initialize(fight, 'BOARD', 12 * shop.rules.TEAM_SIZE + 6);
+  const collisionArguments = profile === 'release'
+    ? "f, board, f.get('petEffects'), f.get('startEffects'), openingState, false"
+    : "f, board, f.get('petEffects'), false";
+  fight = replace(fight, 'gstsServerCollisionStep(f, board, f.get(\'petEffects\'), false); // AP_ROOM_COLLISION',
+    `${battle.collisionFunction}(${collisionArguments});`);
   assert.doesNotMatch(room + fight, /\/\/ AP_ROOM_/);
   return {
     roomSource: [shop.source, declarations, room].join('\n'),

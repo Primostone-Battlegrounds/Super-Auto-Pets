@@ -47,3 +47,20 @@ for row in io.lines(assert(arg[1])) do
 end
 assert(checked > 0)
 print(checked .. " native receipts match authoritative Lua terminal boards and outcomes")
+
+if arg[3] then
+    local bot = require("autopets.bot")
+    local weights = bot.style_weights()
+    local moves = 0
+    for row in io.lines(arg[3]) do
+        if #row > 0 then
+            local seat, from, to, packed = row:match("^(%d+)\t(%d+)\t(%d+)\t(.+)$")
+            local style = weights[tonumber(seat) % #weights + 1].style
+            local snapshot = {phase = "preparation", team = formation(packed), gold = 0, pets = {}, foods = {}, rewards = {}}
+            local move = assert(bot.choose_action(snapshot, style, 0, "beginner", data))
+            assert(move.action == "move" and move.from == tonumber(from) and move.to == tonumber(to), style)
+            moves = moves + 1
+        end
+    end
+    print(moves .. " native placements match shared Lua beginner front-slot decisions")
+end

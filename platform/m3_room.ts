@@ -12,6 +12,8 @@ const roomMaxTime = 2700n; // AP_ROOM_MAX_TIME
 const roomMaxRounds = 40n; // AP_ROOM_MAX_ROUNDS
 const roomStartingLives = 5n; // AP_ROOM_STARTING_LIVES
 const roomRecoveryTime = 15n; // AP_ROOM_RECOVERY
+const roomCompatibilityTier = 0n; // AP_ROOM_COMPATIBILITY_TIER
+const roomCompatibilityPets = 0n; // AP_ROOM_COMPATIBILITY_PETS
 
 const lobby = 0n;
 const opening = 1n;
@@ -63,18 +65,36 @@ function gstsServerRoomFormation(f: ShopFlow, stock: bigint[]): bigint[] {
 function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attempt: bigint): bigint[] {
   const teamCount = f.getCorrespondingValueFromList(stock, shopCountAt);
   const gold = f.getCorrespondingValueFromList(stock, shopGoldAt);
+  const preferRelease = f.getCorrespondingValueFromList(stock, shopTierAt) > roomCompatibilityTier;
   let action = 1n;
   let from = 0n;
   let to = 0n;
-  if (gold >= shopPetCost) {
+  if (attempt < roomBotLimit && gold >= shopPetCost) {
     for (let probe = 0n; probe < shopPetSlots; probe += 1n) {
       const slot = (seat + attempt + probe) % shopPetSlots;
       const offer = f.getCorrespondingValueFromList(stock, shopPetsAt + slot);
       if (offer !== 0n) {
+        const upgraded = preferRelease && (offer > roomCompatibilityPets || offer < 0n - roomCompatibilityPets);
         if (teamCount < shopTeamSize) {
-          action = 11n;
-          from = slot + 1n;
+          if (action === 1n || upgraded) {
+            action = 11n;
+            from = slot + 1n;
+          }
         } else {
+          if (upgraded && attempt === 0n) {
+            // Make room through the same sell command a player uses, preserving upgraded pets.
+            for (let index = 0n; index < teamCount; index += 1n) {
+              const target = teamCount - 1n - index;
+              const position = shopTeamAt + target * shopUnitSize;
+              if (f.getCorrespondingValueFromList(stock, position) <= roomCompatibilityPets
+                  && f.getCorrespondingValueFromList(stock, position + 4n) === 1n) {
+                action = 13n;
+                to = target + 1n;
+                break;
+              }
+            }
+          }
+          if (action === 13n) break;
           for (let target = 0n; target < teamCount; target += 1n) {
             const position = shopTeamAt + target * shopUnitSize;
             const pet = f.getCorrespondingValueFromList(stock, position);
@@ -87,11 +107,11 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
             }
           }
         }
-        if (action !== 1n) break;
+        if (action !== 1n && (teamCount === shopTeamSize || !preferRelease || upgraded)) break;
       }
     }
   }
-  if (action === 1n && teamCount > 0n && gold >= shopFoodCost) {
+  if (action === 1n && attempt < roomBotLimit && teamCount > 0n && gold >= shopFoodCost) {
     for (let slot = 0n; slot < shopFoodSlots; slot += 1n) {
       if (f.getCorrespondingValueFromList(stock, shopFoodsAt + slot) !== 0n) {
         action = 16n;
@@ -102,6 +122,28 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
     }
   }
   if (action === 1n && attempt < 4n && gold >= shopRerollCost) action = 10n;
+  if (action === 1n && teamCount > 1n && attempt <= roomBotLimit) {
+    const weights = f.assemblyList([0n], 'int'); // AP_ROOM_BOT_WEIGHTS
+    const style = seat % (f.getListLength(weights) / 2n) * 2n;
+    const attackWeight = f.getCorrespondingValueFromList(weights, style);
+    const healthWeight = f.getCorrespondingValueFromList(weights, style + 1n);
+    let front = 0n;
+    let best = -1n;
+    for (let slot = 0n; slot < teamCount; slot += 1n) {
+      const at = shopTeamAt + slot * shopUnitSize;
+      const score = f.getCorrespondingValueFromList(stock, at + 2n) * attackWeight
+        + f.getCorrespondingValueFromList(stock, at + 3n) * healthWeight;
+      if (score > best) {
+        best = score;
+        front = slot;
+      }
+    }
+    if (front > 0n) {
+      action = 14n;
+      from = front + 1n;
+      to = 1n;
+    }
+  }
   return f.assemblyList([action, from, to], 'int');
 }
 
@@ -495,12 +537,12 @@ g.server({
             f.set('stocks', stocks);
           }
           if (bot) {
-            const attempt = f.getCorrespondingValueFromList(table, roomBotActionsAt + seat) + 1n;
-            f.modifyValueInList(table, roomBotActionsAt + seat, attempt);
-            if (attempt >= roomBotLimit || !accepted) {
-              f.modifyValueInList(table, roomReadyAt + seat, 1n);
-              f.set('readyCount', f.get('readyCount') + 1n);
+            let attempt = f.getCorrespondingValueFromList(table, roomBotActionsAt + seat) + 1n;
+            if (!accepted) {
+              attempt = roomBotLimit;
+              if (action === 14n) attempt += 1n;
             }
+            f.modifyValueInList(table, roomBotActionsAt + seat, attempt);
             f.set('table', table);
           }
         }

@@ -110,7 +110,14 @@ local function paint_battle()
     if not frame or (frame.left ~= match.seat and frame.right ~= match.seat) then
         local opponent = match.opponents[match.seat]
         local result = result_names[match.results[match.seat]]
-        text("Replay/RoundText", result or (opponent == 0 and "本轮轮空" or "等待服务端战斗画面"))
+        if not result then
+            if not alive() then result = "已淘汰"
+            elseif match.phase == 5 then result = "本局已结束"
+            elseif match.phase == 6 then result = "计算名次"
+            elseif opponent == 0 then result = "本轮轮空"
+            else result = "等待服务端战斗画面" end
+        end
+        text("Replay/RoundText", result)
         for slot = 1, 5 do
             text("Replay/Own" .. slot, "")
             text("Replay/Enemy" .. slot, "")
