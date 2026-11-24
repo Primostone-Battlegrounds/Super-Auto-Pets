@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nativeShop } from '../../platform/versus-shop.mjs';
 import { verifyGraph } from './m2-probe-graph.mjs';
 
 const [checkoutArg, scratch, lua, outputArg] = process.argv.slice(2);
@@ -46,6 +47,13 @@ for (const line of shopData.trimEnd().split('\n')) {
   }
 }
 assert.ok(shopFixture && catalog.length && shelves.length === 4);
+const resource = nativeShop(lua, process.env.LUA54 || 'lua5.4');
+const rule = resource.rules;
+assert.equal(rule.PET_SLOTS, shopFixture.offerSlots);
+assert.equal(rule.TEAM_SIZE, shopFixture.teamSize);
+assert.equal(rule.PET_COST, shopFixture.price);
+assert.equal(rule.GOLD, shopFixture.gold);
+assert.equal(rule.FOOD_SLOTS, 2, 'The current UI has two food offers');
 
 const checkout = fs.realpathSync(checkoutArg);
 const revision = execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -91,25 +99,25 @@ async function stage(name, args) {
 }
 
 const script = 'm2_probe';
-const catalogLua = catalog.map(({ code, name, attack, health }) =>
-  `[${code}] = {name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
+const catalogLua = entries => entries.map(({ name, attack, health }) =>
+  `{name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
+const clientRules = ['PET_SLOTS', 'FOOD_SLOTS', 'TEAM_SIZE', 'PET_COST', 'FOOD_COST', 'MAX_LEVEL']
+  .map(key => `${key.toLowerCase()} = ${rule[key]},`).join('\n    ');
 const source = fs.readFileSync(new URL('../../platform/m2_probe.lua', import.meta.url), 'utf8')
-  .replace('-- AP_DUEL_CATALOG', catalogLua)
-  .replace('0 -- AP_DUEL_PET_COST', String(shopFixture.price));
-assert.ok(source.includes(catalogLua) && !source.includes('AP_DUEL_PET_COST'));
+  .replace('-- AP_DUEL_PETS', catalogLua(resource.catalog.pet))
+  .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
+  .replace('-- AP_DUEL_RULES', clientRules);
+assert.doesNotMatch(source, /-- AP_DUEL_/);
 const signals = {
-  AP_DuelRequest: [['action', 'integer'], ['round', 'integer'], ['sequence', 'integer'], ['token', 'integer']],
+  AP_DuelRequest: ['action', 'round', 'sequence', 'token', 'from', 'to', 'flag'].map(name => [name, 'integer']),
   AP_DuelSnapshot: [
     ['players', 'integer'], ['seat', 'integer'], ['round', 'integer'], ['phase', 'integer'],
     ['ready', 'boolean'], ['continued', 'boolean'], ['settlements', 'integer'], ['version', 'integer'],
     ['sequence', 'integer'], ['winner', 'integer'], ['reason', 'integer'], ['remaining', 'integer'], ['ack', 'integer'],
   ],
-  AP_DuelMarket: [
-    ['round', 'integer'], ['version', 'integer'], ['gold', 'integer'],
-    ['offers', 'integerList'], ['team', 'integerList'],
-  ],
+  AP_DuelMarket: [['round', 'integer'], ['version', 'integer'], ['state', 'integerList']],
 };
-const variables = ['AP_readyRound', 'AP_continueRound', 'AP_shopSeat', 'AP_teamCount', 'AP_shopRound', 'AP_gold', 'AP_sequence'];
+const variables = ['AP_readyRound', 'AP_continueRound', 'AP_shopSeat', 'AP_shopRound', 'AP_sequence'];
 const buttons = [
   { name: 'AP_NativeRefresh', label: '1 刷新状态' },
   { name: 'AP_NativeReady', label: '2 准备' },
@@ -120,61 +128,64 @@ const buttons = [
       name: `AP_NativeBuy${slot}`, label: `${index + 4} · 货位${slot}`,
     };
   }),
-].map((button, index) => ({ ...button, position: [(index - 2.5) * 140, -205],
+  { name: 'AP_NativeReroll', label: '7 · 刷新货架' },
+].map((button, index) => ({ ...button, position: [(index - 3) * 145, -228],
   placeholder: String(1073741901 + index), key: index + 1 }));
+function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
+  return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle' } };
+}
+function card(action, label, position, size, content, colour, fontSize = 22) {
+  return [
+    { name: `${action}Face`, kind: 'image', position, size, image: 100001, colour },
+    text(label, position, size, content, fontSize),
+    { name: action, kind: 'cursorArea', position, size },
+  ];
+}
+const stock = Array.from({ length: rule.PET_SLOTS + rule.FOOD_SLOTS }, (_, index) => {
+  const x = (index - 2) * 190;
+  const pet = index < rule.PET_SLOTS;
+  const slot = index + 1 - (pet ? 0 : rule.PET_SLOTS);
+  const name = pet ? 'Pet' : 'Food';
+  return [
+    ...card(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 149], [174, 66], '',
+      pet ? '#335b44' : '#605432'),
+    ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, 92], [174, 44], '冻结', '#286452', 19),
+  ];
+}).flat();
 const ui = {
   name: 'AP_DuelProbe',
   script,
   showCursor: true,
   blockCursor: false,
   controls: [
-    { name: 'Background', kind: 'image', position: [0, 55], size: [720, 450], image: 100001, colour: '#193931' },
-    {
-      name: 'Status', kind: 'text', position: [0, 214], size: [660, 100],
-      text: { content: '等待服务端响应', fontSize: 29, colour: '#fff3d7', align: 'centre', valign: 'middle' },
-    },
-    {
-      name: 'MarketGold', kind: 'text', position: [0, 137], size: [660, 42],
-      text: { content: '', fontSize: 26, colour: '#ffd887', align: 'centre', valign: 'middle' },
-    },
-    ...Array.from({ length: shopFixture.offerSlots }, (_, index) => index).flatMap(index => {
-      const position = [(index - 1) * 230, 71];
-      const size = [210, 77];
-      const slot = index + 1;
-      return [
-        { name: `OfferFace${slot}`, kind: 'image', position, size, image: 100001, colour: '#335b44' },
-        {
-          name: `OfferLabel${slot}`, kind: 'text', position, size,
-          text: { content: '', fontSize: 23, colour: '#fff3d7', align: 'centre', valign: 'middle' },
-        },
-        { name: `Buy${slot}`, kind: 'cursorArea', position, size },
-      ];
-    }),
-    {
-      name: 'Team', kind: 'text', position: [0, -10], size: [680, 76],
-      text: { content: '', fontSize: 21, colour: '#fff3d7', align: 'centre', valign: 'middle' },
-    },
-    ...[['Refresh', '刷新状态'], ['Ready', '准备'], ['Advance', '下一轮'], ['Leave', '认输']].flatMap(([name, content], index) => {
-      const position = [(index - 1.5) * 165, -98];
-      const size = [148, 65];
-      return [
-        { name: `${name}Face`, kind: 'image', position, size, image: 100001, colour: '#286452' },
-        {
-          name: `${name}Label`, kind: 'text', position, size,
-          text: { content, fontSize: 29, colour: '#fff3d7', align: 'centre', valign: 'middle' },
-        },
-        { name, kind: 'cursorArea', position, size },
-      ];
-    }),
-    ...buttons.map(({ label, position }, index) => ({
-      name: `NativeLegend${index + 1}`, kind: 'text', position: [position[0], position[1] - 50], size: [140, 30],
-      text: { content: label, fontSize: 18, colour: '#fff3d7', align: 'centre', valign: 'middle' },
-    })),
+    { name: 'Background', kind: 'image', position: [0, 58], size: [1000, 478], image: 100001, colour: '#193931' },
+    text('Status', [0, 257], [900, 66], '等待服务端响应', 27),
+    text('MarketGold', [0, 204], [900, 35], '', 25, '#ffd887'),
+    ...stock,
+    text('Team', [0, 50], [900, 28], '', 21),
+    ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => card(`Team${index + 1}`, `TeamLabel${index + 1}`,
+      [(index - 2) * 190, 6], [174, 54], '', '#335b44', 20)).flat(),
+    ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
+      .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -55], [174, 52], content, '#286452')),
+    ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
+      .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -115], [208, 52], content, '#286452')),
+    ...buttons.map(({ label, position }, index) => text(`NativeLegend${index + 1}`,
+      [position[0], position[1] - 50], [140, 30], label, 18)),
   ],
 };
 for (const control of [...ui.controls, ...buttons.map(button => ({ ...button, size: [72, 72] }))]) {
   assert.ok(control.position.every((coordinate, axis) =>
     Math.abs(coordinate) + control.size[axis] / 2 <= [640, 360][axis]), `${control.name} outside the shared canvas`);
+}
+const hitTargets = [...ui.controls.filter(control => control.kind === 'cursorArea'),
+  ...buttons.map(button => ({ ...button, size: [72, 72] }))];
+for (const [index, first] of hitTargets.entries()) {
+  assert.ok(first.size.every(side => side >= 44), `${first.name} below the candidate hit target size`);
+  for (const second of hitTargets.slice(index + 1)) {
+    assert.ok(first.position.some((coordinate, axis) =>
+      Math.abs(coordinate - second.position[axis]) >= (first.size[axis] + second.size[axis]) / 2),
+    `${first.name} overlaps ${second.name}`);
+  }
 }
 
 try {
@@ -200,16 +211,12 @@ try {
   assert.equal(new Set(registeredButtons.map(({ id }) => id)).size, buttons.length);
   const graph = await stage('scene_add_graph', { name: 'AP_DuelProbe', attachTo: 'stage' });
   const buttonGraph = await stage('scene_add_graph', { name: 'AP_DuelButtons', attachToPrefab: 'player' });
-  let graphSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
+  const stageSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
     .replace('id: 1073741825,', `id: ${graph.graphId},`)
-    .replace("[0n], 'int'); // AP_DUEL_OPENING_OFFERS", `[${shelves.flat().map(value => `${value}n`).join(', ')}], 'int');`);
-  const configMarkers = {
-    ROUND_GOLD: shopFixture.gold, PET_COST: shopFixture.price, OFFER_SLOTS: shopFixture.offerSlots, TEAM_SIZE: shopFixture.teamSize,
-  };
-  for (const [marker, value] of Object.entries(configMarkers)) {
-    graphSource = graphSource.replace(`0n; // AP_DUEL_${marker}`, `${value}n;`);
-  }
-  assert.ok(!graphSource.includes('// AP_DUEL_'));
+    .replace('[0n], // AP_DUEL_START_ONE', `[${resource.start[0].map(value => `${value}n`).join(', ')}],`)
+    .replace('[0n], // AP_DUEL_START_TWO', `[${resource.start[1].map(value => `${value}n`).join(', ')}],`);
+  assert.doesNotMatch(stageSource, /\/\/ AP_DUEL_/);
+  const graphSource = `${resource.source}\n${stageSource}`;
   let buttonSource = fs.readFileSync(new URL('../../platform/m2_probe_buttons.ts', import.meta.url), 'utf8')
     .replace('id: 1073741826,', `id: ${buttonGraph.graphId},`);
   for (const [index, { placeholder }] of buttons.entries()) {
@@ -266,7 +273,8 @@ try {
   assert.ok(readUi.interface.controls.every(control => control.active !== false && control.visible !== false));
   const checked = await call('scene_check_client', { mapPath, scripts: [script] });
   assert.deepEqual(checked.problems, []);
-  const graphSimulation = verifyGraph(graphSource, buttonSource, registeredButtons, toolRequire('typescript'), shopFixture);
+  const graphSimulation = verifyGraph(graphSource, buttonSource, registeredButtons, toolRequire('typescript'),
+    { ...shopFixture, foodSlots: rule.FOOD_SLOTS });
   const extracted = path.join(workspace, `${script}.lua`);
   fs.writeFileSync(extracted, readSource);
   const clientSimulation = execFileSync(lua, [
@@ -285,6 +293,7 @@ try {
   fs.writeFileSync(path.join(candidate, 'evidence.json'), JSON.stringify({
     revision, fixtureHash, players, graph: readGraph, buttonGraph: readButtonGraph,
     buttons: registeredButtons, signals: registered.parameters, shopFixture, shopDataSha256: sha256(shopData),
+    nativeShopSha256: sha256(resource.definition), clientControls: readUi.interface.controls.length,
     attachments: { stageGraph: graph.graphId, playerPrefab: playerTemplate.prefabId, playerGraph: buttonGraph.graphId },
     clientScriptSha256: sha256(readSource), graphSourceSha256: sha256(graphSource), buttonSourceSha256: sha256(buttonSource),
     clientDiagnostics: checked.problems, graphSimulation, clientSimulation: clientSimulation.trimEnd().split('\n'),

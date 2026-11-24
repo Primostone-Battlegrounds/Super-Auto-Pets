@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { shopFlow } from './versus-shop-parity.mjs';
 
 export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, marketFixture) {
-  const { gold, price, teamSize, offerSlots, shelves } = marketFixture;
+  const { gold, price, teamSize, offerSlots, foodSlots, shelves } = marketFixture;
   const ids = new Map(registeredButtons.map(({ id, key }) => [Number(key), BigInt(id)]));
-  assert.equal(ids.size, 6);
+  assert.equal(ids.size, 7);
   assert.ok(gold >= price * offerSlots);
   const state = new Map();
   const views = new Map();
@@ -14,8 +15,12 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
   const logs = [];
   let variables, handler, onPress;
   let events, updates, now, lastVersion;
+  let apiCalls = 0;
+  let maximumApiCalls = 0;
+  let maximumMessages = 0;
   const getVariable = (player, name) => ({ asType: () => state.get(player)?.[name] ?? 0n });
-  const flow = {
+  const api = {
+    ...shopFlow,
     getSelfEntity: () => 'stage',
     getListOfPlayerEntitiesOnTheField: () => players,
     equal: (left, right) => left === right,
@@ -30,28 +35,21 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
     set: (name, value) => { variables[name] = value; },
     setCustomVariable: (player, name, value) => { state.get(player)[name] = value; },
     getCustomVariable: getVariable,
-    assemblyList: list => Array.from(list),
-    copyList: list => Array.from(list),
-    modifyValueInList: (list, index, value) => {
-      assert.ok(index >= 0n && index < list.length, 'list edit out of bounds');
-      list[Number(index)] = value;
-    },
-    getCorrespondingValueFromList: (list, index) => {
-      assert.ok(index >= 0n && index < list.length, 'list read out of bounds');
-      return list[Number(index)];
-    },
-    getListLength: list => BigInt(list.length),
     dataTypeConversion: value => String(value),
     printString: line => logs.push(line),
     sendSignal(signal, target, ...values) {
       if (signal === 'AP_DuelRequest') {
-        const [round, sequence, token] = values;
-        handler({ signalSourceEntity: 'stage', params: { action: target, round, sequence, token } }, flow);
+        const [round, sequence, token, from, to, flag] = values;
+        handler({ signalSourceEntity: 'stage', params: { action: target, round, sequence, token, from, to, flag } }, flow);
       } else {
         updates.push([signal, target, ...values.map(value => Array.isArray(value) ? Array.from(value) : value)]);
       }
     },
   };
+  const flow = Object.fromEntries(Object.entries(api).map(([name, call]) => [name, (...args) => {
+    apiCalls += 1;
+    return call(...args);
+  }]));
   function load(source, g) {
     const transpiled = ts.transpileModule(source, {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -82,6 +80,8 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
     } }; } });
   }
   function readFrame() {
+    maximumApiCalls = Math.max(maximumApiCalls, apiCalls);
+    maximumMessages = Math.max(maximumMessages, updates.length);
     const pendingViews = new Map();
     const pendingMarkets = new Map();
     for (const [signal, target, ...fields] of updates) {
@@ -94,12 +94,23 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
           sequence, winner, reason, remaining, ack });
       } else {
         assert.equal(signal, 'client:AP_DuelMarket');
-        assert.equal(fields.length, 5);
+        assert.equal(fields.length, 3);
         assert.ok(!pendingMarkets.has(target), 'duplicate shop frame');
-        const [round, version, gold, offers, team] = fields;
-        assert.equal(offers.length, offerSlots);
-        assert.equal(team.length, teamSize);
-        pendingMarkets.set(target, { round, version, gold, offers, team });
+        const [round, version, raw] = fields;
+        const teamAt = 6 + offerSlots + foodSlots;
+        const size = teamAt + teamSize * 6;
+        if (raw.length === 1) {
+          assert.deepEqual(raw, [0n]);
+          pendingMarkets.set(target, { round, version, gold: 0n, offers: [], team: [], raw });
+        } else {
+          assert.ok(raw.length >= size);
+          assert.equal(raw[0], round);
+          assert.deepEqual(raw.slice(3, 5), [0n, 0n], 'private random stream and future UIDs leaked');
+          const offers = raw.slice(6, 6 + offerSlots);
+          const foods = raw.slice(6 + offerSlots, teamAt);
+          const team = Array.from({ length: teamSize }, (_, i) => raw[teamAt + i * 6]);
+          pendingMarkets.set(target, { round, version, gold: raw[2], offers, foods, team, raw });
+        }
       }
     }
     assert.equal(pendingMarkets.size, pendingViews.size);
@@ -114,7 +125,7 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
       if (view.seat === 0n) {
         assert.equal(market.gold, 0n);
         assert.equal(view.sequence, 0n);
-        assert.ok([...market.offers, ...market.team].every(id => id === 0n), 'unassigned seats cannot see private data');
+        assert.deepEqual(market.raw, [0n], 'unassigned seats cannot see private data');
       }
       views.set(target, view);
       markets.set(target, market);
@@ -126,15 +137,19 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
     return Array.from(pendingViews.keys());
   }
   function request(source, action, round = views.get(source)?.round ?? 0n,
-    sequence = views.get(source)?.sequence ?? 0n, token = 0n) {
+    sequence = views.get(source)?.sequence ?? 0n, token = 0n, from = 0n, to = 0n, flag = 0n) {
     updates = [];
-    handler({ signalSourceEntity: source, params: { action, round, sequence, token } }, flow);
+    apiCalls = 0;
+    handler({ signalSourceEntity: source, params: { action, round, sequence, token, from, to, flag } }, flow);
     return readFrame();
   }
+  const buy = (source, from, round, sequence, token) => request(source, 11n, round, sequence, token, from);
+  const shop = (source, action, from, to, flag) => request(source, action, undefined, undefined, 0n, from, to, flag);
   function tick(time, name = 'AP_DuelClock') {
     assert.ok(BigInt(time) >= now);
     now = BigInt(time);
     updates = [];
+    apiCalls = 0;
     events.get('whenTimerIsTriggered')({ timerName: name }, flow);
     return readFrame();
   }
@@ -146,10 +161,10 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
       getPlayerIdByPlayerGuid: guid => playerIds[guid],
       dataTypeConversion: value => String(value),
       printString: message => logs.push(message),
-      sendSignal: (signal, action, round, sequence, token) => {
+      sendSignal: (signal, action, round, sequence, token, from, to, flag) => {
         assert.equal(signal, 'AP_DuelRequest');
         assert.equal(token, 0n);
-        recipients = request(source, action, round, sequence, token);
+        recipients = request(source, action, round, sequence, token, from, to, flag);
       },
     });
     return recipients;
@@ -165,7 +180,7 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
   assert.equal(views.get('A').count, 1n);
   assert.deepEqual(tick(1), []);
   players.push('B');
-  assert.deepEqual(request(null, 3n, 1n, 1n), []);
+  assert.deepEqual(buy(null, 1n, 1n, 1n), []);
   assert.deepEqual(request('A', -1n, 1n, 1n), []);
   assert.deepEqual(tick(2, 'otherTimer'), []);
   assert.deepEqual(tick(2), ['A', 'B']);
@@ -174,19 +189,19 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
   stocked('B', 1);
   assert.deepEqual(request('A', 1n), ['A']); // Empty team cannot ready.
   assert.equal(views.get('A').sequence, 1n);
-  assert.deepEqual(request('A', 3n, 1n, 2n), ['A']); // Gap is rejected.
-  assert.deepEqual(request('A', 3n, 1n, 1n, 31n), ['A', 'B']);
+  assert.deepEqual(buy('A', 1n, 1n, 2n), ['A']); // Gap is rejected.
+  assert.deepEqual(buy('A', 1n, 1n, 1n, 31n), ['A', 'B']);
   assert.equal(views.get('A').ack, 31n);
   assert.equal(views.get('B').ack, 0n);
   assert.equal(markets.get('A').offers[0], 0n);
   assert.equal(markets.get('A').gold, BigInt(gold - price));
   assert.equal(markets.get('A').team[0], BigInt(shelves[0][0]));
   stocked('B', 1);
-  assert.deepEqual(request('A', 4n, 1n, 1n), ['A']); // Reusing an accepted sequence with a changed payload cannot debit.
+  assert.deepEqual(buy('A', 2n, 1n, 1n), ['A']); // Reusing an accepted sequence with a changed payload cannot debit.
   assert.equal(markets.get('A').offers[1], BigInt(shelves[0][1]));
-  assert.deepEqual(request('A', 3n), ['A']); // Current sequence with an already sold offer is rejected too.
+  assert.deepEqual(buy('A', 1n), ['A']); // Current sequence with an already sold offer is rejected too.
   assert.equal(views.get('A').sequence, 2n);
-  assert.deepEqual(request('B', 3n, 2n, 1n), ['B']);
+  assert.deepEqual(buy('B', 1n, 2n, 1n), ['B']);
   stocked('B', 1);
   assert.deepEqual(press('B', 0), []);
   assert.deepEqual(press('B', 5), ['A', 'B']);
@@ -201,14 +216,14 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
   assert.equal(views.get('A').count, 1n);
   assert.equal(views.get('A').remaining, 15n);
   players.push('C');
-  assert.deepEqual(request('C', 3n, 1n, 1n), ['C']);
+  assert.deepEqual(buy('C', 1n, 1n, 1n), ['C']);
   assert.equal(views.get('C').seat, 0n);
   players.splice(0, players.length, 'B', 'A');
   assert.deepEqual(tick(4), ['B', 'A']);
   assert.equal(views.get('B').seat, 2n);
   assert.equal(markets.get('B').gold, BigInt(gold - price));
   assert.deepEqual(tick(61), []);
-  assert.deepEqual(request('A', 4n, 1n, 2n), ['B', 'A']);
+  assert.deepEqual(buy('A', 2n, 1n, 2n), ['B', 'A']);
   assert.equal(markets.get('A').gold, BigInt(gold - 2 * price));
   assert.deepEqual(tick(62), ['B', 'A']);
   assert.equal(views.get('A').phase, 1n);
@@ -219,7 +234,7 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
   assert.equal(views.get('A').sequence, 1n);
   stocked('A', 2);
   stocked('B', 3);
-  assert.deepEqual(request('A', 3n, 1n, 1n), ['A']);
+  assert.deepEqual(buy('A', 1n, 1n, 1n), ['A']);
   stocked('A', 2);
   assert.deepEqual(press('A', 4), ['B', 'A']);
   assert.equal(markets.get('A').team[2], BigInt(shelves[2][0]));
@@ -264,5 +279,53 @@ export function verifyGraph(graphSource, buttonSource, registeredButtons, ts, ma
   assert.deepEqual(tick(2701), ['A', 'B']);
   assert.equal(views.get('A').phase, 2n);
   assert.equal(views.get('A').reason, 4n);
-  return '双路径购物与次序校验、原生计时器、准备和确认超时、替补隔离、原实体回归、认输与席位缺失终止';
+
+  reset();
+  players.push('B');
+  tick(1);
+  const startingB = markets.get('B').raw;
+  const food = markets.get('A').foods[0];
+  assert.deepEqual(shop('A', 17n, 1n, 1n, 0n), ['A', 'B']);
+  assert.equal(markets.get('A').foods[0], -food);
+  assert.deepEqual(press('A', 7), ['A', 'B']);
+  assert.equal(markets.get('A').foods[0], -food);
+  assert.equal(markets.get('A').gold, BigInt(gold - 1));
+  assert.deepEqual(buy('A', 1n), ['A', 'B']);
+  assert.deepEqual(shop('A', 16n, 1n, 1n), ['A', 'B']);
+  assert.equal(markets.get('A').foods[0], 0n);
+  assert.deepEqual(shop('A', 13n, 0n, 1n), ['A', 'B']);
+  assert.equal(markets.get('A').raw[5], 0n);
+  assert.deepEqual(markets.get('B').raw, startingB);
+
+  reset();
+  players.push('B');
+  tick(1);
+  assert.deepEqual(buy('A', 1n), ['A', 'B']);
+  assert.deepEqual(buy('A', 3n), ['A', 'B']);
+  assert.deepEqual(shop('A', 14n, 1n, 2n), ['A', 'B']);
+  assert.deepEqual(shop('A', 15n, 1n, 2n), ['A', 'B']);
+  assert.equal(markets.get('A').raw[5], 1n);
+  assert.equal(markets.get('A').raw[16], 1n);
+  assert.deepEqual(shop('A', 12n, 2n, 1n), ['A']); // Different species cannot combine.
+
+  reset();
+  players.push('B');
+  tick(1);
+  assert.deepEqual(buy('A', 1n), ['A', 'B']);
+  assert.deepEqual(shop('A', 12n, 3n, 1n), ['A', 'B']);
+  assert.equal(markets.get('A').raw[16], 1n);
+
+  reset();
+  players.push('B');
+  tick(1);
+  players.pop();
+  tick(2);
+  players.push('B');
+  tick(17);
+  assert.equal(views.get('A').winner, 1n);
+  assert.equal(views.get('B').reason, 3n);
+  return {
+    summary: '双路径全商店操作、次序校验与随机态隔离、计时器、阶段超时、替补隔离、原实体回归、认输与席位缺失终止',
+    maximumApiCalls, maximumMessages,
+  };
 }

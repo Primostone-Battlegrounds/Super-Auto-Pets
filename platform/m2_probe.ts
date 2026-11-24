@@ -3,6 +3,7 @@ import { defineSignal, g } from 'genshin-ts/runtime/core';
 
 const request = defineSignal('AP_DuelRequest', [
   ['action', 'int'], ['round', 'int'], ['sequence', 'int'], ['token', 'int'],
+  ['from', 'int'], ['to', 'int'], ['flag', 'int'],
 ] as const);
 const snapshot = defineSignal('client:AP_DuelSnapshot', [
   ['player', 'entity'], ['players', 'int'], ['seat', 'int'], ['round', 'int'],
@@ -10,15 +11,9 @@ const snapshot = defineSignal('client:AP_DuelSnapshot', [
   ['sequence', 'int'], ['winner', 'int'], ['reason', 'int'], ['remaining', 'int'], ['ack', 'int'],
 ] as const);
 const market = defineSignal('client:AP_DuelMarket', [
-  ['player', 'entity'], ['round', 'int'], ['version', 'int'], ['gold', 'int'],
-  ['offers', 'int_list'], ['team', 'int_list'],
+  ['player', 'entity'], ['round', 'int'], ['version', 'int'], ['state', 'int_list'],
 ] as const);
 
-// Filled from the existing Lua shop and duel definitions when the GIL is built.
-const roundGold = 0n; // AP_DUEL_ROUND_GOLD
-const petCost = 0n; // AP_DUEL_PET_COST
-const offerSlots = 0n; // AP_DUEL_OFFER_SLOTS
-const teamSize = 0n; // AP_DUEL_TEAM_SIZE
 const preparationTime = 60n;
 const settlementTime = 10n;
 const roomTime = 2700n;
@@ -31,13 +26,14 @@ g.server({
   variables: {
     round: 1n, phase: 0n, settlements: 0n, version: 0n, enrolled: false,
     present: 0n, due: 0n, roomDue: 0n, absentDue: 0n, winner: 0n, reason: 0n,
-    offersOne: [0n, 0n, 0n], offersTwo: [0n, 0n, 0n],
-    teamOne: [0n, 0n, 0n, 0n, 0n], teamTwo: [0n, 0n, 0n, 0n, 0n],
+    absentWinner: 0n,
+    shopOne: [0n], // AP_DUEL_START_ONE
+    shopTwo: [0n], // AP_DUEL_START_TWO
   },
 }).on('whenEntityIsCreated', (event, f) => {
   f.startTimer(event.eventSourceEntity, clock, true, [1]);
 }).on('whenTimerIsTriggered', (event, f) => {
-  if (event.timerName === clock) f.sendSignal(request, -1n, 0n, 0n, 0n);
+  if (event.timerName === clock) f.sendSignal(request, -1n, 0n, 0n, 0n, 0n, 0n, 0n);
 }).onSignal(request, (event, f) => {
   const players = f.getListOfPlayerEntitiesOnTheField();
   const actor = event.signalSourceEntity;
@@ -92,6 +88,7 @@ g.server({
     f.set('absentDue', absentDue);
     changed = true;
   }
+  if (mayProgress && !roomReady && remainingSeat > 0n) f.set('absentWinner', remainingSeat);
   if (mayProgress) {
     if (now >= f.get('roomDue')) {
       f.set('phase', 2n);
@@ -100,12 +97,15 @@ g.server({
       mayProgress = false;
     } else if (absentDue > 0n && now >= absentDue) {
       f.set('phase', 2n);
-      if (!roomReady) f.set('winner', remainingSeat);
+      let winner = remainingSeat;
+      if (roomReady) winner = f.get('absentWinner');
+      f.set('winner', winner);
       f.set('reason', 3n);
       changed = true;
       mayProgress = false;
     } else if (roomReady && absentDue > 0n) {
       f.set('absentDue', 0n);
+      f.set('absentWinner', 0n);
       changed = true;
     }
   }
@@ -122,38 +122,23 @@ g.server({
       f.setCustomVariable(actor, 'AP_sequence', sequence + 1n, false);
       changed = true;
       mayProgress = false;
-    } else if (roomReady && now < phaseDue && currentShop && event.params.sequence === sequence + 1n) {
+    } else if (seat > 0n && roomReady && now < phaseDue && currentShop && event.params.sequence === sequence + 1n) {
       let accepted = false;
       const actorReady = f.getCustomVariable(actor, 'AP_readyRound').asType('int') === previousRound;
-      const teamCount = f.getCustomVariable(actor, 'AP_teamCount').asType('int');
       if (previousPhase === 0n && !actorReady) {
+        let saved = f.get('shopOne');
+        if (seat === 2n) saved = f.get('shopTwo');
+        const teamCount = f.getCorrespondingValueFromList(saved, shopCountAt);
         if (action === 1n && teamCount > 0n) {
           f.setCustomVariable(actor, 'AP_readyRound', previousRound, false);
           accepted = true;
         }
-        const slot = action - 3n;
-        if (slot >= 0n && slot < offerSlots && teamCount < teamSize) {
-          const gold = f.getCustomVariable(actor, 'AP_gold').asType('int');
-          let currentOffers = f.get('offersOne');
-          if (seat === 2n) currentOffers = f.get('offersTwo');
-          const pet = f.getCorrespondingValueFromList(currentOffers, slot);
-          if (gold >= petCost && pet > 0n) {
-            const offers = f.copyList(currentOffers);
-            let currentTeam = f.get('teamOne');
-            if (seat === 2n) currentTeam = f.get('teamTwo');
-            const team = f.copyList(currentTeam);
-            f.modifyValueInList(offers, slot, 0n);
-            f.modifyValueInList(team, teamCount, pet);
-            if (seat === 1n) {
-              f.set('offersOne', offers);
-              f.set('teamOne', team);
-            } else {
-              f.set('offersTwo', offers);
-              f.set('teamTwo', team);
-            }
-            f.setCustomVariable(actor, 'AP_gold', gold - petCost, false);
-            f.setCustomVariable(actor, 'AP_teamCount', teamCount + 1n, false);
-            accepted = true;
+        if (action >= 10n && action <= 17n) {
+          const candidate = f.copyList(saved);
+          accepted = gstsServerShopApply(f, candidate, action, event.params.from, event.params.to, event.params.flag);
+          if (accepted) {
+            if (seat === 1n) f.set('shopOne', candidate);
+            else f.set('shopTwo', candidate);
           }
         }
       }
@@ -207,34 +192,28 @@ g.server({
   let remaining = f.get('due') - now;
   if (!roomReady) remaining = f.get('absentDue') - now;
   if (phase === 2n || remaining < 0n) remaining = 0n;
-  const stocked = f.assemblyList([0n], 'int'); // AP_DUEL_OPENING_OFFERS
   for (const player of players) {
     if (changed || f.equal(actor, player)) {
       const seat = f.getCustomVariable(player, 'AP_shopSeat').asType('int');
-      let offers = f.assemblyList([0n, 0n, 0n], 'int');
-      let team = f.assemblyList([0n, 0n, 0n, 0n, 0n], 'int');
-      let gold = 0n;
+      let privateShop = f.assemblyList([0n], 'int');
       let sequence = 0n;
       if (seat > 0n) {
         const shopRound = f.getCustomVariable(player, 'AP_shopRound').asType('int');
+        let saved = f.get('shopOne');
+        if (seat === 2n) saved = f.get('shopTwo');
+        privateShop = f.copyList(saved);
         if (shopRound !== round) {
-          const start = ((round - 1n) * 2n + seat - 1n) * offerSlots;
-          for (let index = 0n; index < offerSlots; index += 1n) {
-            f.modifyValueInList(offers, index, f.getCorrespondingValueFromList(stocked, start + index));
+          if (shopRound > 0n) {
+            gstsServerShopOpen(f, privateShop);
+            const copy = f.copyList(privateShop);
+            if (seat === 1n) f.set('shopOne', copy);
+            else f.set('shopTwo', copy);
           }
-          if (seat === 1n) f.set('offersOne', offers);
-          else f.set('offersTwo', offers);
-          f.setCustomVariable(player, 'AP_gold', roundGold, false);
           f.setCustomVariable(player, 'AP_shopRound', round, false);
           f.setCustomVariable(player, 'AP_sequence', 0n, false);
-        } else if (seat === 1n) {
-          offers = f.get('offersOne');
-        } else {
-          offers = f.get('offersTwo');
         }
-        if (seat === 1n) team = f.get('teamOne');
-        else team = f.get('teamTwo');
-        gold = f.getCustomVariable(player, 'AP_gold').asType('int');
+        f.modifyValueInList(privateShop, shopRandomAt, 0n);
+        f.modifyValueInList(privateShop, shopUidAt, 0n);
         sequence = f.getCustomVariable(player, 'AP_sequence').asType('int') + 1n;
       }
       const ready = f.getCustomVariable(player, 'AP_readyRound').asType('int') === round;
@@ -243,7 +222,7 @@ g.server({
       if (!fromClock && f.equal(actor, player)) ack = event.params.token;
       f.sendSignal(snapshot, player, playerCount, seat, round, phase, ready, continued, settlements,
         version, sequence, f.get('winner'), f.get('reason'), remaining, ack);
-      f.sendSignal(market, player, round, version, gold, offers, team);
+      f.sendSignal(market, player, round, version, privateShop);
     }
   }
 });
