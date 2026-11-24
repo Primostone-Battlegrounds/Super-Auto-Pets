@@ -36,7 +36,7 @@ local function resolve_round(match)
     local left, right = match.seats[1], match.seats[2]
     local first = assert(left.shop:finish_turn())
     local second = assert(right.shop:finish_turn())
-    local result = battle.resolve(first, second, match.battle_random:next())
+    local result = battle.resolve(first, second, match.battle_random:next(), match.catalog)
     if result.status == "strike_limit" then
         assert(left.shop:abort_turn(result, "player"))
         assert(right.shop:abort_turn(result, "enemy"))
@@ -76,10 +76,11 @@ function duel.new(seed, player_one, player_two, options)
     assert(versus.player_id(player_one) and versus.player_id(player_two) and player_one ~= player_two,
         "duel needs two distinct player IDs")
     options = options or {}
+    local catalog = options.catalog or data
     local preparation_ms = options.preparation_ms or 60000
     local settlement_ms = options.settlement_ms or 10000
     local match_ms = options.match_ms or 2700000
-    local lives = options.starting_lives or data.rules.start_lives
+    local lives = options.starting_lives or catalog.rules.start_lives
     local now = options.now or 0
     assert(versus.positive_integer(preparation_ms) and versus.positive_integer(settlement_ms)
         and versus.positive_integer(match_ms) and versus.positive_integer(lives),
@@ -89,7 +90,7 @@ function duel.new(seed, player_one, player_two, options)
     local seats = {}
     for index = 1, 2 do
         seats[index] = {
-            shop = shop.new(versus.stream_seed(seed, 0x53484f50 + index)), -- SHOP
+            shop = shop.new(versus.stream_seed(seed, 0x53484f50 + index), catalog), -- SHOP
             lives = lives,
             sequence = 0,
             ready = false,
@@ -98,6 +99,7 @@ function duel.new(seed, player_one, player_two, options)
     end
     return setmetatable({
         seats = seats,
+        catalog = catalog,
         seat_by_player = {[player_one] = 1, [player_two] = 2},
         battle_random = rng.new(versus.stream_seed(seed, 0x4649474854)), -- FIGHT
         phase = "preparation",

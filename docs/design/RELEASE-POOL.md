@@ -49,4 +49,8 @@ Team Wood Games 的官方商店页确认 Standard 使用预置动物包，Versus
 
 选择六阶首发时，宿主将 `require("autopets.release_data")` 传给该局的 `shop.new(seed, catalog)` 和 `battle.resolve(player, enemy, seed, catalog)`。三阶兼容入口省略 `catalog`。共用前三阶定义，两个目录各有自己的规则哈希。首发哈希取 `data.lua` 与 `release_data.lua` 按此顺序拼接的 SHA-256。两文件均统一换行为 LF 并去除其中的 `data.rules_hash` 赋值行。
 
+权威双人和八席宿主在创建房间时可设置 `options.catalog`。整局各席均使用该目录，客户端指令和快照沿用现有接口。
+
+终端练习用 `lua5.4 scripts/play.lua 7 --release` 开启六阶目录。增加 `--beginner` 选择入门对手。`help` 显示经营和回放指令。
+
 `lua5.4 tests/release_content.lua` 和 `lua5.3 -E tests/release_content.lua` 验证 64 个固定种子的开放货架、六阶奖励、冻结、邻位食物、所有新增动物的三个等级、站位触发、碰撞与同时阵亡顺序、召唤容量和战斗回放复现。官方客户端的六阶美术显示、交互和运行预算记录在对应候选的设备验收。

@@ -101,7 +101,7 @@ end
 local function play_bot(match, seat)
     local actions = 0
     while true do
-        local command = bot.choose_action(seat.shop:snapshot(), seat.style, actions, match.bot_difficulty)
+        local command = bot.choose_action(seat.shop:snapshot(), seat.style, actions, match.bot_difficulty, match.catalog)
         if not command then
             break
         end
@@ -145,7 +145,7 @@ local function start(match)
             style = style % #bot_styles + 1
             match.seats[index] = seat
         end
-        seat.shop = shop.new(versus.stream_seed(match.seed, 0x53484f50 + index)) -- SHOP
+        seat.shop = shop.new(versus.stream_seed(match.seed, 0x53484f50 + index), match.catalog) -- SHOP
         seat.lives = match.starting_lives
         seat.active = true
     end
@@ -160,7 +160,7 @@ end
 local function settle_pair(match, left, right)
     local first = assert(left.shop:finish_turn())
     local second = assert(right.shop:finish_turn())
-    local result = battle.resolve(first, second, match.battle_random:next())
+    local result = battle.resolve(first, second, match.battle_random:next(), match.catalog)
     if result.status == "strike_limit" then
         -- Only this pair exceeds the engine limit. Preserve both lives and
         -- finish the round without a battle result for either shop.
@@ -228,6 +228,7 @@ end
 function room.new(seed, options)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
     options = options or {}
+    local catalog = options.catalog or data
     local match = {
         seed = seed,
         phase = "lobby",
@@ -239,7 +240,8 @@ function room.new(seed, options)
         settlement_ms = options.settlement_ms or 10000,
         match_ms = options.match_ms or 2700000,
         max_rounds = options.max_rounds or 40,
-        starting_lives = options.starting_lives or data.rules.start_lives,
+        starting_lives = options.starting_lives or catalog.rules.start_lives,
+        catalog = catalog,
         bot_difficulty = options.bot_difficulty or "standard",
         seats = {},
         seat_by_player = {},
