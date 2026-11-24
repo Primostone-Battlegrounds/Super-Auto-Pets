@@ -2,7 +2,6 @@ local battle_receipt = require("autopets.battle_receipt")
 local data = require("autopets.data")
 local rng = require("autopets.rng")
 
-local rules = data.rules
 local shop = {}
 shop.__index = shop
 
@@ -39,22 +38,24 @@ local function refresh(shelf, slots, pool, random)
 end
 
 local function refresh_shop(self)
-    refresh(self.pets, rules.pet_shop_slots, data.pets_for_tier(self.tier), self.random)
-    refresh(self.foods, rules.food_shop_slots, data.foods_for_tier(self.tier), self.random)
+    local catalog = self.catalog
+    refresh(self.pets, catalog.rules.pet_shop_slots, catalog.pets_for_tier(self.tier), self.random)
+    refresh(self.foods, catalog.rules.food_shop_slots, catalog.foods_for_tier(self.tier), self.random)
 end
 
 local function open_round(self)
     self.round = self.round + 1
-    self.tier = data.tier_for_round(self.round)
-    self.gold = rules.gold_per_round
+    self.tier = self.catalog.tier_for_round(self.round)
+    self.gold = self.catalog.rules.gold_per_round
     self.rewards = {}
     refresh_shop(self)
     self.phase = "preparation"
 end
 
-function shop.new(seed)
+function shop.new(seed, catalog)
     local self = setmetatable({
         round = 0, team = {}, pets = {}, foods = {}, random = rng.new(seed), next_uid = 1,
+        catalog = catalog or data,
     }, shop)
     open_round(self)
     return self
@@ -151,13 +152,14 @@ local function has_open_slot(shelf)
 end
 
 local function reroll(self)
-    if self.gold < rules.reroll_cost then
+    local cost = self.catalog.rules.reroll_cost
+    if self.gold < cost then
         return nil, "insufficient_gold"
     end
     if not has_open_slot(self.pets) and not has_open_slot(self.foods) then
         return nil, "all_frozen"
     end
-    self.gold = self.gold - rules.reroll_cost
+    self.gold = self.gold - cost
     refresh_shop(self)
     return true
 end
@@ -187,6 +189,7 @@ local function remove_offer(shelf, position, reward)
 end
 
 local function buy(self, offer_position, team_position, reward)
+    local rules = self.catalog.rules
     local shelf = reward and self.rewards or self.pets
     if not valid_position(offer_position, #shelf) or not shelf[offer_position] then
         return nil, "missing_offer"
@@ -204,7 +207,7 @@ local function buy(self, offer_position, team_position, reward)
     if not valid_position(position, #self.team + 1) then
         return nil, "invalid_position"
     end
-    local definition = data.pet_by_id[shelf[offer_position].id]
+    local definition = self.catalog.pet_by_id[shelf[offer_position].id]
     table.insert(self.team, position, {
         id = definition.id, uid = self.next_uid,
         attack = definition.attack, health = definition.health, level = 1, xp = 0,
@@ -220,7 +223,7 @@ local function sell(self, position)
         return nil, "invalid_position"
     end
     local unit = table.remove(self.team, position)
-    self.gold = self.gold + unit.level * rules.sell_gold_per_level
+    self.gold = self.gold + unit.level * self.catalog.rules.sell_gold_per_level
     return true
 end
 
@@ -233,16 +236,17 @@ local function move(self, from, to)
     return true
 end
 
-local function merge_error(source, target)
+local function merge_error(source, target, max_level)
     if source.id ~= target.id then
         return "different_pet"
     end
-    if target.level == rules.max_level then
+    if target.level == max_level then
         return "max_level"
     end
 end
 
 local function grow(self, source, target)
+    local rules = self.catalog.rules
     target.attack = math.max(target.attack, source.attack) + rules.merge_attack
     target.health = math.max(target.health, source.health) + rules.merge_health
     target.xp = math.min(rules.level_xp[rules.max_level], target.xp + (source.xp or 0) + 1)
@@ -250,7 +254,7 @@ local function grow(self, source, target)
         target.level = target.level + 1
         local tier = math.min(rules.max_tier, self.tier + rules.level_reward_tier_offset)
         local rewards = self.rewards
-        rewards[#rewards + 1] = random_offer(data.pets_at_tier(tier), self.random)
+        rewards[#rewards + 1] = random_offer(self.catalog.pets_at_tier(tier), self.random)
     end
 end
 
@@ -262,7 +266,7 @@ local function merge(self, from, to)
         return nil, "same_position"
     end
     local source, target = self.team[from], self.team[to]
-    local error_code = merge_error(source, target)
+    local error_code = merge_error(source, target, self.catalog.rules.max_level)
     if error_code then
         return nil, error_code
     end
@@ -272,6 +276,7 @@ local function merge(self, from, to)
 end
 
 local function combine(self, offer_position, target_position, reward)
+    local rules = self.catalog.rules
     local shelf = reward and self.rewards or self.pets
     if not valid_position(offer_position, #shelf) or not shelf[offer_position] then
         return nil, "missing_offer"
@@ -282,9 +287,9 @@ local function combine(self, offer_position, target_position, reward)
     if self.gold < rules.pet_cost then
         return nil, "insufficient_gold"
     end
-    local definition = data.pet_by_id[shelf[offer_position].id]
+    local definition = self.catalog.pet_by_id[shelf[offer_position].id]
     local target = self.team[target_position]
-    local error_code = merge_error(definition, target)
+    local error_code = merge_error(definition, target, rules.max_level)
     if error_code then
         return nil, error_code
     end
@@ -295,21 +300,31 @@ local function combine(self, offer_position, target_position, reward)
 end
 
 local function feed(self, offer_position, target_position)
+    local cost = self.catalog.rules.food_cost
     if not valid_position(offer_position, #self.foods) or not self.foods[offer_position] then
         return nil, "missing_offer"
     end
     if not valid_position(target_position, #self.team) then
         return nil, "invalid_position"
     end
-    if self.gold < rules.food_cost then
+    if self.gold < cost then
         return nil, "insufficient_gold"
     end
-    local food = data.food_by_id[self.foods[offer_position].id]
+    local food = self.catalog.food_by_id[self.foods[offer_position].id]
     local target = self.team[target_position]
     target.attack = target.attack + food.attack
     target.health = target.health + food.health
+    if food.adjacent_attack or food.adjacent_health then
+        for _, offset in ipairs({-1, 1}) do
+            local neighbor = self.team[target_position + offset]
+            if neighbor then
+                neighbor.attack = neighbor.attack + (food.adjacent_attack or 0)
+                neighbor.health = neighbor.health + (food.adjacent_health or 0)
+            end
+        end
+    end
     self.foods[offer_position] = false
-    self.gold = self.gold - rules.food_cost
+    self.gold = self.gold - cost
     return true
 end
 
