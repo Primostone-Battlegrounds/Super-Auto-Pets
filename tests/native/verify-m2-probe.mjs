@@ -98,31 +98,30 @@ const source = fs.readFileSync(new URL('../../platform/m2_probe.lua', import.met
   .replace('0 -- AP_DUEL_PET_COST', String(shopFixture.price));
 assert.ok(source.includes(catalogLua) && !source.includes('AP_DUEL_PET_COST'));
 const signals = {
-  AP_DuelRequest: [['action', 'integer'], ['round', 'integer']],
+  AP_DuelRequest: [['action', 'integer'], ['round', 'integer'], ['sequence', 'integer'], ['token', 'integer']],
   AP_DuelSnapshot: [
     ['players', 'integer'], ['seat', 'integer'], ['round', 'integer'], ['phase', 'integer'],
     ['ready', 'boolean'], ['continued', 'boolean'], ['settlements', 'integer'], ['version', 'integer'],
+    ['sequence', 'integer'], ['winner', 'integer'], ['reason', 'integer'], ['remaining', 'integer'], ['ack', 'integer'],
   ],
   AP_DuelMarket: [
     ['round', 'integer'], ['version', 'integer'], ['gold', 'integer'],
     ['offers', 'integerList'], ['team', 'integerList'],
   ],
 };
-const variables = ['AP_readyRound', 'AP_continueRound', 'AP_shopSeat', 'AP_teamCount', 'AP_shopRound', 'AP_gold'];
+const variables = ['AP_readyRound', 'AP_continueRound', 'AP_shopSeat', 'AP_teamCount', 'AP_shopRound', 'AP_gold', 'AP_sequence'];
 const buttons = [
-  { name: 'AP_NativeRefresh', label: '1 刷新', position: [-285, -185] },
-  { name: 'AP_NativeReady1', label: '2 第一轮准备', position: [-95, -185] },
-  { name: 'AP_NativeNext1', label: '3 确认下一轮', position: [95, -185] },
-  { name: 'AP_NativeReady2', label: '4 第二轮准备', position: [285, -185] },
-  ...Array.from({ length: 6 }, (_, index) => {
-    const round = Math.floor(index / 3) + 1;
-    const slot = index % 3 + 1;
+  { name: 'AP_NativeRefresh', label: '1 刷新状态' },
+  { name: 'AP_NativeReady', label: '2 准备' },
+  { name: 'AP_NativeNext', label: '3 下一轮' },
+  ...Array.from({ length: 3 }, (_, index) => {
+    const slot = index + 1;
     return {
-      name: `AP_NativeBuy${round}_${slot}`, label: `${(index + 5) % 10} · 第${round}轮货位${slot}`,
-      position: [(index - 2.5) * 144, -277],
+      name: `AP_NativeBuy${slot}`, label: `${index + 4} · 货位${slot}`,
     };
   }),
-].map((button, index) => ({ ...button, placeholder: String(1073741901 + index), key: index + 1 }));
+].map((button, index) => ({ ...button, position: [(index - 2.5) * 140, -205],
+  placeholder: String(1073741901 + index), key: index + 1 }));
 const ui = {
   name: 'AP_DuelProbe',
   script,
@@ -155,9 +154,9 @@ const ui = {
       name: 'Team', kind: 'text', position: [0, -10], size: [680, 76],
       text: { content: '', fontSize: 21, colour: '#fff3d7', align: 'centre', valign: 'middle' },
     },
-    ...[['Refresh', '刷新状态'], ['Ready', '准备'], ['Advance', '下一轮']].flatMap(([name, content], index) => {
-      const position = [(index - 1) * 192, -98];
-      const size = [176, 65];
+    ...[['Refresh', '刷新状态'], ['Ready', '准备'], ['Advance', '下一轮'], ['Leave', '认输']].flatMap(([name, content], index) => {
+      const position = [(index - 1.5) * 165, -98];
+      const size = [148, 65];
       return [
         { name: `${name}Face`, kind: 'image', position, size, image: 100001, colour: '#286452' },
         {
@@ -235,7 +234,10 @@ try {
   const readButtonGraph = inspected.graphs.find(entry => entry.id === buttonGraph.graphId || entry.graphId === buttonGraph.graphId);
   assert.ok(readGraph?.nodeCount > 0);
   assert.ok(readButtonGraph?.nodeCount > 0);
+  assert.ok(readGraph.editorCount <= 3000);
+  assert.ok(readButtonGraph.editorCount <= 3000);
   assert.ok(readGraph.signalReferences.some(ref => ref.name === 'AP_DuelRequest' && ref.role === 'monitor'));
+  assert.ok(readGraph.signalReferences.some(ref => ref.name === 'AP_DuelRequest' && ref.role === 'send'));
   assert.ok(readButtonGraph.signalReferences.some(ref => ref.name === 'AP_DuelRequest' && ref.role === 'send'));
   const [playerComponents, stageComponents, interfaceLayout] = await Promise.all([
     call('scene_list_components', { mapPath, prefab: 'player' }),

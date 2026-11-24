@@ -3,6 +3,8 @@ local status = root:GetChild("Status")
 local refresh = root:GetChild("Refresh")
 local ready = root:GetChild("Ready")
 local advance = root:GetChild("Advance")
+local leave = root:GetChild("Leave")
+local leave_label = root:GetChild("LeaveLabel")
 local market_gold = root:GetChild("MarketGold")
 local team_label = root:GetChild("Team")
 local click = Enum.CursorEventType.CursorClick
@@ -12,27 +14,58 @@ local catalog = {
 local pet_cost = 0 -- AP_DUEL_PET_COST
 local round = 0
 local latest_version = 0
+local sequence = 0
+local next_token = 1
+local pending
 local preparing = false
+local can_advance = false
+local can_leave = false
+local confirm_leave = false
 local market
 local offers = {}
 
-local function send(action)
+local function transmit(action, command_round, command_sequence, token)
     local signal = game.ServerSignal("AP_DuelRequest")
     signal:AddInt(action)
-    signal:AddInt(round)
+    signal:AddInt(command_round)
+    signal:AddInt(command_sequence)
+    signal:AddInt(token)
     signal:SendSignal()
 end
 
+local function send(action)
+    if pending or sequence == 0 then return end
+    pending = {action = action, round = round, sequence = sequence, token = next_token}
+    next_token = next_token + 1
+    transmit(pending.action, pending.round, pending.sequence, pending.token)
+end
+
 local function request_snapshot()
-    send(0)
+    if pending then
+        transmit(pending.action, pending.round, pending.sequence, pending.token)
+    else
+        transmit(0, round, 0, 0)
+    end
 end
 
 local function submit_ready()
-    send(1)
+    if preparing and market and market.round == round and market.version == latest_version and #market.team > 0 then
+        send(1)
+    end
 end
 
 local function request_advance()
-    send(2)
+    if can_advance then send(2) end
+end
+
+local function forfeit()
+    if not can_leave or pending then return end
+    if confirm_leave then
+        send(6)
+    else
+        confirm_leave = true
+        leave_label.text = "确认认输"
+    end
 end
 
 local function current_market()
@@ -111,16 +144,35 @@ local function receive_market(_, parameters)
 end
 
 local function receive_snapshot(_, parameters)
-    local players, seat, new_round, phase, is_ready, continued, settlements, version = table.unpack(parameters)
+    local players, seat, new_round, phase, is_ready, continued, settlements, version,
+        next_sequence, winner, reason, remaining, ack = table.unpack(parameters)
+    -- An actor's acknowledgement can arrive after a newer peer update.
+    if pending and pending.token == ack then pending = nil end
     if new_round < round or version <= latest_version then
         return
     end
+    if pending and (new_round > pending.round or next_sequence > pending.sequence or phase == 2) then
+        pending = nil
+    end
     latest_version = version
     round = new_round
+    sequence = next_sequence
+    confirm_leave = false
+    leave_label.text = "认输"
     preparing = players == 2 and seat > 0 and phase == 0 and not is_ready
+    can_advance = players == 2 and seat > 0 and phase == 1 and not continued
+    can_leave = seat > 0 and phase ~= 2
     local message = "等待第 2 位玩家"
     if phase == 2 then
-        message = "验证完成"
+        if reason == 1 then
+            message = "两轮同步验证完成"
+        elseif winner == 0 then
+            message = "房间已结束"
+        else
+            message = winner == seat and "对手离开，本席获胜" or "对局已结束，本席告负"
+        end
+    elseif seat > 0 and players < 2 then
+        message = "等待原席位返回"
     elseif players == 2 then
         if phase == 0 then
             message = is_ready and "已准备，等待对手" or "双方已入场"
@@ -132,6 +184,7 @@ local function receive_snapshot(_, parameters)
     status.text = string.format("%s  ·  第 %d 轮  ·  结算 %d 次\n%s", seat_text, round, settlements, message)
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
+    print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
     render_market()
 end
 
@@ -141,6 +194,7 @@ function OnStart()
     refresh:AddCursorEventListener(click, request_snapshot)
     ready:AddCursorEventListener(click, submit_ready)
     advance:AddCursorEventListener(click, request_advance)
+    leave:AddCursorEventListener(click, forfeit)
     for _, offer in ipairs(offers) do
         offer.button:AddCursorEventListener(click, offer.buy)
     end
@@ -160,6 +214,9 @@ function OnDestroy()
     if advance.alive then
         advance:RemoveCursorEventListener(click, request_advance)
     end
+    if leave.alive then
+        leave:RemoveCursorEventListener(click, forfeit)
+    end
     for _, offer in ipairs(offers) do
         if offer.button.alive then
             offer.button:RemoveCursorEventListener(click, offer.buy)
@@ -167,6 +224,11 @@ function OnDestroy()
     end
     round = 0
     latest_version = 0
+    sequence = 0
+    pending = nil
     preparing = false
+    can_advance = false
+    can_leave = false
+    confirm_leave = false
     market = nil
 end
