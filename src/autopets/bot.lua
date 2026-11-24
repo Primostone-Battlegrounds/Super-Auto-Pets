@@ -251,6 +251,17 @@ local function choose_action(state, style, actions_taken, beginner)
     return nil, "priorities_exhausted"
 end
 
+-- Live hosts submit this command through the same shop entry point as players.
+function bot.choose_action(snapshot, style, actions_taken, difficulty)
+    assert(weights[style], "unknown bot style")
+    assert(math.type(actions_taken) == "integer" and actions_taken >= 0, "invalid action count")
+    assert(difficulty == nil or difficulty == "standard" or difficulty == "beginner", "unknown bot difficulty")
+    if snapshot.phase ~= "preparation" then
+        return nil, "wrong_phase"
+    end
+    return choose_action(snapshot, style, actions_taken, difficulty == "beginner")
+end
+
 local function open_turn(pool)
     local round = {round = pool.sessions[1].store:snapshot().round, sessions = {}}
     for index, session in ipairs(pool.sessions) do
@@ -292,7 +303,7 @@ local function prepare_step(pool, expected)
     local session, frame = pool.sessions[index], pool.turn.sessions[index]
     local store = session.store
     local state = store:snapshot()
-    local command, stop = choose_action(state, session.style, #frame.commands, pool.difficulty == "beginner")
+    local command, stop = bot.choose_action(state, session.style, #frame.commands, pool.difficulty)
     if expected then
         local recorded = expected.sessions[index].commands[#frame.commands + 1]
         assert(equal(command, recorded and recorded.command), "command_mismatch")
