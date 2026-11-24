@@ -10,14 +10,17 @@ import { bundleBattleReplay } from '../../platform/m1-bundle.mjs';
 import { nativeBattle } from '../../platform/m3-battle-opening.mjs';
 import { verifyGraph } from './m2-probe-graph.mjs';
 
-const [checkoutArg, scratch, lua, outputArg] = process.argv.slice(2);
+const [checkoutArg, scratch, lua, outputArg, profile = 'compatibility'] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua,
-  'Usage: node tests/native/verify-m2-probe.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable> [new candidate directory]');
+  'Usage: node tests/native/verify-m2-probe.mjs <MCP checkout> <scratch directory> <Lua 5.3 executable> [new candidate directory] [compatibility|release]');
+assert.ok(profile === 'compatibility' || profile === 'release', 'Unknown catalog profile');
+const release = profile === 'release';
+const outputName = release ? 'm2-duel-release' : 'm2-duel-probe';
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0', 'Set MILIASTRA_ALLOW_LIVE_WRITE=0');
 const luaVersion = execFileSync(lua, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim();
 assert.match(luaVersion, /^Lua 5\.3\./, 'Use the Miliastra client Lua version');
 const project = fileURLToPath(new URL('../../', import.meta.url));
-const exportShop = executable => execFileSync(executable, ['-E', 'platform/m2_shop_data.lua'], {
+const exportShop = executable => execFileSync(executable, ['-E', 'platform/m2_shop_data.lua', profile], {
   cwd: project, encoding: 'utf8', timeout: 10_000,
 });
 const shopData = exportShop(lua);
@@ -36,10 +39,11 @@ for (const line of shopData.trimEnd().split('\n')) {
     assert.equal(offerSlots, 3, 'The existing UI has three pet offers');
     shopFixture = { gold, price, teamSize, offerSlots, shelves };
   } else if (kind === 'pet') {
-    const [code, id, name, attack, health] = fields;
+    const [code, id, name, attack, health, tier] = fields;
     assert.equal(Number(code), catalog.length + 1);
     assert.ok(/^[a-z0-9_]+$/.test(id) && name && /^\d+$/.test(attack) && /^\d+$/.test(health));
-    catalog.push({ code: Number(code), id, name, attack: Number(attack), health: Number(health) });
+    assert.ok(/^\d+$/.test(tier));
+    catalog.push({ code: Number(code), id, name, attack: Number(attack), health: Number(health), tier: Number(tier) });
   } else if (kind === 'lives') {
     [startingLives] = fields.map(Number);
     assert.ok(Number.isSafeInteger(startingLives) && startingLives > 0);
@@ -53,7 +57,7 @@ for (const line of shopData.trimEnd().split('\n')) {
   }
 }
 assert.ok(shopFixture && catalog.length && startingLives && shelves.length === 4);
-const resource = nativeShop(lua, process.env.LUA54 || 'lua5.4');
+const resource = nativeShop(lua, process.env.LUA54 || 'lua5.4', profile);
 const rule = resource.rules;
 assert.equal(rule.PET_SLOTS, shopFixture.offerSlots);
 assert.equal(rule.TEAM_SIZE, shopFixture.teamSize);
@@ -77,7 +81,7 @@ assert.ok(!fs.existsSync(candidate), 'Use a new candidate directory');
 
 const toolRequire = createRequire(path.join(checkout, 'package.json'));
 const { parse } = toolRequire('luaparse');
-const battleGraph = nativeBattle(lua, process.env.LUA54 || 'lua5.4', parse);
+const battleGraph = nativeBattle(lua, process.env.LUA54 || 'lua5.4', parse, profile);
 assert.deepEqual(battleGraph.ids.slice(0, catalog.length), catalog.map(({ id }) => id));
 const { Client } = toolRequire('@modelcontextprotocol/sdk/client/index.js');
 const { StdioClientTransport } = toolRequire('@modelcontextprotocol/sdk/client/stdio.js');
@@ -112,7 +116,7 @@ const catalogLua = entries => entries.map(({ name, attack, health }) =>
   `{name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
 const clientRules = ['PET_SLOTS', 'FOOD_SLOTS', 'TEAM_SIZE', 'PET_COST', 'FOOD_COST', 'MAX_LEVEL']
   .map(key => `${key.toLowerCase()} = ${rule[key]},`).join('\n    ');
-const source = bundleBattleReplay(parse, './m2_probe.lua')
+const source = bundleBattleReplay(parse, './m2_probe.lua', release)
   .replace('-- AP_DUEL_PETS', catalogLua(resource.catalog.pet))
   .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
   .replace('-- AP_DUEL_RULES', clientRules);
@@ -240,6 +244,9 @@ try {
   const fightSource = fs.readFileSync(new URL('../../platform/m2_duel_battle.ts', import.meta.url), 'utf8')
     .replace('id: 1073741827,', `id: ${fightGraph.graphId},`)
     .replace("[0n], 'int'); // AP_DUEL_BOARD", `${literals(Array(66).fill(0))}, 'int');`)
+    .replace('outcome = gstsServerCollisionStep(f, board, fainting, false); // AP_DUEL_COLLISION', release ? `const opening = f.get('openingState');
+      outcome = ${battleGraph.collisionFunction}(f, board, fainting, metadata, opening, false);
+      f.set('openingState', opening);` : 'outcome = gstsServerCollisionStep(f, board, fainting, false);')
     .replace('[0n], // AP_DUEL_FAINT', `${literals(battleGraph.faintMetadata)},`)
     .replace('[0n], // AP_DUEL_OPENING', `${literals(battleGraph.openingMetadata)},`);
   assert.doesNotMatch(fightSource, /\/\/ AP_DUEL_/);
@@ -256,7 +263,7 @@ try {
   ] });
   assert.equal(compiled.failed, undefined, JSON.stringify(compiled));
   await stage('scene_set_client_script', { name: script, file: `${script}.lua`, source });
-  await stage('scene_add_client_ui', { ...ui, outputName: 'm2-duel-probe' });
+  await stage('scene_add_client_ui', { ...ui, outputName });
 
   const { players } = await call('scene_list_respawn_points', { mapPath });
   assert.deepEqual(players, { min: 2, max: 2 });
@@ -310,7 +317,7 @@ try {
   assert.deepEqual(checked.problems, []);
   function checkReplay({ seed, outcome, left, right }, board) {
     const input = [seed, left.join(' '), right.join(' ')].join('\n') + '\n';
-    const oracle = executable => execFileSync(executable, ['-E', 'tests/native/m2-battle-oracle.lua'], {
+    const oracle = executable => execFileSync(executable, ['-E', 'tests/native/m2-battle-oracle.lua', profile], {
       cwd: project, encoding: 'utf8', input, timeout: 10_000,
     });
     const result = oracle(lua);
@@ -327,13 +334,14 @@ try {
       }
       assert.equal(fields.join(' '), rows[side], 'server and Lua terminal board disagree');
     }
+    return rows[2] === '' ? [] : rows[2].split(' ');
   }
   const graphSimulation = verifyGraph(graphSource, buttonSource, combatSource, registeredButtons, toolRequire('typescript'),
-    { ...shopFixture, foodSlots: rule.FOOD_SLOTS, startingLives }, checkReplay);
+    { ...shopFixture, foodSlots: rule.FOOD_SLOTS, startingLives, release }, checkReplay);
   const extracted = path.join(workspace, `${script}.lua`);
   fs.writeFileSync(extracted, readSource);
   const clientSimulation = execFileSync(lua, [
-    '-E', fileURLToPath(new URL('./m2-probe-input.lua', import.meta.url)), extracted,
+    '-E', fileURLToPath(new URL('./m2-probe-input.lua', import.meta.url)), extracted, profile,
   ], { encoding: 'utf8', timeout: 10_000 });
   assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
   assert.equal(sha256(fs.readFileSync(input)), fixtureHash);
@@ -348,7 +356,8 @@ try {
   fs.writeFileSync(path.join(candidate, 'evidence.json'), JSON.stringify({
     revision, sourceRevision: execFileSync('git', ['-C', project, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     sourceDirty: Boolean(execFileSync('git', ['-C', project, 'status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim()),
-    fixtureHash, players, graph: readGraph, buttonGraph: readButtonGraph, fightGraph: readFightGraph,
+    fixtureHash, profile, catalogSize: {pets: resource.catalog.pet.length, foods: resource.catalog.food.length},
+    players, graph: readGraph, buttonGraph: readButtonGraph, fightGraph: readFightGraph,
     buttons: registeredButtons, signals: registered.parameters, shopFixture, shopDataSha256: sha256(shopData),
     nativeShopSha256: sha256(resource.definition), clientControls: readUi.interface.controls.length,
     attachments: { stageGraph: graph.graphId, stageFightGraph: fightGraph.graphId,

@@ -65,7 +65,7 @@ g.server({
   let outcome = gstsServerBattleOutcome(f, board);
   if (outcome === 0n) {
     if (f.get('openingDone')) {
-      outcome = gstsServerCollisionStep(f, board, fainting, false);
+      outcome = gstsServerCollisionStep(f, board, fainting, false); // AP_DUEL_COLLISION
     } else {
       const opening = f.get('openingState');
       const complete = gstsServerOpeningStep(f, board, fainting, metadata, opening, false);

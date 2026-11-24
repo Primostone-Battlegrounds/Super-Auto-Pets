@@ -26,9 +26,10 @@ const checkout = fs.realpathSync(checkoutArg);
 const toolRevision = git(checkout, ['rev-parse', 'HEAD']);
 assert.equal(toolRevision, '59c576e41632a6bf6781bbca83a676d0da0374ec', 'Use the pinned MCP revision');
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const bytes = fs.readFileSync(path.join(baseline, config.file));
-const baselineHash = sha256(bytes);
 const baselineEvidence = JSON.parse(fs.readFileSync(path.join(baseline, 'evidence.json'), 'utf8'));
+const baselineFile = mode === 'duel' && baselineEvidence.profile === 'release' ? 'm2-duel-release.gil' : config.file;
+const bytes = fs.readFileSync(path.join(baseline, baselineFile));
+const baselineHash = sha256(bytes);
 assert.equal(baselineEvidence.sha256, baselineHash, 'Incorrect source probe package');
 
 fs.mkdirSync(scratch, { recursive: true });
@@ -70,7 +71,8 @@ async function stage(name, args) {
 const script = 'multiplayer_standings';
 const uiName = 'AP_Standings';
 const strip = mode === 'duel';
-const layout = standingsLayout(mode, { position: strip ? [0, 328] : [507, 0], probe: true, strip });
+const probe = mode === 'room' || !baselineEvidence.fightGraph;
+const layout = standingsLayout(mode, { position: strip ? [0, 328] : [507, 0], probe, strip });
 const canvases = { pc: [1600, 900], mobile: [1280, 720] };
 
 function graphHashes(gil) {
@@ -153,7 +155,7 @@ try {
   assert.equal(Object.keys(originalGraphHashes).length, original.graphs.length);
   assert.deepEqual(graphHashes(gil), originalGraphHashes);
   assert.equal(sha256(fs.readFileSync(input)), baselineHash);
-  assert.equal(sha256(fs.readFileSync(path.join(baseline, config.file))), baselineHash);
+  assert.equal(sha256(fs.readFileSync(path.join(baseline, baselineFile))), baselineHash);
 
   const file = `${mode}-standings-probe.gil`;
   fs.mkdirSync(output);

@@ -70,8 +70,9 @@ function standings.duel_probe(fields)
     end
     if phase == 2 and reason == 1 then view.phase_name = "两轮同步验证完成"
     elseif phase == 2 then
-        view.phase_name = "房间已结束"
-        if lives ~= nil and view.winner and seat > 0 then
+        if lives == nil then
+            view.phase_name = "房间已结束"
+        elseif view.winner and seat > 0 then
             view.seats[view.winner].place = 1
             view.seats[3 - view.winner].place = 2
         end
