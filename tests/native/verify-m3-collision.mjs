@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { lowerDamage } from '../../platform/m3_collision_lower.mjs';
+import { lowerCombatMath } from '../../platform/m3_collision_lower.mjs';
 
 const [checkoutArg, scratch, lua, outputArg] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua,
@@ -31,7 +31,7 @@ const candidate = outputArg ? path.resolve(outputArg) : path.join(workspace, 'ca
 assert.ok(!fs.existsSync(candidate), 'Use a new candidate directory');
 
 const battleSource = fs.readFileSync(new URL('../../src/autopets/battle.lua', import.meta.url), 'utf8');
-const { statements, strikeLimit } = lowerDamage(battleSource, requireTool('luaparse').parse);
+const { damageCode, buffCode, summonCode, strikeLimit } = lowerCombatMath(battleSource, requireTool('luaparse').parse);
 const template = fs.readFileSync(new URL('../../platform/m3_collision.ts', import.meta.url), 'utf8');
 const lua54 = process.env.LUA54 || 'lua5.4';
 const versions = [lua, lua54].map(binary => execFileSync(binary, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim());
@@ -41,41 +41,93 @@ const readOracle = (binary, mode) => execFileSync(binary, ['-E', 'tests/native/m
   cwd: project, timeout: 30_000, encoding: 'utf8',
 });
 
+const slots = 5;
+const unitFields = 6;
+const eventSizes = { damage: 4, faint: 2, buff: 2, summon: 4 };
+
+function readBoard(fields) {
+  let cursor = 0;
+  const board = Array.from({ length: 2 }, () => {
+    const size = fields[cursor++];
+    assert.ok(Number.isInteger(size) && size >= 0 && size <= slots);
+    return Array.from({ length: size }, () => {
+      const unit = fields.slice(cursor, cursor + unitFields);
+      cursor += unitFields;
+      assert.equal(unit.length, unitFields);
+      assert.ok(unit.every(value => Number.isInteger(value) && value >= 0 && value <= 2147483647));
+      return unit;
+    });
+  });
+  assert.equal(cursor, fields.length);
+  return board;
+}
+
 function parityFixture(mode) {
   const trace = readOracle(lua, mode);
   assert.equal(trace, readOracle(lua54, mode), 'Lua oracle exports differ');
   const pairs = [];
+  const catalog = [];
   for (const row of trace.trimEnd().split('\n')) {
-    const [kind, ...fields] = row.split('\t');
-    const [pair, ...values] = fields.map(Number);
-    assert.ok(fields.length && [pair, ...values].every(Number.isSafeInteger));
-    if (kind === 'pair') {
-      const [attackA, healthA, shieldA, attackB, healthB, shieldB, outcome, strikes] = values;
-      assert.equal(pair, pairs.length + 1);
-      assert.ok([attackA, healthA, shieldA, attackB, healthB, shieldB].every(value => value > 0));
-      assert.ok(outcome >= 1 && outcome <= 4 && strikes > 0 && strikes <= strikeLimit);
-      pairs.push({ attacks: [attackA, attackB], health: [healthA, healthB], shields: [shieldA, shieldB],
-        outcome, strikes, steps: [] });
-    } else {
-      assert.equal(kind, 'step');
-      const [strike, ...step] = values;
-      const list = pairs[pair - 1].steps;
-      assert.equal(strike, list.length + 1);
-      assert.equal(step.length, 6);
-      list.push(step);
+    const [kind, key, ...fields] = row.split('\t');
+    const pair = Number(key);
+    assert.ok(Number.isSafeInteger(pair));
+    if (kind === 'definition') {
+      assert.equal(pair, catalog.length + 1);
+      const [id, ...record] = fields;
+      assert.match(id, /^[a-z0-9_]+$/);
+      assert.ok(record.length === 5 && record.map(Number).every(Number.isSafeInteger));
+      catalog.push({ id, record: record.map(Number) });
+      continue;
     }
+    if (kind === 'pair') {
+      const [outcome, strikes, first, ...opening] = fields.map(Number);
+      assert.ok(opening.every(Number.isSafeInteger));
+      assert.equal(pair, pairs.length + 1);
+      assert.ok(outcome >= 1 && outcome <= 4 && strikes > 0 && strikes <= strikeLimit);
+      assert.ok(first === 0 || first === 1);
+      pairs.push({ opening: readBoard(opening), first, outcome, strikes, steps: [] });
+      continue;
+    }
+    const [strike, ...payload] = fields;
+    const list = pairs[pair - 1].steps;
+    const step = list[Number(strike) - 1] ?? { events: [] };
+    assert.equal(Number(strike), list.length + (list.at(-1) === step ? 0 : 1));
+    if (kind === 'event') {
+      const [action, ...values] = payload;
+      assert.equal(values.length, eventSizes[action]);
+      assert.ok(values.map(Number).every(Number.isSafeInteger));
+      step.events.push([action, ...values.map(Number)]);
+    } else {
+      assert.equal(kind, 'board');
+      assert.ok(!step.board);
+      step.board = readBoard(payload.map(Number));
+    }
+    list[Number(strike) - 1] = step;
   }
   assert.equal(pairs.length, 4);
   for (const pair of pairs) assert.equal(pair.steps.length, pair.strikes);
-  return { pairs, oracleSha256: sha256(trace) };
+  return { catalog, pairs, oracleSha256: sha256(trace) };
 }
 
-function graphSource(graphId, { pairs }) {
+function graphSource(graphId, { catalog, pairs }) {
   let code = template.replace('id: 1073741825,', `id: ${graphId},`)
     .replace('0n; // AP_STRIKE_LIMIT', `${strikeLimit}n;`)
-    .replace('// AP_LOWERED_DAMAGE', statements);
-  for (const field of ['attacks', 'shields', 'health']) {
-    const values = pairs.flatMap(pair => pair[field]).map(value => value + 'n');
+    .replace('// AP_LOWERED_DAMAGE', damageCode)
+    .replace('// AP_LOWERED_BUFF', buffCode)
+    .replace('// AP_LOWERED_SUMMON', summonCode);
+  const seeds = {
+    counts: pairs.flatMap(pair => pair.opening.map(side => side.length)),
+    firsts: pairs.map(pair => pair.first),
+    catalog: catalog.flatMap(definition => definition.record),
+  };
+  for (const [index, pair] of pairs.entries()) {
+    seeds['board' + index] = pair.opening.flatMap(side => {
+      const cells = side.flat();
+      return cells.concat(new Array(slots * unitFields - cells.length).fill(0));
+    });
+  }
+  for (const [field, data] of Object.entries(seeds)) {
+    const values = data.map(value => value + 'n');
     code = code.replace(`[0n]), // AP_PROBE_${field.toUpperCase()}`, `[${values.join(', ')}]),`);
   }
   assert.ok(!code.includes('// AP_'));
@@ -126,6 +178,7 @@ function simulate(source, { pairs }) {
       assert.ok(index >= 0n && index < list.length);
       list[Number(index)] = value;
     },
+    assemblyList: values => Array.from(values),
     copyList: values => Array.from(values),
     dataTypeConversion: value => String(value),
     takeSmallerValue: (a, b) => a < b ? a : b,
@@ -136,6 +189,7 @@ function simulate(source, { pairs }) {
   events.get('whenEntityIsCreated')({ eventSourceEntity: stage }, flow);
   assert.equal(starts, 1);
   const timer = events.get('whenTimerIsTriggered');
+  const seen = Array.from({ length: pairs.length }, () => ({ steps: [] }));
   function tick(name = clock) {
     calls = 0;
     timer({ eventSourceEntity: stage, timerName: name }, flow);
@@ -148,29 +202,46 @@ function simulate(source, { pairs }) {
     assert.equal(logs.length, logStart);
     tick();
     const logEnd = logs.length;
+    if (logEnd !== logStart) {
+      const logsOnTick = logs.slice(logStart);
+      assert.equal(logsOnTick.shift(), 'AUTO_PETS_COLLISION_PROBE strike');
+      const pair = Number(logsOnTick.shift()) - 1;
+      const strike = Number(logsOnTick.shift());
+      assert.ok(pair >= 0 && pair < pairs.length);
+      const result = seen[pair];
+      assert.equal(strike, result.steps.length + 1);
+      const board = Array.from({ length: 2 }, (_, side) => {
+        const index = pair * 2 + side;
+        const head = Number(variables.heads[index]);
+        const size = Number(variables.counts[index]);
+        return Array.from({ length: size }, (_, slot) => {
+          const base = (side * slots + (head + slot) % slots) * unitFields;
+          return variables['board' + pair].slice(base, base + unitFields).map(Number);
+        });
+      });
+      const step = { events: [], board };
+      result.steps.push(step);
+      while (logsOnTick.length) {
+        const kind = logsOnTick.shift();
+        if (kind === 'AUTO_PETS_COLLISION_PROBE outcome') {
+          assert.equal(Number(logsOnTick.shift()), pair + 1);
+          assert.ok(!result.outcome);
+          result.outcome = Number(logsOnTick.shift());
+        } else if (kind === 'AUTO_PETS_COLLISION_PROBE done') {
+          assert.equal(stops, 1);
+        } else {
+          const size = eventSizes[kind];
+          assert.ok(size && size <= logsOnTick.length, `Unrecognized event: ${kind}`);
+          step.events.push([kind, ...logsOnTick.splice(0, size).map(Number)]);
+        }
+      }
+    }
     tick();
     assert.equal(logs.length, logEnd, 'Duplicate timer event did not repeat a hit');
   }
   assert.equal(stops, 1);
-  const messages = logs.slice(1);
   assert.equal(logs[0], 'AUTO_PETS_COLLISION_PROBE start');
-  assert.equal(messages.pop(), 'AUTO_PETS_COLLISION_PROBE done');
-  const seen = Array.from({ length: pairs.length }, () => ({ steps: [] }));
-  while (messages.length) {
-    const kind = messages.shift();
-    const pair = Number(messages.shift());
-    assert.ok(pair >= 1 && pair <= pairs.length);
-    const result = seen[pair - 1];
-    if (kind === 'AUTO_PETS_COLLISION_PROBE pair_strike') {
-      const strike = Number(messages.shift());
-      assert.equal(strike, result.steps.length + 1);
-      result.steps.push(messages.splice(0, 6).map(Number));
-    } else {
-      assert.equal(kind, 'AUTO_PETS_COLLISION_PROBE pair_outcome');
-      assert.ok(!result.outcome);
-      result.outcome = Number(messages.shift());
-    }
-  }
+  assert.equal(logs.at(-1), 'AUTO_PETS_COLLISION_PROBE done');
   assert.deepEqual(seen, pairs.map(({ steps, outcome }) => ({ steps, outcome })));
   return { timerSeconds: Number(now), steps: seen.reduce((sum, pair) => sum + pair.steps.length, 0), maxCalls };
 }
@@ -184,6 +255,10 @@ const graph = addGraph({ mapPath: config.mapPath, name: 'AP_CollisionProbe', att
 const baseline = parityFixture('normal');
 const limit = parityFixture('limit');
 assert.deepEqual(new Set(baseline.pairs.map(pair => pair.outcome)), new Set([1, 2, 3]));
+assert.deepEqual(new Set(baseline.pairs.flatMap(pair => pair.steps.flatMap(step => step.events.map(([kind]) => kind)))),
+  new Set(Object.keys(eventSizes)));
+assert.equal(baseline.pairs[0].opening[0].length, slots);
+assert.equal(baseline.pairs[0].opening[1].length, slots);
 assert.equal(limit.pairs[3].outcome, 4);
 assert.equal(limit.pairs[3].strikes, strikeLimit);
 const source = graphSource(graph.graphId, baseline);
