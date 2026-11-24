@@ -1,3 +1,4 @@
+local connections = require("autopets.connections")
 local duel = require("autopets.duel")
 
 local host = {}
@@ -17,20 +18,12 @@ function host.new(seed, player_one, player_two, options)
     }, host)
 end
 
-local function recovery_deadline(self)
-    local first, second = self.seats[1].expires, self.seats[2].expires
-    if first and second then
-        return math.min(first, second)
-    end
-    return first or second
-end
-
 local function update(self, now)
     if math.type(now) ~= "integer" or now < self.match.clock then
         return nil, "invalid_clock"
     end
     local old_revision = self.match.revision
-    local expires = recovery_deadline(self)
+    local expires = connections.next_expiry(self.seats)
     if expires and expires <= now and self.match.phase ~= "ended" then
         assert(self.match:tick(expires))
         if self.match.phase ~= "ended" then
@@ -83,13 +76,7 @@ function host:connect(player, now)
         return nil, changed
     end
     local seat = self.seats[index]
-    if seat.connection then
-        self.by_connection[seat.connection] = nil
-    end
-    seat.connection = {}
-    seat.expires = nil
-    self.by_connection[seat.connection] = index
-    return seat.connection, frames(self, true)
+    return connections.attach(self.by_connection, seat, index), frames(self, true)
 end
 
 function host:disconnect(connection, now)
@@ -102,8 +89,7 @@ function host:disconnect(connection, now)
         return nil, changed
     end
     local seat = self.seats[index]
-    self.by_connection[connection] = nil
-    seat.connection = nil
+    connections.detach(self.by_connection, seat)
     if self.match.deadline then
         seat.expires = now + math.min(self.reconnect_ms, self.match.match_deadline - now)
     end
@@ -138,7 +124,7 @@ function host:next_deadline()
     if not phase then
         return nil
     end
-    return math.min(phase, recovery_deadline(self) or phase)
+    return math.min(phase, connections.next_expiry(self.seats) or phase)
 end
 
 return host
