@@ -120,10 +120,40 @@ function verifyControls(expected, decoded, records, prefix = '', parentSize) {
     }
     assert.equal(observed.devices, undefined, `${key} must use shared coordinates`);
     assertBounds(key, observed.position, observed.size, parentSize ? { [prefix]: parentSize } : screens);
+    if (observed.kind === 'cursorArea') {
+      assert.ok(observed.size.every(value => value >= 48), `${key} has an undersized input target`);
+    }
     const { kind, position, size, image, colour, opacity, text } = observed;
     records.push({ path: key, parent: prefix || null, kind, position, size, image, colour, opacity, text,
       active: observed.active !== false, visible: observed.visible !== false });
     verifyControls(control.children ?? [], observed.children ?? [], records, key, observed.size);
+  }
+}
+
+function verifyFrameHitAreas(name, items) {
+  const shown = new Map();
+  const centres = new Map();
+  const areas = [];
+  for (const item of items) {
+    const parent = centres.get(item.parent) ?? [0, 0];
+    const centre = item.position.map((offset, axis) => offset + parent[axis]);
+    centres.set(item.path, centre);
+    const visible = item.active && item.visible && (item.parent === null || shown.get(item.parent));
+    shown.set(item.path, visible);
+    if (visible && item.kind === 'cursorArea') {
+      areas.push({ path: item.path, centre, size: item.size });
+      assertBounds(`${name}/${item.path}`, centre, item.size, screens);
+    }
+  }
+  const overlay = shown.get('Restart') ? 'Restart/' : shown.get('Menu') ? 'Menu/' : '';
+  const interactive = areas.filter(entry => entry.path.startsWith(overlay));
+  assert.ok(interactive.length, `${name} has no input target`);
+  for (const [index, first] of interactive.entries()) {
+    for (const second of interactive.slice(index + 1)) {
+      assert.ok(first.centre.some((value, axis) =>
+        Math.abs(value - second.centre[axis]) > (first.size[axis] + second.size[axis]) / 2),
+      `${name}: ${first.path} meets ${second.path}`);
+    }
   }
 }
 
@@ -167,6 +197,7 @@ function readFrames(file, records) {
         sizes.set(item.path, item.size);
         return item;
       });
+      verifyFrameHitAreas(name, items);
       return [name, items];
     })),
   };
@@ -214,7 +245,7 @@ try {
     variables: [{ name: 'seed', type: 'integer', value: seed, public: true }],
     outputName: 'm1-run-script',
   });
-  assert.deepEqual(scripted.callbacks, ['OnStart', 'OnUpdate', 'OnDestroy']);
+  assert.deepEqual(scripted.callbacks, ['OnStart', 'OnEnable', 'OnDisable', 'OnUpdate', 'OnDestroy']);
   assert.ok(fs.realpathSync(scripted.mapPath).startsWith(workspace + path.sep));
   const mounted = { name: nativeRun.script, values: { seed } };
   const built = await call('scene_add_client_ui', {
@@ -286,11 +317,20 @@ try {
   const replayPath = path.join(workspace, 'domain-replay.txt');
   fs.writeFileSync(replayPath, extractedReplay);
   const framesRaw = path.join(workspace, 'frames-runtime.tsv');
-  const inputStartedAt = performance.now();
-  const log = execFileSync(lua, ['-E', fileURLToPath(new URL('./m1-input.lua', import.meta.url)),
-    extracted, bindings, String(decodedSeed), framesRaw],
-    { cwd: projectRoot, encoding: 'utf8', timeout: 30_000 });
-  const inputSimulationMs = performance.now() - inputStartedAt;
+  const mobileFramesRaw = path.join(workspace, 'frames-runtime-mobile.tsv');
+  const inputScript = fileURLToPath(new URL('./m1-input.lua', import.meta.url));
+  const inputSimulationMs = {};
+  const inputLogs = {};
+  for (const [device, frameFile] of [['pc', framesRaw], ['mobile', mobileFramesRaw]]) {
+    const inputStartedAt = performance.now();
+    inputLogs[device] = execFileSync(lua, ['-E', inputScript, extracted, bindings, String(decodedSeed), frameFile, device],
+      { cwd: projectRoot, encoding: 'utf8', timeout: 30_000 });
+    inputSimulationMs[device] = performance.now() - inputStartedAt;
+  }
+  const log = inputLogs.pc;
+  assert.equal(inputLogs.mobile, log, 'PC and mobile simulated input produced different results');
+  assert.deepEqual(fs.readFileSync(mobileFramesRaw), fs.readFileSync(framesRaw),
+    'PC and mobile simulated input produced different layout states');
   const framesPath = path.join(workspace, 'frames.json');
   const frames = readFrames(framesRaw, records);
   fs.writeFileSync(framesPath, JSON.stringify(frames) + '\n');
@@ -340,7 +380,8 @@ try {
     offline: { status: 'passed', checkProblems: checked.problems },
     replay: { status: 'passed', sourceRuntimes: [versions.lua53, versions.lua54], readbackRuntime: versions.lua53,
       sha256: replayHash, bytes: extractedReplay.length },
-    simulation: { status: 'passed', runtime: versions.lua53, input: 'mocked cursor events and update ticks',
+    simulation: { status: 'passed', runtime: versions.lua53, input: 'coordinate-driven mocked cursor events and update ticks',
+      devices: screens,
       seed: decodedSeed, framesPath, logs: log.trimEnd().split('\n') },
     resources,
     officialClient: { pc: 'pending', mobile: 'pending' },
@@ -367,7 +408,7 @@ if (packageDir) {
     players: report.players,
     offline: report.offline.status,
     replay: report.replay,
-    simulation: { status: report.simulation.status, seed: report.simulation.seed },
+    simulation: { status: report.simulation.status, seed: report.simulation.seed, devices: report.simulation.devices },
     officialClient: report.officialClient,
   };
   fs.mkdirSync(packageDir);
@@ -402,7 +443,10 @@ if (packageDir) {
       `用 Lua 5.3 复验回读快照和事件。\n\n` +
       `\`\`\`sh\nlua5.3 -E acceptance-input/m1-replay.lua bundle acceptance-input/readback.lua > replay-check.txt\n` +
       `cmp domain-replay.txt replay-check.txt\n` +
-      `lua5.3 -E acceptance-input/m1-input.lua acceptance-input/readback.lua acceptance-input/control-paths.tsv ${seed} input-frames.tsv\n\`\`\`\n`;
+      `for device in pc mobile; do\n` +
+      `  lua5.3 -E acceptance-input/m1-input.lua acceptance-input/readback.lua acceptance-input/control-paths.tsv ${seed} "input-frames-$device.tsv" "$device"\n` +
+      `done\n` +
+      `cmp input-frames-pc.tsv input-frames-mobile.tsv\n\`\`\`\n`;
     fs.writeFileSync(path.join(packageDir, 'README.md'), guide);
     const files = [mapFile, 'manifest.json', 'README.md', 'device-acceptance.md', 'evidence.json',
       'MCP-FIXTURE-LICENSE.txt', ...generated, ...Object.keys(inputs).map(name => `acceptance-input/${name}`)];

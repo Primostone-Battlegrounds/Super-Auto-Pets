@@ -2,6 +2,7 @@ local rules_data = require("autopets.data")
 local run = require("autopets.run")
 local art = require("autopets.art")
 local root
+local view_enabled = false
 local rules = rules_data.rules
 
 local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
@@ -625,7 +626,7 @@ local function next_reward()
 end
 
 local function sync_updates()
-    script:EnableUpdate(playing and not menu_open)
+    script:EnableUpdate(view_enabled and playing and not menu_open)
 end
 
 local function set_playing(value)
@@ -762,7 +763,7 @@ local function confirm_restart()
 end
 
 function OnUpdate(dt)
-    if not playing or menu_open then return end
+    if not view_enabled or not playing or menu_open then return end
     local battle = state.battle
     local event = battle.events[event_index]
     local delay = event.type == "damage" and 0.55 or 0.4
@@ -779,6 +780,7 @@ function OnUpdate(dt)
 end
 
 local function allows_input(path)
+    if not view_enabled then return false end
     if confirming_restart then return path:match("^Restart/") ~= nil end
     if menu_open then return path:match("^Menu/") ~= nil end
     return not path:match("^Menu/") and not path:match("^Restart/")
@@ -814,8 +816,12 @@ local function bind(path, callback, on_drag)
             press.moved = true
             on_drag(event)
         end
-        bound[Enum.CursorEventType.CursorDrag] = update_drag
-        bound[Enum.CursorEventType.CursorEndDrag] = end_drag
+        bound[Enum.CursorEventType.CursorDrag] = function(event)
+            if pressed_here(path, event) and allows_input(path) then update_drag(event) end
+        end
+        bound[Enum.CursorEventType.CursorEndDrag] = function(event)
+            if pressed_here(path, event) and allows_input(path) then end_drag(event) end
+        end
     end
     for event, handler in pairs(bound) do hit:AddCursorEventListener(event, handler) end
     listeners[hit] = bound
@@ -836,6 +842,7 @@ local function bind_button(path, callback)
 end
 
 local function release_view()
+    view_enabled = false
     set_playing(false)
     stop_sound()
     for hit, bound in pairs(listeners) do
@@ -854,7 +861,7 @@ end
 
 function OnStart()
     if session then release_view() end
-    root = script.object
+    root, view_enabled = script.object, true
     menu_open, has_started, confirming_restart = true, false, nil
     muted, replay_speed = false, 1
     reset_view()
@@ -904,6 +911,21 @@ function OnStart()
     end
     draw()
     log_state()
+end
+
+function OnEnable()
+    view_enabled = true
+    if session then
+        sync_updates()
+        draw(false)
+    end
+end
+
+function OnDisable()
+    view_enabled = false
+    press, drag = nil, nil
+    sync_updates()
+    stop_sound()
 end
 
 function OnDestroy()

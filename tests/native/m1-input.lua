@@ -4,7 +4,9 @@ local nodes, logs = {}, {}
 local configured_seed = seed
 local cursor = {CursorDown = "CursorDown", CursorClick = "CursorClick",
     CursorBeginDrag = "CursorBeginDrag", CursorDrag = "CursorDrag", CursorEndDrag = "CursorEndDrag"}
-local canvas = {1600, 900}
+local device = arg[5] or "pc"
+local canvas = assert(({pc = {1600, 900}, mobile = {1280, 720}})[device], "unknown input device")
+local main_touch = device == "pc" and -1 or 4
 local capture_file = assert(io.open(arg[4], "w"))
 local ticking, image_writes = false, 0
 local captured = {}
@@ -140,11 +142,49 @@ local function cursor_event(touch, x, y)
     return {touchId = touch, GetUIPos = function() return x, y end}
 end
 
-local function click(path, touch)
+local function screen_hit(x, y)
+    local overlay = nodes.Restart.active and "Restart/" or nodes.Menu.active and "Menu/"
+    local match
+    for key, node in pairs(nodes) do
+        if node.kind == "cursorArea" and (not overlay or key:sub(1, #overlay) == overlay) then
+            local ancestor, shown = node, true
+            while ancestor do
+                if not ancestor.active or not ancestor.visible then
+                    shown = false
+                    break
+                end
+                ancestor = ancestor.parent
+            end
+            if shown then
+                local path = assert(key:match("^(.+)/Hit$"))
+                local centre_x, centre_y = hit_centre(path)
+                if math.abs(x - centre_x) <= node.width / 2 and math.abs(y - centre_y) <= node.height / 2 then
+                    assert(not match, "overlapping hit areas: " .. tostring(match) .. " and " .. path)
+                    match = path
+                end
+            end
+        end
+    end
+    return match
+end
+
+local function deliver_click(path, touch, x, y)
     local target = hit_area(path)
-    local event = cursor_event(touch or -1, hit_centre(path))
+    local event = cursor_event(touch or main_touch, x, y)
     target.callbacks.CursorDown(event)
     target.callbacks.CursorClick(event)
+end
+
+local function click(path, touch)
+    local x, y = hit_centre(path)
+    assert(screen_hit(x, y) == path, "screen cannot reach " .. path)
+    deliver_click(path, touch, x, y)
+end
+
+local function blocked_click(path, touch)
+    local x, y = hit_centre(path)
+    assert(screen_hit(x, y) ~= path, "overlay leaves input exposed: " .. path)
+    deliver_click(path, touch, x, y)
 end
 
 local function assert_tooltip(card, above_card)
@@ -167,7 +207,9 @@ end
 
 local function start_drag(path, touch)
     local target = hit_area(path)
-    local press = cursor_event(touch, hit_centre(path))
+    local x, y = hit_centre(path)
+    assert(screen_hit(x, y) == path, "screen cannot drag " .. path)
+    local press = cursor_event(touch or main_touch, x, y)
     target.callbacks.CursorDown(press)
     target.callbacks.CursorBeginDrag(press)
     return target.callbacks
@@ -359,7 +401,7 @@ local function finish(outcome, terminal, inspect_playback)
         click("OpenMenu")
         assert(not ticking)
         sandbox.OnUpdate(5)
-        click("Primary")
+        blocked_click("Primary")
         click("Menu/Continue")
         assert(ticking and label("Battle/Event") == replaying)
         click("Battle/Fast")
@@ -402,6 +444,10 @@ end
 
 assert(nodes.Menu.active and label("Menu/Continue/Title") == "开始游戏")
 capture("menu")
+local menu_x, menu_y = hit_centre("Menu/Audio")
+local menu_edge = hit_area("Menu/Audio").height / 2
+assert(screen_hit(menu_x, menu_y - menu_edge) == "Menu/Audio")
+assert(not screen_hit(menu_x, menu_y - menu_edge - 1))
 click("Menu/Audio", 9)
 assert(label("Menu/Audio/Title") == "音效：关闭")
 opening(seed)
@@ -455,10 +501,9 @@ drag_to("Shop/Pet1", "Team3", -1)
 assert(label("Team1/Name") == "棉尾兔")
 assert(label("Team1/XP") == "L1  经验 0/2")
 assert(label("Money/Value") == "7" and label("Shop/Pet1/Name") == "空商品")
-canvas = {1280, 720}
-drag_to("Shop/Pet2", "Team1", 4, nodes["Team1/Hit"].width / 2 + 1)
+drag_to("Shop/Pet2", "Team1", main_touch, nodes["Team1/Hit"].width / 2 + 1)
 assert(label("Team1/Name") == "棉尾兔" and label("Money/Value") == "7" and not nodes["Shop/Pet2/Selected"].active)
-drag_to("Shop/Pet2", "Team1", 4, nodes["Team1/Hit"].width / 2 - 1)
+drag_to("Shop/Pet2", "Team1", main_touch, nodes["Team1/Hit"].width / 2 - 1)
 assert(label("Team1/Name") == "芦纹龟")
 drag_to("Team2", "Team1", 4)
 assert(label("Team1/Name") == "棉尾兔")
@@ -470,7 +515,6 @@ drag_to("Shop/Food1", "Team5", 4)
 assert(label("Team2/Detail") == detail_before_food and label("Money/Value") == "4")
 drag_to("Shop/Food1", "Team2", 4, 0, -nodes["Team2/Hit"].height / 2 + 1)
 assert(label("Team2/Detail") ~= detail_before_food and label("Money/Value") == "1")
-canvas = {1600, 900}
 shop("freeze", 3)
 assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].active)
 shop("reroll")
@@ -550,7 +594,7 @@ assert(label("Hint"):find("重开本局", 1, true))
 click("Reset")
 assert(nodes.Restart.active and nodes["Restart/Heading"].visible)
 capture("restart_confirm")
-click("Shop/Reroll")
+blocked_click("Shop/Reroll")
 assert(label("Money/Value") == "2")
 click("Restart/Cancel")
 assert(not nodes.Restart.active and label("Money/Value") == "2")
@@ -579,7 +623,7 @@ assert(next(active_audio) == nil)
 click("Menu/NewGame", 8)
 assert(label("Restart/Heading") == "放弃本局？")
 capture("menu_discard")
-click("Shop/Reroll", 8)
+blocked_click("Shop/Reroll", 8)
 assert(label("Money/Value") == gold and label("Team1/Name") == unit)
 click("Restart/Cancel", 8)
 assert(nodes.Menu.active)
@@ -592,6 +636,38 @@ opening(interaction_seed + 1)
 local idle_writes = image_writes
 for _ = 1, 60 do sandbox.OnUpdate(1 / 60) end
 assert(image_writes == idle_writes, "idle preparation rebuilt portraits")
+
+local before_disable = installs
+local pending_drag = start_drag("Shop/Pet1", main_touch)
+local pending_drop = cursor_event(main_touch, hit_centre("Team1"))
+pending_drag.CursorDrag(pending_drop)
+assert(nodes["Team1/DropTarget"].active)
+sandbox.OnDisable()
+pending_drag.CursorEndDrag(pending_drop)
+assert(label("Money/Value") == "10" and not ticking)
+sandbox.OnEnable()
+pending_drag.CursorEndDrag(pending_drop)
+assert(label("Money/Value") == "10" and not nodes["Team1/DropTarget"].active)
+assert(installs == before_disable, "enabling the existing view added listeners")
+
+shop("buy", 1)
+click("Primary")
+local initial_audio = audio_plays
+for _ = 1, 80 do
+    sandbox.OnUpdate(0.6)
+    if audio_plays > initial_audio then break end
+end
+assert(ticking and next(active_audio) ~= nil)
+local suspended_event = label("Battle/Event")
+sandbox.OnDisable()
+assert(not ticking and next(active_audio) == nil)
+sandbox.OnUpdate(5)
+click("Primary")
+assert(label("Battle/Event") == suspended_event)
+sandbox.OnEnable()
+assert(ticking and label("Battle/Event") == suspended_event)
+sandbox.OnUpdate(0.6)
+assert(label("Battle/Event") ~= suspended_event)
 
 destroy_script()
 assert(capture_file:close())
