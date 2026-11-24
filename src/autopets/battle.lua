@@ -5,10 +5,10 @@ local rng = require("autopets.rng")
 local battle = {}
 local strike_limit = 256
 
-local function copy_team(team, side)
+local function copy_team(team, side, catalog)
     assert(type(team) == "table", "battle team must be a table")
     local size = #team
-    assert(size <= data.rules.team_size, "battle team exceeds five slots")
+    assert(size <= catalog.rules.team_size, "battle team exceeds five slots")
     for slot in pairs(team) do
         assert(math.type(slot) == "integer" and slot >= 1 and slot <= size, "battle team must be dense")
     end
@@ -17,12 +17,12 @@ local function copy_team(team, side)
     for slot = 1, size do
         local unit = team[slot]
         assert(type(unit) == "table", "battle team must be dense")
-        local definition = data.pet_by_id[unit.id]
+        local definition = catalog.pet_by_id[unit.id]
         assert(definition, "unknown battle pet")
         assert(math.type(unit.attack) == "integer" and unit.attack >= 1, "invalid battle attack")
         assert(math.type(unit.health) == "integer" and unit.health >= 1, "invalid battle health")
         assert(math.type(unit.level) == "integer" and unit.level >= 1
-            and unit.level <= data.rules.max_level, "invalid battle level")
+            and unit.level <= catalog.rules.max_level, "invalid battle level")
         local uid = side .. ":slot:" .. slot
         if unit.uid ~= nil then
             assert(math.type(unit.uid) == "integer" and unit.uid > 0, "invalid battle pet uid")
@@ -96,6 +96,9 @@ local function damage(state, source, target, amount)
     local remaining = amount - absorbed
     target.shield = target.shield - absorbed
     target.health = math.max(0, target.health - remaining)
+    if remaining > 0 and not target.hurt_used and target.ability and target.ability.trigger == "hurt" then
+        state.hurt_queue[#state.hurt_queue + 1] = target
+    end
     emit(state, "damage", target, {
         source_side = source.side,
         source_slot = source.slot,
@@ -109,13 +112,26 @@ end
 
 local effects = {}
 
+local function shield(state, target, amount)
+    target.shield = target.shield + amount
+    emit(state, "shield", target, {amount = amount, shield = target.shield})
+end
+
 function effects.shield_front(state, unit, ability)
     local team = state.teams[unit.side]
     local amount = ability.power * unit.level
     for slot = 1, math.min(ability.targets, #team) do
-        local target = team[slot]
-        target.shield = target.shield + amount
-        emit(state, "shield", target, {amount = amount, shield = target.shield})
+        shield(state, team[slot], amount)
+    end
+end
+
+function effects.shield_next(state, unit, ability)
+    local team = state.teams[unit.side]
+    for slot = unit.slot + 1, #team do
+        if team[slot].health > 0 then
+            shield(state, team[slot], ability.power * unit.level)
+            return
+        end
     end
 end
 
@@ -129,6 +145,20 @@ function effects.hit_random(state, unit, ability)
     end
 end
 
+function effects.hit_front(state, unit, ability)
+    local target = state.teams[opposing_side(unit.side)][1]
+    damage(state, unit, target, ability.power * unit.level)
+end
+
+function effects.hit_back(state, unit, ability)
+    local team = state.teams[opposing_side(unit.side)]
+    damage(state, unit, team[#team], ability.power * unit.level)
+end
+
+function effects.splash(state, unit, ability, target)
+    damage(state, unit, target, ability.power * unit.level)
+end
+
 function effects.buff_front(state, unit, ability)
     local target = state.teams[unit.side][1]
     if target then
@@ -139,10 +169,26 @@ function effects.buff_front(state, unit, ability)
     end
 end
 
+function effects.rally_summon(state, unit, ability, target)
+    local power = ability.power * unit.level
+    local attack = math.min(power, math.maxinteger - target.attack)
+    local health = math.min(power, math.maxinteger - target.health)
+    target.attack = target.attack + attack
+    target.health = target.health + health
+    target.max_health = target.max_health + health
+    emit(state, "buff", target, {amount = health, attack_amount = attack, health = target.health})
+end
+
+local function use_ability(state, unit, target)
+    local ability = unit.ability
+    emit(state, "skill", unit, {ability = ability.name, trigger = ability.trigger})
+    return effects[ability.effect](state, unit, ability, target)
+end
+
 function effects.summon(state, unit, ability, position)
     local team = state.teams[unit.side]
-    local token = data.token_by_id[ability.token]
-    local count = math.min(ability.power, data.rules.team_size - #team)
+    local token = state.catalog.token_by_id[ability.token]
+    local count = math.min(ability.power, state.catalog.rules.team_size - #team)
     for offset = 0, count - 1 do
         state.summon_count = state.summon_count + 1
         local summon = {
@@ -158,17 +204,16 @@ function effects.summon(state, unit, ability, position)
         }
         table.insert(team, summon.slot, summon)
         emit(state, "summon", summon, {attack = summon.attack, health = summon.health})
-    end
-    for slot = position + count, #team do
-        team[slot].slot = slot
+        for slot = summon.slot + 1, #team do
+            team[slot].slot = slot
+        end
+        for _, friend in ipairs(team) do
+            if friend.ability and friend.ability.trigger == "summon" then
+                use_ability(state, friend, summon)
+            end
+        end
     end
     return count
-end
-
-local function use_ability(state, unit, summon_position)
-    local ability = unit.ability
-    emit(state, "skill", unit, {ability = ability.name, trigger = ability.trigger})
-    return effects[ability.effect](state, unit, ability, summon_position)
 end
 
 -- Remove all casualties from both teams before their queued effects use the free slots.
@@ -213,10 +258,23 @@ local function both_teams_remain(state)
     return #state.teams.player > 0 and #state.teams.enemy > 0
 end
 
+local function resolve_damage(state)
+    for _, target in ipairs(state.hurt_queue) do
+        if target.health > 0 and not target.hurt_used then
+            target.hurt_used = true
+            use_ability(state, target)
+        end
+    end
+    for index = #state.hurt_queue, 1, -1 do
+        state.hurt_queue[index] = nil
+    end
+    resolve_faints(state)
+end
+
 local function open_battle(state)
     local queue = {}
     -- Use the original slot order and the seeded side order for tied slots.
-    for slot = 1, data.rules.team_size do
+    for slot = 1, state.catalog.rules.team_size do
         for _, side in ipairs(state.order) do
             local unit = state.teams[side][slot]
             if unit and unit.ability.trigger == "start" then
@@ -230,7 +288,7 @@ local function open_battle(state)
         end
         if unit.health > 0 then
             use_ability(state, unit)
-            resolve_faints(state)
+            resolve_damage(state)
         end
     end
 end
@@ -254,22 +312,32 @@ local function collide(state)
     announce_attack(state, second, first)
     damage(state, first, second, first.attack)
     damage(state, second, first, second.attack)
-    resolve_faints(state)
+    for _, side in ipairs(state.order) do
+        local unit = state.teams[side][1]
+        local secondary = state.teams[opposing_side(side)][2]
+        if secondary and unit.ability and unit.ability.trigger == "attack" then
+            use_ability(state, unit, secondary)
+        end
+    end
+    resolve_damage(state)
 end
 
 -- Inputs are dense, front-first teams of pet snapshots. Events are emitted in
 -- replay order, with strike 0 reserved for opening effects. Faint slots refer
 -- to the formation before the current damage batch is compacted. Board frames
 -- show the post-event state. For events without a frame, retain the prior one.
-function battle.resolve(player, enemy, seed)
+function battle.resolve(player, enemy, seed, catalog)
+    catalog = catalog or data
     local generator = rng.new(seed)
     local first = generator:int(1, 2) == 1 and "player" or "enemy"
     local state = {
-        teams = {player = copy_team(player, "player"), enemy = copy_team(enemy, "enemy")},
+        teams = {player = copy_team(player, "player", catalog), enemy = copy_team(enemy, "enemy", catalog)},
+        catalog = catalog,
         rng = generator,
         order = {first, opposing_side(first)},
         strike = 0,
         summon_count = 0,
+        hurt_queue = {},
         events = {},
     }
     emit(state, "start", nil, {seed = seed, first_side = first})
