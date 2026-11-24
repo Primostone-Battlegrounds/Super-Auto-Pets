@@ -1,0 +1,404 @@
+local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
+local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
+local battle = require("autopets.battle")
+local battle_codes = {win = 1, loss = 2, draw = 3}
+local click = Enum.CursorEventType.CursorClick
+local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
+local render_standings, panel
+local controls, bindings, keys, content = {}, {}, {}, {}
+local frames, frame_round, frame_index, following, canonical_round
+local token = 0
+local source_ready = false
+
+local function object(path)
+    if not controls[path] then controls[path] = assert(panel:FindChild(path), path) end
+    return controls[path]
+end
+
+local function text(path, value)
+    if content[path] == value then return end
+    object(path).text = value
+    content[path] = value
+end
+
+local function visible(path, value)
+    local control = object(path)
+    if control.active ~= value then
+        control:SetActive(value)
+        control:SetVisible(value)
+    end
+end
+
+local function transmit(action, round, sequence, from, to, flag, ack)
+    local signal = game.ServerSignal("AP_RoomRequest")
+    signal:AddInt(action)
+    signal:AddInt(round)
+    signal:AddInt(sequence)
+    signal:AddInt(from)
+    signal:AddInt(to)
+    signal:AddInt(flag)
+    signal:AddInt(ack)
+    signal:SendSignal()
+end
+
+local function refresh()
+    if pending then transmit(table.unpack(pending)) else transmit(0, 0, 0, 0, 0, 0, 0) end
+end
+
+local function alive()
+    return match and match.seat > 0 and (match.lives[match.seat] or 0) > 0
+end
+
+local function editable()
+    return not pending and alive() and match.phase == 2 and not match.ready and preview and preview.round == match.round
+end
+
+local function send(action, from, to, flag)
+    if not source_ready or not alive() or pending or match.sequence == 0 then return end
+    token = token % 2147483646 + 1
+    pending = {action, match.round, match.sequence, from or 0, to or 0, flag or 0, token}
+    transmit(table.unpack(pending))
+end
+
+local function parse_market(raw)
+    if #raw < 41 then return nil end
+    local view = {round = raw[1], tier = raw[2], gold = raw[3], pets = {}, foods = {}, team = {}, rewards = {}}
+    for slot = 1, 3 do view.pets[slot] = raw[6 + slot] end
+    for slot = 1, 2 do view.foods[slot] = raw[9 + slot] end
+    for slot = 1, math.min(raw[6], 5) do
+        local offset = 12 + (slot - 1) * 6
+        view.team[slot] = {code = raw[offset], uid = raw[offset + 1], attack = raw[offset + 2],
+            health = raw[offset + 3], level = raw[offset + 4], xp = raw[offset + 5]}
+    end
+    for offset = 42, #raw do view.rewards[#view.rewards + 1] = raw[offset] end
+    return view
+end
+
+local function chosen()
+    if preview and selected then
+        for slot, unit in ipairs(preview.team) do
+            if unit.uid == selected then return slot, unit end
+        end
+    end
+end
+
+local function paint_shop()
+    if not preview or preview.round ~= match.round then return end
+    text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5", preview.gold, preview.tier, #preview.team))
+    local picked = chosen()
+    for slot = 1, 5 do
+        local is_pet = slot <= 3
+        local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
+        local item = (is_pet and pets or foods)[math.abs(code)]
+        local detail = is_pet and "%s\n%d 攻 · %d 命" or "%s\n+%d 攻 · +%d 命"
+        text("Shop/Offer" .. slot .. "/Text", item and detail:format(item.name, item.attack, item.health) or "售罄")
+        text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
+        local unit = preview.team[slot]
+        local prefix = slot == picked and "已选 · " or ""
+        local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
+        local stats = unit and string.format("\n%d 攻 · %d 命 / L%d  经验%d", unit.attack, unit.health, unit.level, unit.xp) or ""
+        text("Shop/Team" .. slot .. "/Text", prefix .. name .. stats)
+    end
+    reward = math.min(reward, math.max(#preview.rewards, 1))
+    local item = pets[preview.rewards[reward]]
+    text("Shop/Reward/Text", item and string.format("%s %d/%d", item.name, reward, #preview.rewards) or "暂无升级奖励")
+    text("Shop/Merge/Text", merge and "取消合并" or "合并队员")
+end
+
+local function paint_battle()
+    local frame = frame_round == match.round and frames[frame_index]
+    if not frame or (frame.left ~= match.seat and frame.right ~= match.seat) then
+        local opponent = match.opponents[match.seat]
+        local result = result_names[match.results[match.seat]]
+        text("Replay/RoundText", result or (opponent == 0 and "本轮轮空" or "等待服务端战斗画面"))
+        for slot = 1, 5 do
+            text("Replay/Own" .. slot, "")
+            text("Replay/Enemy" .. slot, "")
+        end
+        return
+    end
+    local allied_side = frame.left == match.seat and 0 or 1
+    local opposing_seat = allied_side == 0 and frame.right or frame.left
+    local board = frame.board
+    for slot = 1, 5 do
+        for side = 0, 1 do
+            local name = side == allied_side and "Own" or "Enemy"
+            local display = "空位"
+            if frame.teams then
+                local unit = frame.teams[side == 0 and "player" or "enemy"][slot]
+                if unit then
+                    local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
+                    display = string.format("%s\n%d攻 · %d命\n盾 %d", def.name, unit.attack, unit.health, unit.shield)
+                end
+            elseif slot <= board[61 + side] then
+                local head = board[63 + side]
+                local offset = (side * 5 + (head + slot - 1) % 5) * 6 + 1
+                local item = fighters[board[offset]] or pets[board[offset]]
+                if item then
+                    display = string.format("%s\n%d攻 · %d命\n盾 %d", item.name, board[offset + 1],
+                        board[offset + 2], board[offset + 4])
+                end
+            end
+            text("Replay/" .. name .. slot, display)
+        end
+    end
+    local result
+    if frame.outcome == 1 or frame.outcome == 2 then
+        result = frame.outcome == allied_side + 1 and "本轮获胜" or "本轮落败"
+    elseif frame.outcome > 0 then
+        result = result_names[frame.outcome]
+    else
+        result = "自动战斗"
+    end
+    text("Replay/RoundText", string.format("%s · 对手席位 %d\n回放 %d / %d",
+        result, opposing_seat, frame_index, #frames))
+end
+
+local function redraw()
+    if not match then return end
+    local label = phase_names[match.phase] or "等待房间"
+    text("Status", label .. (match.round > 0 and (" · 第 " .. match.round .. " 轮") or ""))
+    local shop_open = match.phase == 2 and preview ~= nil and alive()
+    local replay_open = match.phase >= 3 and match.seat > 0
+    visible("Shop", shop_open)
+    visible("Replay", replay_open)
+    visible("Ready", shop_open and not match.ready)
+    visible("Forfeit", alive() and match.phase > 0 and match.phase < 5)
+    text("Forfeit/Text", forfeiting and "确认认输" or "认输")
+    if shop_open then paint_shop() end
+    if replay_open then paint_battle() end
+    local message = hint or "等待服务端推进"
+    if pending then
+        message = "等待服务端响应，可用「同步」查看当前状态"
+    elseif not hint and shop_open then
+        message = match.ready and "已准备，等待其他席位" or "点选队员后可喂食、出售、换位或合并"
+    elseif not hint and match.phase == 5 then
+        local place = match.places[match.seat]
+        message = place and place > 0 and ("我的名次 · 第 " .. place .. " 名") or "本局已结束"
+    end
+    text("Hint", message)
+end
+
+local function receive_view(_, values)
+    if not source_ready then return end
+    local revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, raw, ack =
+        table.unpack(values)
+    if match and round < match.round then return end
+    local acknowledged = pending and round == pending[2] and ack == pending[7]
+    if revision <= latest then
+        if acknowledged then pending = nil; redraw() end
+        return
+    end
+    local transitioned = not match or round ~= match.round or phase ~= match.phase
+    if transitioned then
+        selected, merge, reward, hint = nil, false, 1, nil
+    elseif acknowledged and sequence == pending[3] then
+        hint = "操作未生效，已同步服务端状态"
+    else
+        hint = nil
+    end
+    if frame_round < round then
+        frames, frame_round, frame_index, following = {}, round, 0, true
+    end
+    if transitioned or acknowledged or pending and sequence > pending[3] then pending = nil end
+    latest, forfeiting = revision, false
+    match = {phase = phase, round = round, seat = seat, sequence = sequence, ready = ready, lives = lives,
+        places = places, opponents = opponents, results = results}
+    preview = parse_market(raw)
+    local playing_seats = phase >= 1
+    local view = {revision = revision, phase = phase == 0 and "lobby" or phase == 5 and "ended" or "preparation",
+        phase_name = phase_names[phase], round = round, seat = seat, human_count = humans,
+        bot_count = playing_seats and 8 - humans or 0, alive_count = 0, seats = {},
+        winner = winner > 0 and winner or nil}
+    if alive() and phase >= 3 and phase <= 4 then
+        local opponent = opponents[seat]
+        view.opponent = opponent > 0 and opponent or nil
+        view.bye = not view.opponent
+    end
+    for index = 1, playing_seats and 8 or humans do
+        local life, place = lives[index], places[index]
+        if phase == 5 and place == 1 or phase ~= 5 and life > 0 then view.alive_count = view.alive_count + 1 end
+        view.seats[index] = {kind = index <= humans and "human" or "bot", lives = playing_seats and life or nil,
+            place = place > 0 and place or nil, ready = index == seat and ready}
+    end
+    render_standings(view)
+    redraw()
+end
+
+local function receive_battle(_, values)
+    if not source_ready then return end
+    local stamp, round, left, right, outcome, board = table.unpack(values)
+    if #board < 66 or round <= canonical_round or round < frame_round or match and round < match.round then return end
+    if match and round == match.round and match.seat ~= left and match.seat ~= right then return end
+    if round > frame_round then frames, frame_round, frame_index, following = {}, round, 0, true end
+    local at = #frames + 1
+    while at > 1 and frames[at - 1].stamp > stamp do at = at - 1 end
+    if at > 1 and frames[at - 1].stamp == stamp then return end
+    table.insert(frames, at, {stamp = stamp, left = left, right = right, outcome = outcome, board = board})
+    if at <= frame_index then frame_index = frame_index + 1 end
+    if #frames > 256 then table.remove(frames, 1); frame_index = math.max(1, frame_index - 1) end
+    if following then frame_index = #frames end
+    if match and round == match.round and match.phase >= 3 then paint_battle() end
+end
+
+local function decode_formation(wire)
+    local count = wire[1]
+    if math.type(count) ~= "integer" or count < 0 or count > native_catalog.rules.team_size
+        or #wire ~= 1 + count * 6 then return nil end
+    local team = {}
+    for at = 2, #wire, 6 do
+        local definition = native_catalog.pets[wire[at]]
+        if not definition then return nil end
+        team[#team + 1] = {id = definition.id, uid = wire[at + 1], attack = wire[at + 2],
+            health = wire[at + 3], level = wire[at + 4]}
+    end
+    return team
+end
+
+local function receive_replay(_, values)
+    if not source_ready or not match then return end
+    local round, left, right, outcome, seed, first, second = table.unpack(values)
+    if round < match.round or round < frame_round or round <= canonical_round
+        or (match.seat ~= left and match.seat ~= right) then return end
+    local left_team, right_team = decode_formation(first), decode_formation(second)
+    if not left_team or not right_team then return end
+    local ok, result = pcall(battle.resolve, left_team, right_team, seed, native_catalog)
+    if not ok or (result.status == "strike_limit" and 4 or battle_codes[result.outcome]) ~= outcome then
+        print(string.format("AUTO_PETS_M3 replay_mismatch round=%d", round))
+        return
+    end
+    local resolved = {}
+    for _, event in ipairs(result.events) do
+        if event.board then
+            resolved[#resolved + 1] = {left = left, right = right, outcome = event.type == "result" and outcome or 0,
+                teams = event.board}
+        end
+    end
+    frames, frame_round, frame_index, following, canonical_round = resolved, round, 1, false, round
+    print(string.format("AUTO_PETS_M3 replay round=%d events=%d outcome=%d", round, #result.events, outcome))
+    if match.round == round and match.phase >= 3 then paint_battle() end
+end
+
+local function buy(slot, is_reward)
+    if not editable() then return end
+    local code = math.abs((is_reward and preview.rewards or preview.pets)[slot] or 0)
+    local target, unit = chosen()
+    if code == 0 then return end
+    if unit and unit.code == code then send(12, slot, target, is_reward and 1 or 0)
+    else send(11, slot, target, is_reward and 1 or 0) end
+end
+
+local function choose(slot)
+    if not editable() or not preview.team[slot] then return end
+    local picked = chosen()
+    if not picked then selected = preview.team[slot].uid
+    elseif picked == slot then selected = nil
+    else
+        send(merge and 15 or 14, picked, slot)
+        selected, merge = nil, false
+    end
+end
+
+local function button(path, callback)
+    local control = object(path .. "/Hit")
+    local run = function()
+        if source_ready then callback(); redraw() end
+    end
+    control:AddCursorEventListener(click, run)
+    bindings[#bindings + 1] = {control, run}
+end
+
+local function key(event, callback)
+    local run = function()
+        if not source_ready then return false end
+        callback()
+        redraw()
+        return true
+    end
+    panel:AddKeyEventListener(event, run)
+    keys[#keys + 1] = {event, run}
+end
+
+local function reroll()
+    if editable() then send(10) end
+end
+
+local function ready_up()
+    if editable() and #preview.team > 0 then send(1) end
+end
+
+local function scrub(offset)
+    if not match or frame_round ~= match.round or #frames == 0 then return end
+    following = offset == 0
+    frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
+end
+
+function OnStart()
+    local root = script.object
+    panel = assert(root:GetChild("Match"))
+    render_standings = standings.bind(assert(root:GetChild("Standings")), "room")
+    latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
+    frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
+    controls, bindings, keys, content = {}, {}, {}, {}
+    source_ready = true
+    visible("Ready", false)
+    visible("Forfeit", false)
+    for slot = 1, 5 do
+        button("Shop/Offer" .. slot, function()
+            if slot <= 3 then
+                buy(slot, false)
+            elseif editable() then
+                local target = chosen()
+                if target and preview.foods[slot - 3] ~= 0 then send(16, slot - 3, target) end
+            end
+        end)
+        button("Shop/Freeze" .. slot, function()
+            if not editable() then return end
+            local is_pet = slot <= 3
+            local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
+            if code ~= 0 then send(17, is_pet and slot or slot - 3, is_pet and 0 or 1) end
+        end)
+        button("Shop/Team" .. slot, function() choose(slot) end)
+    end
+    button("Shop/Reroll", reroll)
+    button("Shop/Sell", function()
+        local slot = editable() and chosen()
+        if slot then send(13, 0, slot); selected = nil end
+    end)
+    button("Shop/Merge", function() if editable() then merge = not merge end end)
+    button("Shop/Reward", function() buy(reward, true) end)
+    button("Shop/RewardNext", function()
+        if editable() and #preview.rewards > 1 then reward = reward % #preview.rewards + 1 end
+    end)
+    button("Replay/Previous", function() scrub(-1) end)
+    button("Replay/Forward", function() scrub(1) end)
+    button("Replay/Follow", function() scrub(0) end)
+    button("Refresh", refresh)
+    button("Ready", ready_up)
+    button("Forfeit", function()
+        if not alive() or match.phase == 0 or match.phase >= 5 or pending then return end
+        if forfeiting then send(3) else forfeiting = true end
+    end)
+    key(Enum.KeyEventType.KeyboardCharacterSkill1KeyDown, refresh)
+    key(Enum.KeyEventType.KeyboardInteractKeyDown, ready_up)
+    key(Enum.KeyEventType.KeyboardCharacterSkill2KeyDown, reroll)
+    script:RegisterServerSignalHandler("AP_RoomView", receive_view)
+    script:RegisterServerSignalHandler("AP_RoomBattle", receive_battle)
+    script:RegisterServerSignalHandler("AP_RoomReplay", receive_replay)
+    refresh()
+end
+
+function OnDestroy()
+    source_ready = false
+    script:UnregisterServerSignalHandler("AP_RoomView")
+    script:UnregisterServerSignalHandler("AP_RoomBattle")
+    script:UnregisterServerSignalHandler("AP_RoomReplay")
+    for _, item in ipairs(bindings) do
+        if item[1].alive then item[1]:RemoveCursorEventListener(click, item[2]) end
+    end
+    if panel and panel.alive then
+        for _, item in ipairs(keys) do panel:RemoveKeyEventListener(item[1], item[2]) end
+    end
+    controls, bindings, keys, content, frames = {}, {}, {}, {}, {}
+    render_standings, panel = nil, nil
+end
