@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 00:51'
-updated_date: '2026-11-23 08:52'
+updated_date: '2026-11-24 00:57'
 labels: []
 milestone: m-1
 dependencies:
@@ -43,6 +43,8 @@ ordinal: 8000
 1. 用原生 UI 将五格、商店和战斗事件接入 TASK-7 单局接口。
 2. 将纯 Lua 模块内嵌到隔离 GIL，由 MCP 回读并执行 Lua 5.3 模拟整局。
 3. 记录 PC 和手机官方客户端分开的待验步骤。
+
+4. 分别以 PC 和手机画布运行回读输入，校验控件边界、模态层的命中隔离与脚本停用和恢复。
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -56,4 +58,6 @@ ordinal: 8000
 成品复核候选从 PR #10 的 GitHub Actions Artifacts 下载。检查人数、操作、确认重开、两种终局与回放，并记录同一候选的 PC 与手机证据。
 
 PR #11 已进入 develop，沿用该 PR 的隔离单人候选完成官方 PC 和手机实测。已通过同 SHA 的源码、独立 GIL 读回与离线双端画面复核；官方客户端待验。候选 GIL SHA-256 为 3b54bd1f3cb1da7331fb063f3650d1248e30850136f3053b9873297a13cb3c81。[候选下载](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45113299227/artifacts/14790068203)
+
+回读候选现分别执行 1600×900 鼠标与 1280×720 触点完整输入。两种画布输出相同日志及 13 个画面状态，校核 48×48 布局单位的最小命中、拖放内外边缘、模态隔离和停用再启用。停用结束悬挂拖放、逐帧更新和音效，启用保留回放位置。官方 PC 和移动端仍独立待验。
 <!-- SECTION:NOTES:END -->
