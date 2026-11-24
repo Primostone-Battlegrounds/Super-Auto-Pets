@@ -6,6 +6,8 @@
 
 在 [Game delivery](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop) 打开最新成功的 `develop` 运行，从 Summary 下载 `super-auto-pets-<short-sha>.zip`。解压后导入同一个 `super-auto-pets.gil`，可从主菜单进入八人吃鸡、好友 1v1 或单人 AI 练习。下载需要登录 GitHub，产物保留 30 天。校验、构建版本与官方双端操作见包内说明。[导入与验收](platform/GAME.md)
 
+有 Actions 写权限的维护者可在运行页面选择「Re-run all jobs」，按该次运行的原始提交手动重新交付。
+
 ## 开发入口
 
 - 从仓库根目录运行 `lua5.4 scripts/play.lua 7 --release --beginner` 进入六阶练习，输入 `help` 查看操作。省略选项可进入兼容目录和默认难度。
