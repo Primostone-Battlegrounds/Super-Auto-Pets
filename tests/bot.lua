@@ -3,6 +3,8 @@ package.path = "src/?.lua;" .. package.path
 local battle = require("autopets.battle")
 local bot = require("autopets.bot")
 local data = require("autopets.data")
+local release = require("autopets.release_data")
+local shop = require("autopets.shop")
 
 local function same(expected, actual)
     if type(expected) ~= "table" then
@@ -18,18 +20,19 @@ local function same(expected, actual)
     return true
 end
 
-local rules = data.rules
 local styles = {"guardian", "striker", "swarm"}
 local actions_seen = {}
 local styles_seen = {}
 local rosters_seen = {}
-local function inspect(trace, snapshot, round)
-    assert(trace.rules_hash == data.rules_hash and #trace.rounds == round)
+local function inspect(trace, snapshot, round, catalog)
+    catalog = catalog or data
+    local rules = catalog.rules
+    assert(trace.rules_hash == catalog.rules_hash and #trace.rounds == round)
     assert(#trace.sessions == 2 and trace.sessions[1].shop_seed ~= trace.sessions[2].shop_seed)
-    assert(snapshot.round == round and snapshot.tier == data.tier_for_round(round))
+    assert(snapshot.round == round and snapshot.tier == catalog.tier_for_round(round))
     assert(snapshot.style == trace.sessions[trace.selected].style)
     assert(same(snapshot.team, trace.rounds[round].sessions[trace.selected].finished.team))
-    local opponent, err, detail = bot.replay(trace)
+    local opponent, err, detail = bot.replay(trace, catalog)
     assert(opponent, tostring(err) .. ": " .. tostring(detail))
     assert(same(opponent, snapshot))
 
@@ -67,7 +70,7 @@ local function inspect(trace, snapshot, round)
             assert(finished.phase == "battle" and finished.gold == gold and #finished.team > 0)
             assert(#finished.team <= rules.team_size and math.type(finished.rng_state) == "integer")
             for _, unit in ipairs(finished.team) do
-                local pet = assert(data.pet_by_id[unit.id])
+                local pet = assert(catalog.pet_by_id[unit.id])
                 assert(math.type(unit.uid) == "integer" and not known_uid[unit.uid])
                 known_uid[unit.uid] = true
                 assert(pet.tier <= math.min(rules.max_tier, finished.tier + rules.level_reward_tier_offset))
@@ -78,7 +81,7 @@ local function inspect(trace, snapshot, round)
         end
         if index < round then
             local left, right = frame.sessions[1].finished.team, frame.sessions[2].finished.team
-            local verified = battle.resolve(left, right, frame.training.result.seed)
+            local verified = battle.resolve(left, right, frame.training.result.seed, catalog)
             for _, field in ipairs({"seed", "status", "outcome", "rng_state"}) do
                 assert(verified[field] == frame.training.result[field])
             end
@@ -181,5 +184,62 @@ assert(not pcall(bot.generate, 0, 17))
 assert(not pcall(bot.generate, 1, 17, "unknown"))
 assert(not pcall(bot.generate, 1, 17, "guardian", "unknown"))
 assert(not pcall(bot.generate, 1, "bad seed"))
+
+-- An eight-seat host can execute decisions against its own shop without a training pool.
+local store = shop.new(31, release)
+local baseline = store:snapshot()
+assert(#baseline.team == 0)
+local state = store:snapshot()
+local opening_command = assert(bot.choose_action(state, "swarm", 0, "standard", release))
+assert(same(state, baseline), "choosing a command writes to the supplied snapshot")
+assert(same(opening_command, bot.choose_action(state, "swarm", 0, "standard", release)))
+assert(store:apply(opening_command))
+assert(#store:finish_turn() == 1)
+local finished_command, finished_reason = bot.choose_action(store:snapshot(), "swarm", 1, "standard", release)
+assert(finished_command == nil and finished_reason == "wrong_phase")
+
+local function unit(id)
+    local pet = release.pet_by_id[id]
+    return {id = id, attack = pet.attack, health = pet.health, level = 1, xp = 0}
+end
+local synergistic = {
+    phase = "preparation", round = 12, tier = 6, gold = release.rules.food_cost,
+    team = {unit("mist_crane"), unit("tidal_narwhal"), unit("fern_quail")},
+    pets = {false, false, false}, rewards = {},
+    foods = {{id = "night_orchard", frozen = false}, false},
+}
+local feed = assert(bot.choose_action(synergistic, "swarm", 0, "standard", release))
+assert(feed.action == "feed" and feed.offer == 1 and feed.target == 2, "adjacent food reaches two neighbors")
+synergistic.gold = 0
+local moves = 0
+while true do
+    local move, stop = bot.choose_action(synergistic, "swarm", moves, "standard", release)
+    if not move then
+        assert(stop == "priorities_exhausted")
+        break
+    end
+    assert(move.action == "move")
+    local pet = table.remove(synergistic.team, move.from)
+    table.insert(synergistic.team, move.to, pet)
+    moves = moves + 1
+end
+assert(moves > 0 and synergistic.team[3].id == "mist_crane", "summon supporter stays behind both summoners")
+
+local reached_high_tier = false
+for _, style in ipairs(styles) do
+    for _, difficulty in ipairs({"standard", "beginner"}) do
+        local pool = bot.new_pool(31, style, difficulty, release)
+        while not bot.advance_to_round(pool, 12, 13) do end
+        local trace, snapshot = assert(bot.trace(pool)), assert(bot.snapshot(pool))
+        inspect(trace, snapshot, 12, release)
+        assert(same(snapshot, bot.generate(12, 31, style, difficulty, release)))
+        local wrong_catalog, mismatch = bot.replay(trace)
+        assert(wrong_catalog == nil and mismatch == "trace_version_mismatch")
+        for _, unit in ipairs(snapshot.team) do
+            reached_high_tier = reached_high_tier or release.pet_by_id[unit.id].tier == release.rules.max_tier
+        end
+    end
+end
+assert(reached_high_tier, "release sample did not reach tier 6")
 
 print("bot tests passed")

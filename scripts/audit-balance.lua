@@ -246,7 +246,8 @@ local function size(set)
     return count
 end
 
-local function random_purchases(store, random)
+local function random_purchases(store, random, catalog)
+    local rules = (catalog or data).rules
     while true do
         local market = store:snapshot()
         local recruits, purchases = {}, {}
@@ -291,9 +292,9 @@ end
 
 local reverse_outcome = {win = "loss", loss = "win", draw = "draw"}
 
-local function count_both_sides(outcomes, player, opponent, seed)
-    local first = battle.resolve(player, opponent, seed)
-    local second = battle.resolve(opponent, player, seed)
+local function count_both_sides(outcomes, player, opponent, seed, catalog)
+    local first = battle.resolve(player, opponent, seed, catalog)
+    local second = battle.resolve(opponent, player, seed, catalog)
     assert(first.status == "resolved" and second.status == "resolved")
     outcomes[first.outcome] = outcomes[first.outcome] + 1
     local mirrored = reverse_outcome[second.outcome]
@@ -366,6 +367,96 @@ local function audit_difficulties(sample_size)
     end
 end
 
+local function prepare_live(store, catalog, style, difficulty, random)
+    if difficulty == "random" then
+        random_purchases(store, random, catalog)
+    else
+        local actions = 0
+        while true do
+            local command, stop = bot.choose_action(store:snapshot(), style, actions, difficulty, catalog)
+            if not command then
+                assert(stop == "priorities_exhausted", stop)
+                break
+            end
+            assert(store:apply(command))
+            actions = actions + 1
+        end
+    end
+    return assert(store:finish_turn())
+end
+
+local function audit_release(sample_size)
+    local catalog = require("autopets.release_data")
+    local rounds = 12
+    local styles = {"guardian", "striker", "swarm"}
+    local compositions = {}
+    local results = {}
+    local total_fights = 0
+    local function matchup(left_style, left_difficulty, right_style, right_difficulty)
+        local wins = {win = 0, draw = 0, loss = 0}
+        local lineups, tier_six, level_three = {}, 0, 0
+        for seed = 1, sample_size do
+            local shop_seed = rng.new(seed ~ 0x53484f50):next()
+            local left = shop.new(shop_seed, catalog)
+            local right = shop.new(shop_seed, catalog)
+            assert(#left:snapshot().team == 0 and #right:snapshot().team == 0)
+            local shopping_random = rng.new(seed ~ 0x425559)
+            local battle_random = rng.new(seed ~ 0x424154544c45)
+            for round = 1, rounds do
+                local left_team = prepare_live(left, catalog, left_style, left_difficulty, shopping_random)
+                local right_team = prepare_live(right, catalog, right_style, right_difficulty, shopping_random)
+                local result = count_both_sides(wins, left_team, right_team, battle_random:next(), catalog)
+                assert(left:record_battle(result, "player"))
+                assert(right:record_battle(result, "enemy"))
+                if round < rounds then
+                    assert(left:advance_round())
+                    assert(right:advance_round())
+                else
+                    local members = {}
+                    local has_tier_six, has_level_three = false, false
+                    for _, unit in ipairs(left_team) do
+                        members[#members + 1] = unit.id
+                        has_tier_six = has_tier_six or catalog.pet_by_id[unit.id].tier == catalog.rules.max_tier
+                        has_level_three = has_level_three or unit.level == catalog.rules.max_level
+                    end
+                    table.sort(members)
+                    local composition = table.concat(members, "/")
+                    lineups[composition] = (lineups[composition] or 0) + 1
+                    tier_six = tier_six + (has_tier_six and 1 or 0)
+                    level_three = level_three + (has_level_three and 1 or 0)
+                end
+            end
+        end
+        local fights = 2 * rounds * sample_size
+        local points = wins.win + wins.draw / 2
+        total_fights = total_fights + fights
+        local label = ("%s %s / %s %s"):format(left_style, left_difficulty, right_style, right_difficulty)
+        results[#results + 1] = ("%-38s %d wins / %d draws / %d losses, %.1f%% points; %d lineups, %d tier 6, %d level 3")
+            :format(label, wins.win, wins.draw, wins.loss, 100 * points / fights, size(lineups), tier_six, level_three)
+        if left_difficulty == "standard" and right_difficulty == "random" then
+            for lineup, count in pairs(lineups) do
+                compositions[lineup] = (compositions[lineup] or 0) + count
+            end
+        end
+    end
+    for _, style in ipairs(styles) do
+        matchup(style, "standard", style, "random")
+        matchup(style, "beginner", style, "random")
+        matchup(style, "standard", style, "beginner")
+    end
+    matchup("guardian", "standard", "striker", "standard")
+    matchup("guardian", "standard", "swarm", "standard")
+    matchup("striker", "standard", "swarm", "standard")
+    print(("Six-tier live shop audit: %d seeds, %d rounds, %d battles including both seat orders")
+        :format(sample_size, rounds, total_fights))
+    for _, line in ipairs(results) do print(line) end
+    local top_count = 0
+    for _, count in pairs(compositions) do top_count = math.max(top_count, count) end
+    local total_standard = #styles * sample_size
+    print(("Standard lineups across styles: %d, most common %d/%d (%.1f%%)")
+        :format(size(compositions), top_count, total_standard, 100 * top_count / total_standard))
+end
+
 local function audit_pool(sample_size)
     local rounds = {1, 3, 6, 12}
     local summaries, styles, actions = {}, {}, {}
@@ -429,6 +520,10 @@ if #arg > 0 then
         audit_against_random(seed, arg[3])
         return
     end
+    if arg[1] == "release" and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
+        audit_release(seed or 128)
+        return
+    end
     if arg[1] == "difficulty" and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
         audit_difficulties(seed or 64)
         return
@@ -446,7 +541,8 @@ if #arg > 0 then
     io.stderr:write("Usage  lua scripts/audit-balance.lua [spread|funded-spread|carry|merge|role INTEGER_SEED]\n",
         "       lua scripts/audit-balance.lua trace INTEGER_SEED ROUND [guardian|striker|swarm]\n",
         "       lua scripts/audit-balance.lua versus-random [SEED_COUNT [beginner]]\n",
-        "       lua scripts/audit-balance.lua difficulty [SEED_COUNT]\n")
+        "       lua scripts/audit-balance.lua difficulty [SEED_COUNT]\n",
+        "       lua scripts/audit-balance.lua release [SEED_COUNT]\n")
     os.exit(1)
 end
 
