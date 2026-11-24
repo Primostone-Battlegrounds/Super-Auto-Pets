@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+
+export function shopExport(executable, kind) {
+  return execFileSync(executable, ['-E', 'platform/versus_shop_data.lua', kind], {
+    cwd: root, encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024,
+  });
+}
+
+export function nativeShop(lua, lua54 = 'lua5.4') {
+  const definition = shopExport(lua, 'catalog');
+  assert.equal(shopExport(lua54, 'catalog'), definition);
+  let source = fs.readFileSync(new URL('./versus_shop.ts', import.meta.url), 'utf8');
+  const start = [];
+  const catalog = { pet: [], food: [] };
+  const rules = {};
+  const ints = values => {
+    assert.ok(values.every(value => /^-?\d+$/.test(value)), 'native shop export requires integers');
+    return values.map(BigInt);
+  };
+  for (const line of definition.trimEnd().split('\n')) {
+    const [kind, key, ...values] = line.split('\t');
+    if (kind === 'const' || kind === 'list') {
+      const marker = `AP_SHOP_${key}`;
+      const literals = ints(values).map(value => `${value}n`).join(', ');
+      const placeholder = kind === 'const' ? `0n; // ${marker}` : `[0n], 'int'); // ${marker}`;
+      const replacement = kind === 'const' ? `${literals};` : `[${literals}], 'int');`;
+      assert.ok(source.includes(placeholder), `missing marker ${marker}`);
+      source = source.replace(placeholder, replacement);
+      if (kind === 'const') rules[key] = Number(values[0]);
+    } else if (kind === 'start') {
+      assert.equal(Number(key), start.length + 1);
+      start.push(ints(values));
+    } else {
+      assert.ok(kind === 'pet' || kind === 'food');
+      assert.equal(Number(key), catalog[kind].length + 1);
+      const [name, attack, health] = values;
+      assert.ok(name);
+      ints([attack, health]);
+      catalog[kind].push({ name, attack: Number(attack), health: Number(health) });
+    }
+  }
+  assert.doesNotMatch(source, /\/\/ AP_SHOP_/);
+  assert.equal(start.length, 2);
+  const packedSize = 6 + rules.PET_SLOTS + rules.FOOD_SLOTS + rules.TEAM_SIZE * 6;
+  assert.ok(start.every(seat => seat.length === packedSize));
+  return { source, start, catalog, rules, definition };
+}
