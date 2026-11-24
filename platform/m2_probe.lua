@@ -1,12 +1,13 @@
-local root = script.object
-local status = root:GetChild("Status")
-local market_gold = root:GetChild("MarketGold")
-local team_label = root:GetChild("Team")
-local leave_label = root:GetChild("LeaveLabel")
-local merge_label = root:GetChild("MergeLabel")
-local reward_label = root:GetChild("RewardLabel")
-local replay_label = root:GetChild("ReplayLabel")
-local replay_status = root:GetChild("ReplayStatus")
+local root, offers = script.object, script.object
+local function child(name) return assert(root:GetChild(name), name) end
+local status = child("Status")
+local market_gold = child("MarketGold")
+local team_label = child("Team")
+local leave_label = child("LeaveLabel")
+local merge_label = child("MergeLabel")
+local reward_label = child("RewardLabel")
+local replay_label = child("ReplayLabel")
+local replay_status = child("ReplayStatus")
 local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
 local pets = {
@@ -205,8 +206,8 @@ local function forfeit()
     end
 end
 
-local function bind(name, callback)
-    bindings[#bindings + 1] = {object = root:GetChild(name), callback = callback}
+local function bind(name, callback, parent)
+    bindings[#bindings + 1] = {object = (parent or root):GetChild(name), callback = callback}
 end
 
 local event_text = {start = "入场", skill = "技能", attack = "攻击", damage = "受击", shield = "护盾",
@@ -309,16 +310,16 @@ bind("RewardNext", function()
 end)
 
 for slot = 1, rules.pet_slots do
-    pet_labels[slot] = root:GetChild("OfferLabel" .. slot)
-    pet_freeze_labels[slot] = root:GetChild("FreezePetLabel" .. slot)
-    bind("Buy" .. slot, function() acquire(slot, false) end)
-    bind("FreezePet" .. slot, function() freeze(slot, false) end)
+    pet_labels[slot] = offers:GetChild("OfferLabel" .. slot)
+    pet_freeze_labels[slot] = offers:GetChild("FreezePetLabel" .. slot)
+    bind("Buy" .. slot, function() acquire(slot, false) end, offers)
+    bind("FreezePet" .. slot, function() freeze(slot, false) end, offers)
 end
 for slot = 1, rules.food_slots do
-    food_labels[slot] = root:GetChild("FoodLabel" .. slot)
-    food_freeze_labels[slot] = root:GetChild("FreezeFoodLabel" .. slot)
-    bind("Food" .. slot, function() feed(slot) end)
-    bind("FreezeFood" .. slot, function() freeze(slot, true) end)
+    food_labels[slot] = offers:GetChild("FoodLabel" .. slot)
+    food_freeze_labels[slot] = offers:GetChild("FreezeFoodLabel" .. slot)
+    bind("Food" .. slot, function() feed(slot) end, offers)
+    bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)

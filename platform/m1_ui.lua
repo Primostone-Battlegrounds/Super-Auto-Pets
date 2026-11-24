@@ -904,9 +904,9 @@ local function release_view()
     preparing_layout, lunging = nil, nil
 end
 
-function OnStart()
+function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
-    root, view_enabled = script.object, true
+    root, view_enabled = view_root or script.object, true
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1
@@ -939,6 +939,7 @@ function OnStart()
     bind_button("Menu/NewGame", new_game_from_menu)
     bind_button("Menu/Difficulty", choose_difficulty)
     bind_button("Menu/Audio", toggle_audio)
+    if back_to_game_menu then bind_button("Menu/Back", back_to_game_menu) end
     bind_button("Reset", function() show_restart("board") end)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)

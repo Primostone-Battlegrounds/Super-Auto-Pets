@@ -43,13 +43,13 @@ function bundleModules(parse, names, entry, release, prefix = []) {
     'end',
     ...factories,
     `local native_catalog = loadAutoPetsModule('${catalog}')`,
-    convert(entry),
+    typeof entry === 'function' ? entry(convert) : convert(entry),
   ].join('\n\n');
 }
 
-export function bundleRun(parse, release = false) {
+export function bundleRun(parse, release = false, entry = './m1_ui.lua') {
   const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art'];
-  return bundleModules(parse, names, './m1_ui.lua', release, [`local portrait_layers = ${portraitLayers}`]);
+  return bundleModules(parse, names, entry, release, [`local portrait_layers = ${portraitLayers}`]);
 }
 
 export function bundleBattleReplay(parse, entry, release = false) {

@@ -70,7 +70,7 @@ function card(name, position, width, type, interactive = true, visible = true) {
   return group(name, position, size, children, visible);
 }
 
-function button(name, position, size, title, primary = false) {
+export function button(name, position, size, title, primary = false) {
   return group(name, position, size, [
     image('Rim', [0, 0], size, primary ? '#1e4f43' : pigment.edge),
     image('Face', [0, 0], [size[0] - 4, size[1] - 4], primary ? pigment.primary : pigment.chip),

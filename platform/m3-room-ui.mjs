@@ -73,11 +73,15 @@ function catalogLua(items) {
   }).join(',');
 }
 
-export function m3RoomUiSource({ pet, food, battle = pet }, parse, release = false) {
+export function roomClientSource(template, { pet, food, battle = pet }) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
     `local standings = (function()\n${shared}\nend)()`,
     `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,
-    `local fighters = {${catalogLua(battle)}}`, bundleBattleReplay(parse, './m3_room_ui.lua', release),
+    `local fighters = {${catalogLua(battle)}}`, template,
   ].join('\n\n');
+}
+
+export function m3RoomUiSource(catalog, parse, release = false) {
+  return roomClientSource(bundleBattleReplay(parse, './m3_room_ui.lua', release), catalog);
 }

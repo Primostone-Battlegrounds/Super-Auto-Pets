@@ -5,7 +5,7 @@ local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
 local render_standings, panel
-local controls, bindings, keys, content = {}, {}, {}, {}
+local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round
 local token = 0
 local source_ready = false
@@ -22,11 +22,12 @@ local function text(path, value)
 end
 
 local function visible(path, value)
+    if visibility[path] == value then return end
     local control = object(path)
-    if control.active ~= value then
-        control:SetActive(value)
-        control:SetVisible(value)
-    end
+    if value then control:SetActive(true) end
+    control:SetVisible(value)
+    if not value then control:SetActive(false) end
+    visibility[path] = value
 end
 
 local function transmit(action, round, sequence, from, to, flag, ack)
@@ -340,13 +341,14 @@ local function scrub(offset)
     frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
 end
 
-function OnStart()
-    local root = script.object
-    panel = assert(root:GetChild("Match"))
-    render_standings = standings.bind(assert(root:GetChild("Standings")), "room")
+function OnStart(view_root)
+    local root = view_root or script.object
+    local function child(name) return assert(root:GetChild(name), name) end
+    panel = child("Match")
+    render_standings = standings.bind(child("Standings"), "room")
     latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
     frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
-    controls, bindings, keys, content = {}, {}, {}, {}
+    controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
     source_ready = true
     visible("Ready", false)
     visible("Forfeit", false)
@@ -406,6 +408,6 @@ function OnDestroy()
     if panel and panel.alive then
         for _, item in ipairs(keys) do panel:RemoveKeyEventListener(item[1], item[2]) end
     end
-    controls, bindings, keys, content, frames = {}, {}, {}, {}, {}
+    controls, bindings, keys, content, visibility, frames = {}, {}, {}, {}, {}, {}
     render_standings, panel = nil, nil
 end

@@ -1,0 +1,166 @@
+local source, layout, captures = assert(arg[1]), assert(arg[2]), assert(arg[3])
+local order = {}
+for line in io.lines(layout) do order[#order + 1] = line end
+local output = assert(io.open(captures, "w"))
+local function simulate()
+    local controls, signals, commands = {}, {}, {}
+    local function get(path) return assert(controls[path], path) end
+    for _, line in ipairs(order) do
+        local path, active, visible, x, y, width, height = line:match("([^\t]+)\t([01])\t([01])\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)")
+        controls[path] = {
+            alive = true, active = active == "1", visible = visible == "1", events = {}, keys = {},
+            x = x, y = y, width = width, height = height,
+            GetChild = function(_, name) return get(path .. "/" .. name) end,
+            FindChild = function(_, name) return get(path .. "/" .. name) end,
+            SetActive = function(self, value) assert(type(value) == "boolean"); self.active = value end,
+            SetVisible = function(self, value) assert(type(value) == "boolean"); self.visible = value end,
+            SetAnchoredPosition = function(self, px, py) self.x, self.y = px, py end,
+            SetSizeDelta = function(self, w, h) self.width, self.height = w, h end,
+            SetImage = function(self, _, image) self.image = image end,
+            AddCursorEventListener = function(self, event, callback) assert(not self.events[event]); self.events[event] = callback end,
+            RemoveCursorEventListener = function(self, event, callback)
+                assert(self.events[event] == callback); self.events[event] = nil
+            end,
+            AddKeyEventListener = function(self, event, callback) assert(not self.keys[event]); self.keys[event] = callback end,
+            RemoveKeyEventListener = function(self, event, callback) assert(self.keys[event] == callback); self.keys[event] = nil end,
+        }
+    end
+    local function colour(r, g, b) return string.format("#%02x%02x%02x", r, g, b) end
+    local enabled
+    local env = setmetatable({
+        game = {
+            ServerSignal = function(name)
+                local args = {}
+                return {
+                    AddInt = function(_, value) args[#args + 1] = assert(math.tointeger(value)) end,
+                    SendSignal = function() commands[#commands + 1] = name .. ":" .. table.concat(args, ",") end,
+                }
+            end,
+        },
+        Color = colour,
+        Enum = {
+            CursorEventType = {CursorDown = 1, CursorClick = 2, CursorBeginDrag = 3, CursorDrag = 4, CursorEndDrag = 5},
+            ImageSource = {StaticReference = 1},
+            KeyEventType = {KeyboardCharacterSkill1KeyDown = 1, KeyboardInteractKeyDown = 2, KeyboardCharacterSkill2KeyDown = 3},
+        },
+        script = {
+            object = {FindChild = function(_, path) return get(path) end, GetChild = function(_, path) return get(path) end},
+            GetParam = function(_, name) assert(name == "seed"); return 8 end,
+            EnableUpdate = function(_, value) enabled = value end,
+            RegisterServerSignalHandler = function(_, name, callback) assert(not signals[name]); signals[name] = callback end,
+            UnregisterServerSignalHandler = function(_, name) assert(signals[name]); signals[name] = nil end,
+        },
+    }, {__index = _G})
+    assert(loadfile(source, "t", env))()
+    env.OnStart()
+    assert(commands[#commands] == "AP_GameChooseMode:0")
+    local function press(path)
+        local target = get(path)
+        local ancestor = path
+        while ancestor do
+            local control = get(ancestor)
+            assert(control.active and control.visible, ancestor)
+            ancestor = ancestor:match("^(.*)/")
+        end
+        if target.events[1] then target.events[1]({touchId = 1}) end
+        assert(target.events[2], path)({touchId = 1})
+    end
+    local function receive(name, values) assert(signals[name], name)(name, values) end
+    local function view(mode, count, loading) receive("AP_GameLobby", {mode, count, loading or 0}) end
+    local function expect(command) assert(commands[#commands] == command, tostring(commands[#commands])) end
+    local function capture(name)
+        for _, row in ipairs(order) do
+            local path = row:match("^[^\t]+")
+            local c = get(path)
+            local text = c.text and c.text:gsub("[^%w ._-]", function(char) return string.format("%%%02X", char:byte()) end) or "~"
+            output:write(table.concat({name, path, c.active and 1 or 0, c.visible and 1 or 0, c.x, c.y,
+                c.width, c.height, c.image or "", c.color or "", c.fontColor or "", text}, "\t"), "\n")
+        end
+    end
+    local function destroy()
+        env.OnDisable()
+        assert(not enabled)
+        env.OnDestroy()
+        assert(next(signals) == nil)
+        for _, c in pairs(controls) do assert(next(c.events) == nil and next(c.keys) == nil) end
+    end
+    return {press = press, receive = receive, get = get, view = view, expect = expect, capture = capture, destroy = destroy}
+end
+
+local function market(round)
+    local raw = {round, 1, 10, 0, 0, 2, 1, 2, 3, 1, -2, 1, 21, 3, 2, 1, 1, 2, 22, 3, 2, 1, 1}
+    for i = #raw + 1, 41 do raw[i] = 0 end
+    return raw
+end
+local function duel_snapshot(version, phase, ready, sequence, ack)
+    return {2, 1, 1, phase, ready, false, 0, version, sequence or 1, phase == 2 and 2 or 0, 0,
+        30, ack or 0, phase == 2 and 0 or 5, 5, 0}
+end
+local function room_snapshot(revision, phase, human, lives, places, winner, ack)
+    return {revision, phase, 1, 1, revision, human, winner or 0, false,
+        lives or {5,5,5,5,5,5,5,5}, places or {0,0,0,0,0,0,0,0}, {2,1,4,3,6,5,8,7}, {0,0,0,0,0,0,0,0},
+        market(1), ack or 0}
+end
+
+local practice = simulate()
+practice.view(0, 1)
+practice.capture("menu")
+practice.press("Lobby/Choices/Practice/Hit")
+practice.press("Practice/Menu/Continue/Hit")
+practice.press("Practice/Shop/Pet1/Hit")
+practice.press("Practice/Shop/Buy/Hit")
+practice.capture("practice_shop")
+practice.press("Practice/Primary/Hit")
+practice.capture("practice_battle")
+practice.press("Practice/OpenMenu/Hit")
+practice.press("Practice/Menu/Back/Hit")
+practice.expect("AP_GameChooseMode:0")
+practice.destroy()
+
+local duel = simulate()
+duel.view(0, 1, 1)
+duel.press("Lobby/Choices/Duel/Hit")
+duel.expect("AP_GameChooseMode:2")
+duel.view(0, 1, 1)
+assert(duel.get("Lobby/Status").text:find("加载中"))
+duel.capture("waiting_friend")
+duel.view(0, 2)
+duel.press("Lobby/Choices/Duel/Hit")
+duel.view(2, 2)
+duel.expect("AP_DuelRequest:0,0,0,0,0,0,0")
+duel.receive("AP_DuelSnapshot", duel_snapshot(1, 0, false))
+duel.receive("AP_DuelMarket", {1, 1, market(1)})
+duel.press("Duel/MarketOffers/Buy1")
+duel.expect("AP_DuelRequest:10,1,1,1,1,0,0")
+duel.capture("duel_shop")
+duel.receive("AP_DuelSnapshot", duel_snapshot(2, 2, false, 2, 1))
+assert(duel.get("Duel/Status").text:find("告负"))
+duel.capture("duel_result")
+duel.press("Duel/Back/Hit")
+duel.view(0, 2)
+assert(duel.get("Lobby/Continue").active and not duel.get("Lobby/Choices").active)
+duel.press("Lobby/Continue/Hit")
+assert(duel.get("Duel").active)
+duel.destroy()
+
+local room = simulate()
+room.view(0, 1)
+room.press("Lobby/Choices/Room/Hit")
+room.expect("AP_GameChooseMode:8")
+room.view(8, 1)
+room.expect("AP_RoomRequest:0,0,0,0,0,0,0")
+room.receive("AP_RoomView", room_snapshot(1, 2, 1))
+assert(room.get("Room/Match/Shop").active and room.get("Room/Match/Shop").visible)
+assert(room.get("Room/Standings/Count").text:find("7 机器人"))
+room.press("Room/Match/Shop/Offer1/Hit")
+room.expect("AP_RoomRequest:11,1,1,1,0,0,1")
+room.capture("room_shop")
+room.receive("AP_RoomView", room_snapshot(2, 5, 1, {3,0,0,0,0,0,0,0}, {1,2,3,4,5,6,7,8}, 1, 1))
+assert(room.get("Room/Match/Hint").text:find("第 1 名"))
+room.capture("room_result")
+room.press("Room/Back/Hit")
+room.expect("AP_GameChooseMode:0")
+assert(room.get("Lobby").active and not room.get("Room").active)
+room.destroy()
+output:close()
+print("Game readback controls: local practice to battle and return; two-player and eight-seat choice, shop, terminal and return.")
