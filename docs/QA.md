@@ -21,6 +21,14 @@ OpenHarness 固定到 `aebb0c2255a5df275491009285c1a23d03f90771`，使用 cooper
 
 GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub 连接器核对 PR、当前 SHA 和 CI，通过同一 GitHub PR 完成集成。
 
+## 正式 CD 验收
+
+`Game delivery` 在 `develop` 更新后对该次提交构建、回读并核对 `SHA256SUMS`。每次成功运行发布一个 ZIP，解压后导入 `super-auto-pets.gil`。ZIP 同时含 `BUILD.json`、验收说明以及夹具许可。历史候选继续通过 PR 检查提供隔离验证。[固定下载入口](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
+
+首次托管交付提取自合入提交 `a23f1bef22a5595528ce7333c852892e77547cc9`。已从 GitHub 取回 ZIP，核对 GitHub 归档散列、五项根目录文件、包内四项校验和与 `BUILD.json` 的 Git SHA。[首次成功运行](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378)
+
+同次运行的原生手动重跑也已成功。重跑按原始提交构建，并用新制品替换同名旧制品。已取回重跑 ZIP，确认该次运行仍只有一个制品，且提交和校验和均正确。当前默认分支为 `main`，网页新建 `workflow_dispatch` 运行需要在默认分支注册工作流。有 Actions 写权限的维护者可从已有运行手动重跑。[重跑记录](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378/attempts/2) · [GitHub 触发说明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)
+
 ## 多人和六阶复验
 
 双人、八席 Lua 套件从空阵容执行经营和权威结算，验证异步请求、定向商店、相同对局回放及终局。八席按 1 至 8 个真人席位运行固定种子，记录逻辑机器人数、轮空、中途退出、同轮淘汰和排名。用 `lua5.4 -E scripts/audit-room.lua 32 release host` 核对实际宿主生成的定向帧和资源指标。[八席负载记录](design/ROOM-LOAD.md) · [双人复验](../platform/M2-host.md) · [八席复验](../platform/M3-host.md)
