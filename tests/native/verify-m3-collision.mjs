@@ -32,6 +32,11 @@ assert.ok(!fs.existsSync(candidate), 'Use a new candidate directory');
 
 const battleSource = fs.readFileSync(new URL('../../src/autopets/battle.lua', import.meta.url), 'utf8');
 const { damageCode, buffCode, summonCode, strikeLimit } = lowerCombatMath(battleSource, requireTool('luaparse').parse);
+const kernel = fs.readFileSync(new URL('../../platform/m3_battle_step.ts', import.meta.url), 'utf8')
+  .replace('0n; // AP_STRIKE_LIMIT', `${strikeLimit}n;`)
+  .replace('// AP_LOWERED_DAMAGE', damageCode)
+  .replace('// AP_LOWERED_BUFF', buffCode)
+  .replace('// AP_LOWERED_SUMMON', summonCode);
 const template = fs.readFileSync(new URL('../../platform/m3_collision.ts', import.meta.url), 'utf8');
 const lua54 = process.env.LUA54 || 'lua5.4';
 const versions = [lua, lua54].map(binary => execFileSync(binary, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim());
@@ -110,21 +115,15 @@ function parityFixture(mode) {
 }
 
 function graphSource(graphId, { catalog, pairs }) {
-  let code = template.replace('id: 1073741825,', `id: ${graphId},`)
-    .replace('0n; // AP_STRIKE_LIMIT', `${strikeLimit}n;`)
-    .replace('// AP_LOWERED_DAMAGE', damageCode)
-    .replace('// AP_LOWERED_BUFF', buffCode)
-    .replace('// AP_LOWERED_SUMMON', summonCode);
+  let code = kernel + '\n' + template.replace('id: 1073741825,', `id: ${graphId},`);
   const seeds = {
-    counts: pairs.flatMap(pair => pair.opening.map(side => side.length)),
-    firsts: pairs.map(pair => pair.first),
     catalog: catalog.flatMap(definition => definition.record),
   };
   for (const [index, pair] of pairs.entries()) {
     seeds['board' + index] = pair.opening.flatMap(side => {
       const cells = side.flat();
       return cells.concat(new Array(slots * unitFields - cells.length).fill(0));
-    });
+    }).concat(pair.opening.map(side => side.length), [0, 0, pair.first, 0]);
   }
   for (const [field, data] of Object.entries(seeds)) {
     const values = data.map(value => value + 'n');
@@ -210,13 +209,14 @@ function simulate(source, { pairs }) {
       assert.ok(pair >= 0 && pair < pairs.length);
       const result = seen[pair];
       assert.equal(strike, result.steps.length + 1);
+      const packed = variables['board' + pair];
       const board = Array.from({ length: 2 }, (_, side) => {
-        const index = pair * 2 + side;
-        const head = Number(variables.heads[index]);
-        const size = Number(variables.counts[index]);
+        const countAt = 2 * slots * unitFields;
+        const size = Number(packed[countAt + side]);
+        const head = Number(packed[countAt + 2 + side]);
         return Array.from({ length: size }, (_, slot) => {
           const base = (side * slots + (head + slot) % slots) * unitFields;
-          return variables['board' + pair].slice(base, base + unitFields).map(Number);
+          return packed.slice(base, base + unitFields).map(Number);
         });
       });
       const step = { events: [], board };

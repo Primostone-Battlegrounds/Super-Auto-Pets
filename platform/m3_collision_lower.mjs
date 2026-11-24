@@ -14,7 +14,7 @@ export function lowerCombatMath(luaSource, parse) {
     ['ability.power', 'power'], ['unit.level', 'level'], ['token.attack', 'tokenAttack'],
     // Miliastra node integers are signed 32-bit.
     ['math.maxinteger', '2147483647n'],
-    ['data.rules.team_size', 'slots'], ['state.catalog.rules.team_size', 'slots'],
+    ['data.rules.team_size', 'battleSlots'], ['state.catalog.rules.team_size', 'battleSlots'],
   ]);
   function expression(node, locals) {
     if (node.type === 'Identifier' && locals.has(node.name)) return node.name;
