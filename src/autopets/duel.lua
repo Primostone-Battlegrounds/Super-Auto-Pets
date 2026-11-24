@@ -166,6 +166,21 @@ function duel:tick(now)
     return true
 end
 
+-- Both transport sessions reached the same recovery deadline. With neither
+-- player available to continue, the host closes the match as a draw.
+function duel:abandon(now)
+    local ok, err = self:tick(now)
+    if not ok then
+        return nil, err
+    end
+    if self.phase == "ended" then
+        return nil, "wrong_phase"
+    end
+    end_match(self, nil, "abandoned")
+    self.revision = self.revision + 1
+    return true
+end
+
 local actions = {}
 
 function actions.shop(match, seat, request)

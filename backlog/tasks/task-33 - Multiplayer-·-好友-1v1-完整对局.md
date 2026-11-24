@@ -1,16 +1,19 @@
 ---
 id: TASK-33
 title: Multiplayer · 好友 1v1 完整对局
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex-native'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-23 09:37'
+updated_date: '2026-11-24 00:57'
 labels: []
 milestone: m-2
 dependencies:
   - TASK-32
   - TASK-36
   - TASK-37
+documentation:
+  - platform/M2-host.md
 priority: high
 type: feature
 ordinal: 27000
@@ -26,3 +29,17 @@ ordinal: 27000
 <!-- AC:BEGIN -->
 - [ ] #1 两台官方客户端从独立经营和准备一直打到终局，各轮结果一致，并可安全重试请求。
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. 对接已验证身份、序号与定向状态，离线运行完整双人规则。
+2. 扩展千星原生输入、计时、经营、战斗与终局，分层记录离线证据。
+3. 使用隔离候选做官方双客户端整局与断线验证。
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+已实现复用双人权威规则的宿主连接与定向快照，离线覆盖请求重试、平局、超时、共享回放、终局及同身份恢复。千星需独立核对实际连接身份和原生执行，TASK-32 继续记录官方实测。
+<!-- SECTION:NOTES:END -->
