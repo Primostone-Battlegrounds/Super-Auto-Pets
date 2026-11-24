@@ -1,0 +1,71 @@
+name: Game delivery
+run-name: Game delivery · ${{ github.sha }}
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build and deliver game
+    if: github.repository == 'Primostone-Battlegrounds/Super-Auto-Pets' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4 lua5.3
+      - name: Prepare pinned Miliastra MCP
+        run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
+      - name: Build and verify the game package
+        id: build
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          package="$RUNNER_TEMP/game-package"
+          node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/game-validation" lua5.3 "$package"
+          node -e 'const build = require(process.argv[1]); if (build.sourceRevision !== process.env.GITHUB_SHA) process.exit(1)' "$package/BUILD.json"
+          (cd "$package" && sha256sum --strict -c SHA256SUMS)
+          printf 'name=super-auto-pets-%s\n' "${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+      - name: Upload the verified game
+        id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: |
+            ${{ runner.temp }}/game-package/super-auto-pets.gil
+            ${{ runner.temp }}/game-package/SHA256SUMS
+            ${{ runner.temp }}/game-package/BUILD.json
+            ${{ runner.temp }}/game-package/README.md
+            ${{ runner.temp }}/game-package/MCP-FIXTURE-LICENSE.txt
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+      - name: Link the game download
+        env:
+          ARTIFACT_NAME: ${{ steps.build.outputs.name }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          {
+            printf '## 小动物自走棋 · 千星奇域\n\n'
+            printf '[下载 %s.zip](%s)\n\n' "$ARTIFACT_NAME" "$ARTIFACT_URL"
+            printf 'Git SHA `%s`\n\n' "$GITHUB_SHA"
+            printf '解压后导入 `super-auto-pets.gil`。包内有 SHA-256 校验和离线与真机验收说明。\n'
+          } >> "$GITHUB_STEP_SUMMARY"
