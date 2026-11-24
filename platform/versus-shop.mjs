@@ -5,15 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-export function shopExport(executable, kind) {
-  return execFileSync(executable, ['-E', 'platform/versus_shop_data.lua', kind], {
+export function shopExport(executable, kind, profile = 'compatibility') {
+  return execFileSync(executable, ['-E', 'platform/versus_shop_data.lua', kind, profile], {
     cwd: root, encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024,
   });
 }
 
-export function nativeShop(lua, lua54 = 'lua5.4') {
-  const definition = shopExport(lua, 'catalog');
-  assert.equal(shopExport(lua54, 'catalog'), definition);
+export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
+  const definition = shopExport(lua, 'catalog', profile);
+  assert.equal(shopExport(lua54, 'catalog', profile), definition);
   let source = fs.readFileSync(new URL('./versus_shop.ts', import.meta.url), 'utf8');
   const start = [];
   const catalog = { pet: [], food: [] };

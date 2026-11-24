@@ -18,9 +18,9 @@ export const shopFlow = {
   initLocalVariable: (_type, value) => ({ value }),
 };
 
-export function verifyShop(ts, source, lua, lua54 = 'lua5.4') {
-  const expected = shopExport(lua, 'trace');
-  assert.equal(shopExport(lua54, 'trace'), expected);
+export function verifyShop(ts, source, lua, lua54 = 'lua5.4', profile = 'compatibility') {
+  const expected = shopExport(lua, 'trace', profile);
+  assert.equal(shopExport(lua54, 'trace', profile), expected);
   const compiled = ts.transpileModule(`${source}\nmodule.exports = { gstsServerShopApply, gstsServerShopOpen };`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;

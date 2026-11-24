@@ -118,6 +118,11 @@ function gstsServerShopGrow(f: ShopFlow, state: bigint[], to: bigint,
   f.modifyValueInList(state, to + 5n, experience);
 }
 
+function gstsServerShopFeedStats(f: ShopFlow, state: bigint[], at: bigint, attack: bigint, health: bigint): void {
+  f.modifyValueInList(state, at + 2n, f.getCorrespondingValueFromList(state, at + 2n) + attack);
+  f.modifyValueInList(state, at + 3n, f.getCorrespondingValueFromList(state, at + 3n) + health);
+}
+
 // The graph checks actor, round, sequence and preparation before calling this.
 // Positions use the Lua contract's 1-based indices. An omitted buy target is 0.
 // 10 reroll, 11 buy, 12 combine, 13 sell, 14 move, 15 merge, 16 feed, 17 freeze.
@@ -217,10 +222,16 @@ function gstsServerShopApply(f: ShopFlow, state: bigint[], action: bigint,
     if (code > 0n) {
       const attacks = f.assemblyList([0n], 'int'); // AP_SHOP_FOOD_ATTACK
       const healths = f.assemblyList([0n], 'int'); // AP_SHOP_FOOD_HEALTH
-      f.modifyValueInList(state, toAt + 2n, f.getCorrespondingValueFromList(state, toAt + 2n)
-        + f.getCorrespondingValueFromList(attacks, code));
-      f.modifyValueInList(state, toAt + 3n, f.getCorrespondingValueFromList(state, toAt + 3n)
-        + f.getCorrespondingValueFromList(healths, code));
+      const adjacentAttacks = f.assemblyList([0n], 'int'); // AP_SHOP_ADJACENT_ATTACK
+      const adjacentHealths = f.assemblyList([0n], 'int'); // AP_SHOP_ADJACENT_HEALTH
+      gstsServerShopFeedStats(f, state, toAt,
+        f.getCorrespondingValueFromList(attacks, code), f.getCorrespondingValueFromList(healths, code));
+      const adjacentAttack = f.getCorrespondingValueFromList(adjacentAttacks, code);
+      const adjacentHealth = f.getCorrespondingValueFromList(adjacentHealths, code);
+      if (adjacentAttack !== 0n || adjacentHealth !== 0n) {
+        if (to > 1n) gstsServerShopFeedStats(f, state, toAt - shopUnitSize, adjacentAttack, adjacentHealth);
+        if (to < count) gstsServerShopFeedStats(f, state, toAt + shopUnitSize, adjacentAttack, adjacentHealth);
+      }
       f.modifyValueInList(state, at, 0n);
       f.modifyValueInList(state, shopGoldAt, gold - shopFoodCost);
       accepted = true;

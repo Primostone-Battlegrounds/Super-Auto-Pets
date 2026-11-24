@@ -1,7 +1,9 @@
 package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
-local data = require("autopets.data")
+local profile = arg[2] or "compatibility"
+assert(profile == "compatibility" or profile == "release", "unknown shop profile")
+local data = profile == "release" and require("autopets.release_data") or require("autopets.data")
 local duel = require("autopets.duel")
 local rng = require("autopets.rng")
 local shop = require("autopets.shop")
@@ -36,6 +38,11 @@ end
 
 local pets, pet_attack, pet_health = index(data.pets)
 local foods, food_attack, food_health = index(data.foods)
+local adjacent_attack, adjacent_health = {0}, {0}
+for _, food in ipairs(data.foods) do
+    adjacent_attack[#adjacent_attack + 1] = food.adjacent_attack or 0
+    adjacent_health[#adjacent_health + 1] = food.adjacent_health or 0
+end
 
 local function packed(store)
     local view = store:snapshot()
@@ -88,9 +95,10 @@ if arg[1] == "catalog" then
         {"PET_LIMITS", pet_limits}, {"FOOD_LIMITS", food_limits}, {"UNLOCK_ROUNDS", unlock_rounds},
         {"LEVEL_THRESHOLDS", thresholds}, {"REWARD_PET_LIMITS", pet_limits},
         {"PET_ATTACK", pet_attack}, {"PET_HEALTH", pet_health}, {"FOOD_ATTACK", food_attack}, {"FOOD_HEALTH", food_health},
+        {"ADJACENT_ATTACK", adjacent_attack}, {"ADJACENT_HEALTH", adjacent_health},
     }
     for _, list in ipairs(lists) do row("list", list[1], table.concat(list[2], "\t")) end
-    local match = duel.new(1, 1, 2)
+    local match = duel.new(1, 1, 2, {catalog = data})
     for seat = 1, 2 do row("start", seat, packed(match.seats[seat].shop)) end
     for code, item in ipairs(data.pets) do row("pet", code, item.name, item.attack, item.health) end
     for code, item in ipairs(data.foods) do row("food", code, item.name, item.attack, item.health) end
@@ -103,10 +111,14 @@ local commands = {
     [14] = "move", [15] = "merge", [16] = "feed", [17] = "freeze",
 }
 
-local function turn(reference)
+local function advance(reference)
     local formation = assert(reference:finish_turn())
-    assert(reference:record_battle(battle.resolve(formation, {}, 1), "player"))
+    assert(reference:record_battle(battle.resolve(formation, {}, 1, data), "player"))
     assert(reference:advance_round())
+end
+
+local function turn(reference)
+    advance(reference)
     row("open", packed(reference))
 end
 
@@ -135,10 +147,47 @@ local function apply(reference, action, from, to, flag)
     row("apply", action, from, to, flag, accepted, packed(reference))
 end
 
+if profile == "release" then
+    -- Start the native release sample with a legal tier-six shelf and three pets.
+    local function stocked(seed)
+        local candidate = shop.new(seed, data)
+        for offer = 1, rules.pet_shop_slots do assert(candidate:apply({action = "buy", offer = offer})) end
+        for _ = 2, rules.tier_unlock_rounds[rules.max_tier] do advance(candidate) end
+        return candidate
+    end
+    local reference, food_slot, selected_seed
+    for seed = 1, 128 do
+        local candidate = stocked(seed)
+        for slot, food in ipairs(candidate.foods) do
+            local definition = data.food_by_id[food.id]
+            if definition.tier == rules.max_tier and definition.adjacent_attack and definition.adjacent_health then
+                reference, food_slot, selected_seed = candidate, slot, seed
+                break
+            end
+        end
+        if reference then break end
+    end
+    assert(reference, "expected adjacent food in a tier-six shelf")
+    row("init", packed(reference))
+    apply(reference, 16, food_slot, 2, 0)
+    apply(reference, 16, food_slot, 2, 0)
+    apply(reference, 17, 1, 0, 1)
+    turn(reference)
+    apply(reference, 11, 2, 0, 0)
+    apply(reference, 13, 0, 1, 0)
+    apply(reference, 14, 1, 3, 0)
+    apply(reference, 10, 0, 0, 0)
+    for _, target in ipairs({1, 3}) do
+        local edge = stocked(selected_seed)
+        row("init", packed(edge))
+        apply(edge, 16, food_slot, target, 0)
+    end
+end
+
 -- Buy two identical pets, merge them, and use the third offer to trigger a reward.
 local opening
 for seed = 1, 128 do
-    local candidate = shop.new(seed)
+    local candidate = shop.new(seed, data)
     if candidate.pets[1].id == candidate.pets[2].id and candidate.pets[2].id == candidate.pets[3].id then
         opening = candidate
         break
@@ -154,7 +203,7 @@ apply(opening, 11, 1, 0, 1) -- The reward is unaffordable this round.
 for _ = 1, 2 do turn(opening) end
 apply(opening, 13, 0, 1, 0)
 
-local frozen = shop.new(1)
+local frozen = shop.new(1, data)
 row("init", packed(frozen))
 for offer = 1, rules.pet_shop_slots do apply(frozen, 17, offer, 0, 1) end
 for offer = 1, rules.food_shop_slots do apply(frozen, 17, offer, 1, 1) end
@@ -164,7 +213,7 @@ apply(frozen, 17, 1, 0, 2)
 apply(frozen, 10, 0, 0, 0)
 
 -- Exercise buying an existing reward and rejecting that same empty slot.
-local reward = shop.new(1)
+local reward = shop.new(1, data)
 reward.gold = 2 * rules.pet_cost
 reward.rewards[1] = {id = data.pets_for_tier(2)[#data.pets_for_tier(2)].id, frozen = false}
 row("init", packed(reward))
@@ -174,7 +223,7 @@ apply(reward, 11, 2147483647, 0, 1)
 apply(reward, 15, -2147483648, 2147483647, 0)
 
 for seed = 1, 48 do
-    local reference = shop.new(seed * 68473)
+    local reference = shop.new(seed * 68473, data)
     local random = rng.new(seed * 48147)
     row("init", packed(reference))
     for round = 1, 14 do
