@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@rules-core'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-24 01:14'
+updated_date: '2026-11-24 01:30'
 labels: []
 milestone: m-3
 dependencies:
@@ -43,4 +43,6 @@ ordinal: 28000
 纯 Lua 领域层已覆盖 1 至 8 名真人及空余房位机器人补位。tests/room.lua 验证空阵经营、机器人实际交战、准备超时、奇数轮空、同轮淘汰、退出、序号拒绝、共享回放与全局名次。千星原生完整对局和官方房间匹配均待验。
 
 离线八席宿主验证连接请求路由、商店定向回执、同身份恢复、主动退出及并发到期；真实千星连接事件和恢复语义仍待验。
+
+六阶共享目录经已认证的 Lua 宿主完成 256 场，覆盖 1–8 真人席且全部由最后存活者取胜。两版 Lua 的完整报告 SHA-256 cf2d178dcb01f6b5aa4341a45cdbb1c14a985d5ec182571b49c6e173047763da。源码压力、CPU/内存与宿主定向帧见 docs/design/ROOM-LOAD.md，千星实际玩法及匹配待继续验收。
 <!-- SECTION:NOTES:END -->

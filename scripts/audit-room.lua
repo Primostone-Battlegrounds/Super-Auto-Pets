@@ -4,7 +4,13 @@ local bot = require("autopets.bot")
 local room = require("autopets.room")
 
 local seeds = math.tointeger(tonumber(arg[1] or 128))
+local profile = arg[2] or "compatibility"
+local transport = arg[3] or "model"
 assert(seeds and seeds > 0, "seed count must be a positive integer")
+assert(profile == "compatibility" or profile == "release", "unknown content profile")
+assert(transport == "model" or transport == "host", "unknown transport")
+local catalog = profile == "release" and require("autopets.release_data") or nil
+local room_host = transport == "host" and require("autopets.room_host") or nil
 local styles = {"guardian", "striker", "swarm"}
 
 local function reachable_tables(value, seen)
@@ -50,15 +56,29 @@ end
 
 local function run_match(seed, humans, totals)
     local clock = 0
-    local matches = room.new(seed, {wait_ms = 5000})
+    local options = {wait_ms = 5000, catalog = catalog}
+    local host = room_host and room_host.new(seed, options) or nil
+    local matches = host and host.match or room.new(seed, options)
     local disconnected, simulated_snapshots, counted_eliminations = {}, {}, {}
+    local handles = {}
     local revision = -1
+
+    local function accept_frames(updates)
+        totals.snapshots = totals.snapshots + #updates
+        totals.peak_batch = math.max(totals.peak_batch, #updates)
+        for _, update in ipairs(updates) do
+            local state = update.state
+            assert(handles[state.seat] == update.connection, "snapshot routed to the wrong connection")
+            assert(not state.shop or not state.shop.rng_state, "private RNG escaped")
+            simulated_snapshots[state.seat] = state
+        end
+    end
 
     -- Model a host which publishes at most one latest snapshot per connected
     -- player when the revision changes. The model makes no platform API calls.
     local function sample()
         local state = matches:public_snapshot()
-        if state.revision == revision then
+        if host or state.revision == revision then
             return state
         end
         revision = state.revision
@@ -77,24 +97,46 @@ local function run_match(seed, humans, totals)
         return state
     end
 
-    local function request(player, snapshot, action, command)
+    local function send(player, payload)
         totals.requests = totals.requests + 1
-        return matches:request(player, {
+        if host then
+            local accepted, code, updates = host:request(handles[player], payload, clock)
+            accept_frames(assert(updates))
+            return accepted, code
+        end
+        return matches:request(player, payload, clock)
+    end
+
+    local function request(player, snapshot, action, command)
+        return send(player, {
             round = snapshot.round,
             sequence = snapshot.next_sequence,
             action = action,
             command = command,
-        }, clock)
+        })
     end
 
     local function tick(deadline)
         clock = assert(deadline)
-        assert(matches:tick(clock))
+        if host then
+            local ok, updates = host:tick(clock)
+            assert(ok, updates)
+            accept_frames(updates)
+        else
+            assert(matches:tick(clock))
+        end
     end
 
     for player = 1, humans do
-        assert(matches:join(player, clock) == player)
-        sample()
+        if host then
+            local handle, updates = host:connect(player, clock)
+            handles[player] = assert(handle, updates)
+            accept_frames(updates)
+            assert(simulated_snapshots[player].seat == player)
+        else
+            assert(matches:join(player, clock) == player)
+            sample()
+        end
     end
     local state = matches:public_snapshot()
     if state.phase == "lobby" then
@@ -164,14 +206,13 @@ local function run_match(seed, humans, totals)
                     local actions = 0
                     while true do
                         local style = styles[(player - 1) % #styles + 1]
-                        local command = bot.choose_action(snapshot.shop, style, actions, "standard")
+                        local command = bot.choose_action(snapshot.shop, style, actions, "standard", catalog)
                         if not command then
                             break
                         end
                         if actions == 0 then
                             local gap = {round = snapshot.round, sequence = snapshot.next_sequence + 1, action = "shop", command = command}
-                            totals.requests = totals.requests + 1
-                            local accepted, error_code = matches:request(player, gap, clock)
+                            local accepted, error_code = send(player, gap)
                             assert(not accepted and error_code == "sequence_gap")
                         end
                         assert(request(player, snapshot, "shop", command))
@@ -192,7 +233,14 @@ local function run_match(seed, humans, totals)
             local current = matches:public_snapshot()
             if current.phase == "preparation" then
                 if current.round == 2 and humans > 1 and seed % 5 == 0 and simulated_snapshots[humans].active then
-                    assert(matches:leave(humans, clock))
+                    if host then
+                        local ok, updates = host:leave(handles[humans], clock)
+                        assert(ok, updates)
+                        handles[humans] = nil
+                        accept_frames(updates)
+                    else
+                        assert(matches:leave(humans, clock))
+                    end
                     disconnected[humans] = true
                     totals.exits = totals.exits + 1
                     current = matches:public_snapshot()
@@ -226,7 +274,8 @@ local function run_match(seed, humans, totals)
     totals.endings[state.reason] = (totals.endings[state.reason] or 0) + 1
 end
 
-print(("eight-seat Lua audit | %d seeds per human count"):format(seeds))
+local suffix = (profile == "compatibility" and transport == "model") and "" or (" | " .. profile .. " | " .. transport)
+print(("eight-seat Lua audit | %d seeds per human count%s"):format(seeds, suffix))
 for humans = 1, 8 do
     collectgarbage("collect")
     local start_kib = collectgarbage("count")
@@ -240,9 +289,10 @@ for humans = 1, 8 do
     for seed = 1, seeds do
         run_match(seed, humans, totals)
     end
-    print(("humans=%d bots=%d rounds=%d longest=%d battles=%d bot_battles=%d byes=%d timeouts=%d exits=%d multi_elimination=%d requests=%d modeled_snapshots=%d peak_batch=%d events=%d peak_events=%d peak_tables=%d simulated_ms=%d last_player=%d round_limit=%d match_timeout=%d digest=%016x")
+    local message_key = transport == "host" and "host_frames" or "modeled_snapshots"
+    print(("humans=%d bots=%d rounds=%d longest=%d battles=%d bot_battles=%d byes=%d timeouts=%d exits=%d multi_elimination=%d requests=%d %s=%d peak_batch=%d events=%d peak_events=%d peak_tables=%d simulated_ms=%d last_player=%d round_limit=%d match_timeout=%d digest=%016x")
         :format(humans, 8 - humans, totals.rounds, totals.longest, totals.battles, totals.bot_battles, totals.byes,
-            totals.timeouts, totals.exits, totals.multi_elimination, totals.requests, totals.snapshots, totals.peak_batch,
+            totals.timeouts, totals.exits, totals.multi_elimination, totals.requests, message_key, totals.snapshots, totals.peak_batch,
             totals.events, totals.peak_events, totals.peak_tables, totals.simulated_ms, totals.endings.last_player or 0,
             totals.endings.round_limit or 0, totals.endings.match_timeout or 0, totals.hash))
     collectgarbage("collect")
