@@ -16,11 +16,13 @@ for _, id in ipairs(tokens) do
     codes[id] = #definitions
 end
 
-local starts = {shield_front = 1, hit_random = 2, hit_front = 3, hit_back = 4}
+local live_effects = {
+    shield_front = 1, hit_random = 2, hit_front = 3, hit_back = 4, shield_next = 5, rally_summon = 6, splash = 7,
+}
 local faints = {buff_front = 1, summon = 2, shield_front = 3}
 for _, pet in ipairs(definitions) do
     local ability = pet.ability
-    local start = ability and ability.trigger == "start" and assert(starts[ability.effect]) or 0
+    local start = ability and ability.trigger ~= "faint" and assert(live_effects[ability.effect]) or 0
     local faint = ability and ability.trigger == "faint" and assert(faints[ability.effect]) or 0
     local token = faint == 2 and assert(data.token_by_id[ability.token]) or nil
     print(pet.id, start, start > 0 and ability.power or 0, start > 0 and (ability.targets or 1) or 0,

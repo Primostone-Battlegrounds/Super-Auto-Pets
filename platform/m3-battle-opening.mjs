@@ -30,18 +30,24 @@ function combatMath(parse) {
   return lowerCombatMath(fs.readFileSync(new URL('../src/autopets/battle.lua', import.meta.url), 'utf8'), parse);
 }
 
-function openingSource(math) {
+function openingSource(math, profile) {
+  const release = profile === 'release';
   const source = fs.readFileSync(new URL('./m3_battle_opening.ts', import.meta.url), 'utf8')
+    .replace(' /* AP_OPENING_HURT */', release ? ', 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n' : '')
+    .replace('false /* AP_OPENING_HURT_CHECK */', release
+      ? 'remaining > 0n && f.getCorrespondingValueFromList(openingCatalog, (code - 1n) * 3n) === 5n' : 'false')
+    .replace(/^ *\/\/ AP_REACTIVE_BEGIN\n([\s\S]*?)^ *\/\/ AP_REACTIVE_END\n/gm, (_, body) => release ? body : '')
     .replace('// AP_OPENING_DAMAGE', math.damageCode)
     .replace('// AP_OPENING_BUFF', math.buffCode)
-    .replace('// AP_OPENING_SUMMON', math.summonCode);
+    .replace('// AP_OPENING_SUMMON', math.summonCode)
+    .replace('// AP_OPENING_RALLY', math.rallyCode);
   assert.doesNotMatch(source, /\/\/ AP_OPENING_/);
   return source;
 }
 
 export function nativeBattleOpening(lua53, lua54, parse, profile = 'compatibility') {
   const { openingMetadata } = catalog(lua53, lua54, profile);
-  return { source: openingSource(combatMath(parse)), metadata: openingMetadata };
+  return { source: openingSource(combatMath(parse), profile), metadata: openingMetadata };
 }
 
 // Append the shared battle code to nativeShop source, which supplies its
@@ -56,5 +62,13 @@ export function nativeBattle(lua53, lua54, parse, profile = 'compatibility') {
     .replace('// AP_LOWERED_BUFF', math.buffCode)
     .replace('// AP_LOWERED_SUMMON', math.summonCode);
   assert.doesNotMatch(collision, /\/\/ AP_/);
-  return { source: collision + '\n' + openingSource(math), strikeLimit: math.strikeLimit, ...data };
+  const release = profile === 'release';
+  const reactions = release ? fs.readFileSync(new URL('./m3_battle_release_step.ts', import.meta.url), 'utf8') : '';
+  const source = [collision, openingSource(math, profile), reactions].join('\n');
+  return {
+    source,
+    strikeLimit: math.strikeLimit,
+    collisionFunction: release ? 'gstsServerReleaseCollisionStep' : 'gstsServerCollisionStep',
+    ...data,
+  };
 }
