@@ -4,7 +4,6 @@ local data = require("autopets.data")
 local rng = require("autopets.rng")
 local shop = require("autopets.shop")
 
-local rules = data.rules
 local opponent_turn_budget = 64
 local run = {}
 run.__index = run
@@ -29,20 +28,20 @@ end
 local function reset(self, seed)
     self.seed = seed
     self.wins = 0
-    self.lives = rules.start_lives
+    self.lives = self.catalog.rules.start_lives
     self.final = nil
     -- Salt each RNG with its domain so shop activity cannot influence later battles.
-    self.shop = shop.new(seed ~ 0x53484f50) -- SHOP
+    self.shop = shop.new(seed ~ 0x53484f50, self.catalog) -- SHOP
     local opponent_random = rng.new(seed ~ 0x424f54) -- BOT
-    self.opponents = bot.new_pool(opponent_random:next(), nil, self.difficulty)
+    self.opponents = bot.new_pool(opponent_random:next(), nil, self.difficulty, self.catalog)
     self.battle_random = rng.new(seed ~ 0x4649474854) -- FIGHT
     assert(bot.advance_to_round(self.opponents, 1, opponent_turn_budget))
     prepare(self)
 end
 
-function run.new(seed, difficulty)
+function run.new(seed, difficulty, catalog)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
-    local self = setmetatable({difficulty = difficulty}, run)
+    local self = setmetatable({difficulty = difficulty, catalog = catalog or data}, run)
     reset(self, seed)
     return self
 end
@@ -83,7 +82,7 @@ function run:submit()
     local player = assert(self.shop:finish_turn())
     local prior_rng = self.battle_random.state
     local seed = self.battle_random:next()
-    local result = battle.resolve(player, self.opponent.team, seed)
+    local result = battle.resolve(player, self.opponent.team, seed, self.catalog)
     if result.status == "strike_limit" then
         assert(self.shop:abort_turn(result, "player"))
         self.battle_random.state = prior_rng
@@ -109,7 +108,7 @@ function run:settle()
     elseif outcome == "loss" then
         self.lives = self.lives - 1
     end
-    if self.wins == rules.wins_to_win or self.lives == 0 then
+    if self.wins == self.catalog.rules.wins_to_win or self.lives == 0 then
         self.phase = "ended"
         self.final = outcome
     else

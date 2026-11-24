@@ -3,6 +3,7 @@ package.path = "src/?.lua;" .. package.path
 local battle = require("autopets.battle")
 local bot = require("autopets.bot")
 local data = require("autopets.data")
+local release = require("autopets.release_data")
 local run = require("autopets.run")
 local rules = data.rules
 
@@ -95,6 +96,15 @@ assert_same(assert(bot.replay(beginner_trace)), beginner_opening.opponent)
 assert(beginner:restart(-19))
 assert(beginner:opponent_trace().difficulty == "beginner")
 assert_same(beginner:snapshot(), run.new(-19, "beginner"):snapshot(), "restart preserves difficulty")
+
+local released = run.new(seed, "beginner", release)
+local released_opening = released:snapshot()
+local released_trace = assert(released:opponent_trace())
+assert(released_trace.rules_hash == release.rules_hash and released_trace.difficulty == "beginner")
+assert_same(released_opening.opponent, assert(bot.replay(released_trace, release)))
+assert(released:shop_action("buy", 1) and released:submit() and released:settle())
+assert(released:advance() and released:restart())
+assert_same(released:snapshot(), released_opening, "restart preserves the catalog and difficulty")
 
 local function feed_all(first, after_roll)
     return {{"feed", first, 1}, {"feed", 3 - first, 1}, {"reroll"}, {"feed", after_roll, 1}}
