@@ -1,30 +1,47 @@
 package.path = "src/?.lua;" .. package.path
 
-local data = require("autopets.data")
 local run = require("autopets.run")
-
-local rules = data.rules
 
 local function number(text)
     return text and math.tointeger(tonumber(text))
 end
 
-local seed = number(arg[1])
-if #arg > 1 or (arg[1] and not seed) then
-    io.stderr:write("用法  lua scripts/play.lua [整数种子]\n")
-    os.exit(1)
+local seed, difficulty, use_release
+for _, option in ipairs(arg) do
+    if option == "--release" and not use_release then
+        use_release = true
+    elseif option == "--beginner" and not difficulty then
+        difficulty = "beginner"
+    elseif not seed and number(option) then
+        seed = number(option)
+    else
+        io.stderr:write("用法  lua scripts/play.lua [整数种子] [--release] [--beginner]\n")
+        os.exit(1)
+    end
 end
 
-local game = run.new(seed or os.time())
+local data = use_release and require("autopets.release_data") or require("autopets.data")
+local rules = data.rules
+local game = run.new(seed or os.time(), difficulty, data)
 
 local function ability_text(pet, level)
     local ability = pet.ability
     local power = ability.power * level
     local detail
     if ability.effect == "shield_front" then
-        detail = string.format("开场为最前 %d 名友方各提供 %d 护盾", ability.targets, power)
+        local trigger = ability.trigger == "faint" and "退场时" or "开场"
+        detail = string.format("%s为最前 %d 名友方各提供 %d 护盾", trigger, ability.targets, power)
+    elseif ability.effect == "shield_next" then
+        detail = string.format("首次受伤存活时为身后一名友方提供 %d 护盾", power)
     elseif ability.effect == "hit_random" then
         detail = string.format("开场随机攻击最多 %d 名敌方，各造成 %d 伤害", ability.targets, power)
+    elseif ability.effect == "hit_front" or ability.effect == "hit_back" then
+        local target = ability.effect == "hit_front" and "前排" or "后排"
+        detail = string.format("开场攻击敌方%s，造成 %d 伤害", target, power)
+    elseif ability.effect == "splash" then
+        detail = string.format("前排碰撞时对敌方第二格造成 %d 伤害", power)
+    elseif ability.effect == "rally_summon" then
+        detail = string.format("友方召唤时使新单位本场增加 %d 攻和 %d 命", power, power)
     elseif ability.effect == "buff_front" then
         detail = string.format("退场时为最前面的友方增加 %d 生命", power)
     elseif ability.effect == "summon" then
@@ -58,8 +75,12 @@ local function print_offers(label, offers, definitions)
                 print(string.format("  %d  %s  T%d  攻 %d  命 %d  %s%s",
                     index, item.name, item.tier, item.attack, item.health, ability_text(item, 1), frozen))
             else
-                print(string.format("  %d  %s  T%d  攻 %+d  命 %+d%s",
-                    index, item.name, item.tier, item.attack, item.health, frozen))
+                local adjacent = ""
+                if item.adjacent_attack or item.adjacent_health then
+                    adjacent = string.format("  相邻各攻 %+d 命 %+d", item.adjacent_attack or 0, item.adjacent_health or 0)
+                end
+                print(string.format("  %d  %s  T%d  攻 %+d  命 %+d%s%s",
+                    index, item.name, item.tier, item.attack, item.health, frozen, adjacent))
             end
         else
             print(string.format("  %d  空", index))
@@ -151,6 +172,10 @@ local function event_label(event)
     elseif event.type == "summon" then
         return string.format("%s 被召唤（%d 攻 %d 命）", unit, event.attack, event.health)
     elseif event.type == "buff" then
+        if event.attack_amount then
+            return string.format("%s 增加 %d 攻和 %d 命，当前生命 %d",
+                unit, event.attack_amount, event.amount, event.health)
+        end
         return string.format("%s 增加 %d 生命，当前生命 %d", unit, event.amount, event.health)
     elseif event.type == "shield" then
         return string.format("%s 获得 %d 护盾，当前护盾 %d", unit, event.amount, event.shield)
@@ -224,6 +249,8 @@ local handlers = {
 }
 
 print("小动物自走棋  ·  输入 help 查看指令")
+if use_release then print("六阶首发目录") end
+if difficulty then print("练习难度  入门") end
 show()
 while true do
     io.write("> ")
