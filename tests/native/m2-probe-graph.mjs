@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import { shopFlow } from './versus-shop-parity.mjs';
 
 export function verifyGraph(graphSource, buttonSource, combatSource, registeredButtons, ts, marketFixture, checkReplay) {
-  const { gold, price, teamSize, offerSlots, foodSlots, shelves, startingLives } = marketFixture;
+  const { gold, price, teamSize, offerSlots, foodSlots, shelves, startingLives, release } = marketFixture;
   const ids = new Map(registeredButtons.map(({ id, key }) => [Number(key), BigInt(id)]));
   assert.equal(ids.size, 7);
   assert.ok(gold >= price * offerSlots);
@@ -16,6 +16,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   const logs = [];
   let variables, handler, onPress;
   let events, updates, now, lastVersion, combatVariables, combatEvents, combatSignals, randomCount;
+  let advancedSkills;
   let totalResolved = 0;
   let apiCalls = 0;
   let maximumApiCalls = 0;
@@ -96,6 +97,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
     events = new Map();
     combatSignals = new Map();
     combatEvents = new Map();
+    advancedSkills = [];
     randomCount = 0n;
     now = 0n;
     lastVersion = 0n;
@@ -183,7 +185,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
         assert.equal(replay.outcome, view.outcome);
         if (replays.get(target)?.round !== replay.round) {
           if (!Array.from(replays.values()).some(previous => previous.round === replay.round)) {
-            checkReplay(replay, Array.from(combatVariables.board));
+            advancedSkills = checkReplay(replay, Array.from(combatVariables.board));
             totalResolved += 1;
           }
           replays.set(target, replay);
@@ -463,8 +465,56 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   tick(17);
   assert.equal(views.get('A').winner, 1n);
   assert.equal(views.get('B').reason, 3n);
+
+  let releaseBattle;
+  if (release) {
+    reset();
+    players.push('B');
+    tick(1);
+    for (let round = 1n; round <= 10n; round += 1n) {
+      assert.equal(views.get('A').round, round);
+      tick(variables.due);
+      resolveFight();
+      assert.equal(views.get('B').outcome, 3n);
+      assert.equal(views.get('B').lives, BigInt(startingLives));
+      tick(variables.due);
+    }
+    assert.equal(views.get('A').round, 11n);
+    assert.equal(markets.get('A').raw[1], 6n);
+    assert.deepEqual(buy('A', 1n), ['A', 'B']);
+    assert.deepEqual(press('A', 7), ['A', 'B']);
+    assert.deepEqual(buy('A', 3n), ['A', 'B']);
+    assert.deepEqual(buy('A', 2n), ['A', 'B']);
+    assert.deepEqual(buy('B', 3n), ['A', 'B']);
+    assert.deepEqual(buy('B', 1n), ['A', 'B']);
+    const neighborAttack = 6 + offerSlots + foodSlots + 6 + 2;
+    const before = markets.get('B').raw;
+    assert.deepEqual(shop('B', 16n, 2n, 1n), ['A', 'B']);
+    assert.equal(markets.get('B').raw[neighborAttack], before[neighborAttack] + 1n);
+    assert.equal(markets.get('B').raw[neighborAttack + 1], before[neighborAttack + 1] + 1n);
+    press('A', 2);
+    press('B', 2);
+    resolveFight();
+    assert.equal(views.get('A').outcome, 1n);
+    assert.deepEqual(advancedSkills, ['cinder_caracal', 'dawn_tapir', 'fern_quail', 'mist_crane', 'mist_crane', 'tidal_narwhal']);
+    releaseBattle = { round: Number(views.get('A').round), skills: advancedSkills };
+    tick(variables.due);
+    assert.deepEqual(shop('B', 13n, 0n, 1n), ['A', 'B']);
+    assert.deepEqual(shop('B', 13n, 0n, 1n), ['A', 'B']);
+    assert.equal(markets.get('B').raw[5], 0n);
+    for (let life = BigInt(startingLives) - 2n; life >= 0n; life -= 1n) {
+      press('A', 2);
+      tick(variables.due);
+      resolveFight();
+      assert.equal(views.get('B').lives, life);
+      if (life > 0n) tick(variables.due);
+    }
+    assert.equal(views.get('A').phase, 2n);
+    assert.equal(views.get('A').winner, 1n);
+    releaseBattle.terminalRound = Number(views.get('A').round);
+  }
   return {
     summary: '完整双人经营、定向隔离、权威战斗与同一回放、平局、扣命终局、阶段超时、恢复和认输',
-    maximumApiCalls, maximumMessages, totalResolved,
+    maximumApiCalls, maximumMessages, totalResolved, releaseBattle,
   };
 }

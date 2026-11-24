@@ -1,7 +1,9 @@
 package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
-local data = require("autopets.data")
+local profile = arg[1] or "compatibility"
+assert(profile == "compatibility" or profile == "release")
+local data = require(profile == "release" and "autopets.release_data" or "autopets.data")
 
 local function team(line)
     local fields, result = {}, {}
@@ -16,7 +18,7 @@ end
 
 local seed = assert(tonumber(io.read("*l")))
 local left, right = team(io.read("*l")), team(io.read("*l"))
-local result = battle.resolve(left, right, seed)
+local result = battle.resolve(left, right, seed, data)
 local outcomes = {win = 1, loss = 2, draw = 3}
 assert(result.status == "resolved")
 print(assert(outcomes[result.outcome]))
@@ -35,3 +37,11 @@ for _, side in ipairs({"player", "enemy"}) do
     end
     print(table.concat(fields, " "))
 end
+local advanced_skills = {}
+for _, event in ipairs(result.events) do
+    local definition = data.pet_by_id[event.id]
+    if event.type == "skill" and definition and definition.tier >= 4 then
+        advanced_skills[#advanced_skills + 1] = event.id
+    end
+end
+print(table.concat(advanced_skills, " "))

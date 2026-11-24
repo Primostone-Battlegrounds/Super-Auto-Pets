@@ -1,7 +1,9 @@
 -- From the repository root, run: lua platform/m2_shop_data.lua
 package.path = "src/?.lua;" .. package.path
 
-local data = require("autopets.data")
+local profile = arg[1] or "compatibility"
+assert(profile == "compatibility" or profile == "release")
+local data = require(profile == "release" and "autopets.release_data" or "autopets.data")
 local duel = require("autopets.duel")
 
 local function positive_integer(value, label)
@@ -36,12 +38,13 @@ for code, pet in ipairs(data.pets) do
     assert(not codes[id], "duplicate pet ID: " .. id)
     codes[id] = positive_integer(code, "pet code")
     row("pet", code, id, text_field(pet.name, "pet name"),
-        positive_integer(pet.attack, "pet attack"), positive_integer(pet.health, "pet health"))
+        positive_integer(pet.attack, "pet attack"), positive_integer(pet.health, "pet health"),
+        positive_integer(pet.tier, "pet tier"))
 end
 
 -- Seed 1 produces different shelves on both seats in the first two turns.
 -- Time out an empty first turn so the domain advances without buying or freezing.
-local match = duel.new(1, 1, 2)
+local match = duel.new(1, 1, 2, {catalog = data})
 row("lives", rules.start_lives)
 local function export_offers(round, seat)
     local view = assert(match:snapshot(seat))
