@@ -60,6 +60,23 @@ jobs:
           path: ${{ runner.temp }}/m1-device-candidate
           if-no-files-found: error
           retention-days: 30
+      - name: Verify six-tier native practice
+        if: hashFiles('platform/M4.md') != ''
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          node tests/native/verify-m1.mjs "$RUNNER_TEMP/miliastra-mcp" \
+            "$RUNNER_TEMP/native-validation" lua5.3 "$RUNNER_TEMP/m4-single-practice" --release
+          cd "$RUNNER_TEMP/m4-single-practice"
+          sha256sum -c SHA256SUMS
+      - name: Upload verified six-tier practice
+        if: hashFiles('platform/M4.md') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m4-single-practice-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/m4-single-practice
+          if-no-files-found: error
+          retention-days: 30
       - name: Verify the isolated two-player sync probe
         if: hashFiles('tests/native/verify-m2-probe.mjs') != ''
         env:

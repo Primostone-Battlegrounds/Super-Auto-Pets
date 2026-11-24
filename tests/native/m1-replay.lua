@@ -1,4 +1,5 @@
 local mode, extracted = arg[1], arg[2]
+local release = arg[mode == "source" and 2 or 3] == "release"
 local load_module
 if mode == "source" then
     package.path = "src/?.lua;" .. package.path
@@ -14,7 +15,7 @@ else
     load_module = assert(load(source .. "\nreturn loadAutoPetsModule", "@" .. extracted, "t", env))()
 end
 
-local data = load_module("autopets.data")
+local data = load_module(release and "autopets.release_data" or "autopets.data")
 local art = load_module("autopets.art")
 local bot = load_module("autopets.bot")
 local run = load_module("autopets.run")
@@ -76,20 +77,20 @@ inspect_assets(data.token_by_id)
 io.write("assets ", asset_count, " ", definitions_layers, " ", max_layers, "\n")
 
 for _, fixture in ipairs({{seed = 7, style = "guardian"}, {seed = -12, style = "swarm"}}) do
-    local pool = bot.new_pool(fixture.seed, fixture.style)
+    local pool = bot.new_pool(fixture.seed, fixture.style, nil, data)
     local attempts = 0
-    while not bot.advance_to_round(pool, 6, 3) do
+    while not bot.advance_to_round(pool, release and 12 or 6, 3) do
         attempts = attempts + 1
         assert(attempts < 1000, "training progress exhausted its call budget")
     end
     local trace = bot.trace(pool)
     local expected = bot.snapshot(pool)
-    local replayed = assert(bot.replay(trace))
+    local replayed = assert(bot.replay(trace, data))
     assert(canonical(replayed) == canonical(expected), "training replay diverged")
     record("training", {fixture = fixture, opponent = expected, trace = trace})
 end
 
-local game = run.new(7)
+local game = run.new(7, nil, data)
 record("player_start", game:snapshot())
 local function action(name, ...)
     assert(game:shop_action(name, ...))
