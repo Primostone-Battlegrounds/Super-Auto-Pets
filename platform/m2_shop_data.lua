@@ -42,6 +42,7 @@ end
 -- Seed 1 produces different shelves on both seats in the first two turns.
 -- Time out an empty first turn so the domain advances without buying or freezing.
 local match = duel.new(1, 1, 2)
+row("lives", rules.start_lives)
 local function export_offers(round, seat)
     local view = assert(match:snapshot(seat))
     local shelf = view.shop.pets

@@ -9,16 +9,42 @@ const snapshot = defineSignal('client:AP_DuelSnapshot', [
   ['player', 'entity'], ['players', 'int'], ['seat', 'int'], ['round', 'int'],
   ['phase', 'int'], ['ready', 'bool'], ['continued', 'bool'], ['settlements', 'int'], ['version', 'int'],
   ['sequence', 'int'], ['winner', 'int'], ['reason', 'int'], ['remaining', 'int'], ['ack', 'int'],
+  ['lives', 'int'], ['opponentLives', 'int'], ['outcome', 'int'],
 ] as const);
 const market = defineSignal('client:AP_DuelMarket', [
   ['player', 'entity'], ['round', 'int'], ['version', 'int'], ['state', 'int_list'],
+] as const);
+const fightStart = defineSignal('AP_DuelFightStart', [
+  ['round', 'int'], ['attempt', 'int'], ['seed', 'int'], ['first', 'int_list'], ['second', 'int_list'],
+] as const);
+const fightCancel = defineSignal('AP_DuelFightCancel', [['attempt', 'int']] as const);
+const replay = defineSignal('client:AP_DuelReplay', [
+  ['player', 'entity'], ['round', 'int'], ['seed', 'int'], ['outcome', 'int'],
+  ['first', 'int_list'], ['second', 'int_list'],
 ] as const);
 
 const preparationTime = 60n;
 const settlementTime = 10n;
 const roomTime = 2700n;
 const recoveryTime = 15n;
+const startingLives = 0n; // AP_DUEL_LIVES
 const clock = 'AP_DuelClock';
+
+// Transfer the locked lineup, independent of the private shop and its RNG.
+function gstsServerDuelFormation(f: ShopFlow, shop: bigint[]): bigint[] {
+  const result = f.emptyList('int');
+  const count = f.getCorrespondingValueFromList(shop, shopCountAt);
+  for (let slot = 0n; slot < count; slot += 1n) {
+    const at = shopTeamAt + slot * shopUnitSize;
+    const index = slot * 5n;
+    f.insertValueIntoList(result, index, f.getCorrespondingValueFromList(shop, at));
+    f.insertValueIntoList(result, index + 1n, f.getCorrespondingValueFromList(shop, at + 1n));
+    f.insertValueIntoList(result, index + 2n, f.getCorrespondingValueFromList(shop, at + 2n));
+    f.insertValueIntoList(result, index + 3n, f.getCorrespondingValueFromList(shop, at + 3n));
+    f.insertValueIntoList(result, index + 4n, f.getCorrespondingValueFromList(shop, at + 4n));
+  }
+  return result;
+}
 
 g.server({
   id: 1073741825,
@@ -27,6 +53,9 @@ g.server({
     round: 1n, phase: 0n, settlements: 0n, version: 0n, enrolled: false,
     present: 0n, due: 0n, roomDue: 0n, absentDue: 0n, winner: 0n, reason: 0n,
     absentWinner: 0n,
+    livesOne: startingLives, livesTwo: startingLives,
+    battleAttempt: 0n, battleSeed: 0n, battleOutcome: 0n,
+    replayOne: [0n], replayTwo: [0n],
     shopOne: [0n], // AP_DUEL_START_ONE
     shopTwo: [0n], // AP_DUEL_START_TWO
   },
@@ -38,8 +67,8 @@ g.server({
   const players = f.getListOfPlayerEntitiesOnTheField();
   const actor = event.signalSourceEntity;
   const action = event.params.action;
-  const fromClock = action === -1n && f.equal(f.getSelfEntity(), actor);
-  if (!fromClock) {
+  const fromStage = (action === -1n || action === -2n) && f.equal(f.getSelfEntity(), actor);
+  if (!fromStage) {
     let fromPlayer = false;
     for (const player of players) {
       if (f.equal(player, actor)) fromPlayer = true;
@@ -93,6 +122,8 @@ g.server({
     if (now >= f.get('roomDue')) {
       f.set('phase', 2n);
       f.set('reason', 4n);
+      if (f.get('livesOne') > f.get('livesTwo')) f.set('winner', 1n);
+      if (f.get('livesOne') < f.get('livesTwo')) f.set('winner', 2n);
       changed = true;
       mayProgress = false;
     } else if (absentDue > 0n && now >= absentDue) {
@@ -111,7 +142,7 @@ g.server({
   }
 
   const phaseDue = f.get('due');
-  if (mayProgress && !fromClock && action > 0n && event.params.round === previousRound) {
+  if (mayProgress && !fromStage && action > 0n && event.params.round === previousRound) {
     const seat = f.getCustomVariable(actor, 'AP_shopSeat').asType('int');
     const sequence = f.getCustomVariable(actor, 'AP_sequence').asType('int');
     const currentShop = f.getCustomVariable(actor, 'AP_shopRound').asType('int') === previousRound;
@@ -163,27 +194,61 @@ g.server({
       if (f.getCustomVariable(player, 'AP_continueRound').asType('int') === previousRound) continueCount += 1n;
     }
     if (previousPhase === 0n && (readyCount === 2n || now >= phaseDue)) {
-      f.set('settlements', f.get('settlements') + 1n);
-      if (previousRound === 1n) {
-        f.set('phase', 1n);
-        f.set('due', now + settlementTime);
-      } else {
-        f.set('phase', 2n);
-        f.set('reason', 1n);
-      }
+      const seed = f.getRandomInteger(1n, 2147483646n);
+      const attempt = f.get('battleAttempt') + 1n;
+      f.set('phase', 3n);
+      f.set('battleSeed', seed);
+      f.set('battleAttempt', attempt);
+      f.sendSignal(fightStart, previousRound, attempt, seed, f.get('shopOne'), f.get('shopTwo'));
       changed = true;
-      f.printString('AUTO_PETS_M2 settled');
-      f.printString(f.dataTypeConversion(previousRound, 'str'));
     }
     if (previousPhase === 1n && (continueCount === 2n || now >= phaseDue)) {
       f.set('round', previousRound + 1n);
       f.set('phase', 0n);
       f.set('due', now + preparationTime);
+      f.set('battleOutcome', 0n);
       changed = true;
     }
   }
 
-  if (fromClock && !changed) return;
+  // The separate combat graph advances one bounded step per timer. The room
+  // may already have ended while that graph was computing its previous attempt.
+  if (mayProgress && action === -2n && previousPhase === 3n && event.params.round === previousRound
+    && event.params.sequence === f.get('battleAttempt')) {
+    const outcome = event.params.from;
+    if (outcome >= 1n && outcome <= 3n) {
+      f.set('battleOutcome', outcome);
+      f.set('replayOne', gstsServerDuelFormation(f, f.get('shopOne')));
+      f.set('replayTwo', gstsServerDuelFormation(f, f.get('shopTwo')));
+      f.set('settlements', f.get('settlements') + 1n);
+      let remainingOne = f.get('livesOne');
+      let remainingTwo = f.get('livesTwo');
+      if (outcome === 1n) remainingTwo -= 1n;
+      if (outcome === 2n) remainingOne -= 1n;
+      f.set('livesOne', remainingOne);
+      f.set('livesTwo', remainingTwo);
+      if (remainingOne === 0n || remainingTwo === 0n) {
+        f.set('phase', 2n);
+        if (remainingOne === 0n) f.set('winner', 2n);
+        else f.set('winner', 1n);
+        f.set('reason', 5n);
+      } else {
+        f.set('phase', 1n);
+        f.set('due', now + settlementTime);
+      }
+      changed = true;
+      f.printString('AUTO_PETS_M2 settled');
+      f.printString(f.dataTypeConversion(previousRound, 'str'));
+    } else if (outcome === 4n) {
+      f.set('phase', 0n);
+      f.set('due', now + preparationTime);
+      for (const player of players) f.setCustomVariable(player, 'AP_readyRound', 0n, false);
+      changed = true;
+      f.printString('AUTO_PETS_M2 strike_limit');
+    }
+  }
+
+  if (fromStage && !changed) return;
   const round = f.get('round');
   const phase = f.get('phase');
   const settlements = f.get('settlements');
@@ -191,7 +256,9 @@ g.server({
   f.set('version', version);
   let remaining = f.get('due') - now;
   if (!roomReady) remaining = f.get('absentDue') - now;
-  if (phase === 2n || remaining < 0n) remaining = 0n;
+  if (phase === 2n || phase === 3n || remaining < 0n) remaining = 0n;
+  if (phase === 2n && previousPhase === 3n) f.sendSignal(fightCancel, f.get('battleAttempt'));
+  const outcome = f.get('battleOutcome');
   for (const player of players) {
     if (changed || f.equal(actor, player)) {
       const seat = f.getCustomVariable(player, 'AP_shopSeat').asType('int');
@@ -219,10 +286,22 @@ g.server({
       const ready = f.getCustomVariable(player, 'AP_readyRound').asType('int') === round;
       const continued = f.getCustomVariable(player, 'AP_continueRound').asType('int') === round;
       let ack = 0n;
-      if (!fromClock && f.equal(actor, player)) ack = event.params.token;
+      if (!fromStage && f.equal(actor, player)) ack = event.params.token;
+      let lives = 0n;
+      let opponentLives = 0n;
+      if (seat === 1n) {
+        lives = f.get('livesOne');
+        opponentLives = f.get('livesTwo');
+      } else if (seat === 2n) {
+        lives = f.get('livesTwo');
+        opponentLives = f.get('livesOne');
+      }
       f.sendSignal(snapshot, player, playerCount, seat, round, phase, ready, continued, settlements,
-        version, sequence, f.get('winner'), f.get('reason'), remaining, ack);
+        version, sequence, f.get('winner'), f.get('reason'), remaining, ack, lives, opponentLives, outcome);
       f.sendSignal(market, player, round, version, privateShop);
+      if (outcome > 0n && seat > 0n) {
+        f.sendSignal(replay, player, round, f.get('battleSeed'), outcome, f.get('replayOne'), f.get('replayTwo'));
+      }
     }
   }
 });

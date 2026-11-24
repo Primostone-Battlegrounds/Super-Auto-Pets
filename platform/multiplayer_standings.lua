@@ -1,8 +1,9 @@
 local standings = {}
 local modes = {duel = 2, room = 8}
 local phases = {
-    lobby = "等待入席", preparation = "经营准备", settlement = "回合结算", ended = "对局终局",
+    lobby = "等待入席", preparation = "经营准备", battle = "战斗计算", settlement = "回合结算", ended = "对局终局",
 }
+local duel_phases = {"preparation", "settlement", "ended", "battle"}
 
 local function seconds_until(deadline, now)
     if deadline == nil then return nil end
@@ -50,18 +51,30 @@ function standings.duel(snapshot, now)
 end
 
 function standings.duel_probe(fields)
-    local players, seat, round, phase, ready, continued, _, revision, _, winner, reason = table.unpack(fields)
+    local players, seat, round, phase, ready, continued, _, revision, _, winner, reason, remaining, _, lives, opponent_lives =
+        table.unpack(fields)
     local view = {
-        revision = revision, round = round, seat = seat, phase = ({"preparation", "settlement", "ended"})[phase + 1],
+        revision = revision, round = round, seat = seat, phase = duel_phases[phase + 1],
         human_count = players, bot_count = 0, winner = winner > 0 and winner or nil,
         reconnecting = players < 2 and seat > 0, seats = {},
     }
     if seat > 0 then
-        view.seats[seat] = {kind = "human", ready = ready}
-        if players == 2 then view.seats[3 - seat] = {kind = "human"} end
+        view.seats[seat] = {kind = "human", ready = ready, lives = lives}
+        if players == 2 or opponent_lives ~= nil then
+            view.seats[3 - seat] = {kind = "human", lives = opponent_lives, absent = players < 2}
+        end
+        if lives ~= nil then
+            view.seconds = remaining
+            view.opponent = 3 - seat
+        end
     end
     if phase == 2 and reason == 1 then view.phase_name = "两轮同步验证完成"
-    elseif phase == 2 then view.phase_name = "房间已结束"
+    elseif phase == 2 then
+        view.phase_name = "房间已结束"
+        if lives ~= nil and view.winner and seat > 0 then
+            view.seats[view.winner].place = 1
+            view.seats[3 - view.winner].place = 2
+        end
     elseif phase == 1 and continued then view.phase_name = "已确认本轮"
     elseif players < 2 and phase ~= 2 then view.phase = "lobby"
     end
