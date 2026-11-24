@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import { shopFlow } from './versus-shop-parity.mjs';
 
 export function verifyGraph(graphSource, buttonSource, combatSource, registeredButtons, ts, marketFixture, checkReplay) {
-  const { gold, price, teamSize, offerSlots, foodSlots, shelves, startingLives, release } = marketFixture;
+  const { gold, price, teamSize, offerSlots, foodSlots, shelves, startingLives, release, gated } = marketFixture;
   const ids = new Map(registeredButtons.map(({ id, key }) => [Number(key), BigInt(id)]));
   assert.equal(ids.size, 7);
   assert.ok(gold >= price * offerSlots);
@@ -124,6 +124,16 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
       };
     } });
     events.get('whenEntityIsCreated')({ eventSourceEntity: 'stage' }, flow);
+    if (gated) {
+      players.push('B');
+      updates = [];
+      events.get('whenTimerIsTriggered')({ timerName: 'AP_DuelClock' }, flow);
+      handler({ signalSourceEntity: 'A', params: { action: 0n } }, flow);
+      assert.equal(variables.enrolled, false);
+      assert.deepEqual(updates, []);
+      players.pop();
+      state.set('stage', { AP_GameMode: 2n });
+    }
     load(combatSource, { server(options) {
       combatVariables = { ...options.variables };
       return {

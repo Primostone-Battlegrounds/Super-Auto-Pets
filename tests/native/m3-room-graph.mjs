@@ -19,6 +19,7 @@ function session(sources, ts, count, settings, delayedSignals = false) {
   let worker;
   let now = 0n;
   let ticket = 0n;
+  let mode = 0n;
   let running = false;
   let calls = 0;
   let maxCalls = 0;
@@ -46,6 +47,7 @@ function session(sources, ts, count, settings, delayedSignals = false) {
     queryGameTimeElapsed: () => now,
     getCustomVariable: (entity, name) => ({ asType: () => {
       assert.equal(entity, stage);
+      if (name === 'AP_GameMode') return mode;
       assert.equal(name, 'AP_RoomTicket');
       return ticket;
     } }),
@@ -195,6 +197,14 @@ function session(sources, ts, count, settings, delayedSignals = false) {
   function take() { return outputs.splice(0); }
   fire('whenEntityIsCreated');
   assert.ok(running && ticket > 0n);
+  if (settings.gated) {
+    fire('whenTimerIsTriggered', { timerName: 'AP_RoomClock' });
+    dispatch({ name: requestSignal, actor: enrolled[0], params: { action: 0n } });
+    assert.equal(controller.lastTick, -1n);
+    assert.equal(controller.phase, 0n);
+    assert.deepEqual(outputs, []);
+    mode = 8n;
+  }
 
   return {
     enrolled, field, controller, worker, stage, logs, messages, completed, positions,
@@ -233,7 +243,8 @@ function session(sources, ts, count, settings, delayedSignals = false) {
 function read(rows, target) {
   const result = rows.find(entry => entry.target === target && entry.name === viewSignal);
   assert.ok(result, 'expected targeted acknowledgement');
-  const [revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, market, ack] = result.values;
+  const [revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, market, ack, remaining] = result.values;
+  assert.ok(typeof remaining === 'bigint' && remaining >= 0n);
   assert.ok(revision > 0n);
   for (const list of [lives, places, opponents, results]) assert.equal(list.length, 8);
   if (market.length) {

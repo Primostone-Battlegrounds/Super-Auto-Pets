@@ -9,7 +9,7 @@ const roomView = defineSignal('client:AP_RoomView', [
   ['player', 'entity'], ['revision', 'int'], ['phase', 'int'], ['round', 'int'], ['seat', 'int'],
   ['nextSequence', 'int'], ['humanCount', 'int'], ['winner', 'int'], ['ready', 'bool'],
   ['lives', 'int_list'], ['places', 'int_list'], ['opponents', 'int_list'], ['results', 'int_list'], ['market', 'int_list'],
-  ['ack', 'int'],
+  ['ack', 'int'], ['remaining', 'int'],
 ] as const);
 const roomBoard = defineSignal('client:AP_RoomBattle', [
   ['player', 'entity'], ['frame', 'int'], ['round', 'int'], ['left', 'int'], ['right', 'int'],

@@ -1,14 +1,16 @@
-local root = script.object
-local status = root:GetChild("Status")
-local market_gold = root:GetChild("MarketGold")
-local team_label = root:GetChild("Team")
-local leave_label = root:GetChild("LeaveLabel")
-local merge_label = root:GetChild("MergeLabel")
-local reward_label = root:GetChild("RewardLabel")
-local replay_label = root:GetChild("ReplayLabel")
-local replay_status = root:GetChild("ReplayStatus")
+local root, offers = script.object, script.object
+local function child(name) return assert(root:GetChild(name), name) end
+local status = child("Status")
+local market_gold = child("MarketGold")
+local team_label = child("Team")
+local leave_label = child("LeaveLabel")
+local merge_label = child("MergeLabel")
+local reward_label = child("RewardLabel")
+local replay_label = child("ReplayLabel")
+local replay_status = child("ReplayStatus")
 local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
+local decode_shop = require("autopets.shop_wire")
 local pets = {
     -- AP_DUEL_PETS
 }
@@ -31,10 +33,40 @@ local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
-local playback
+local playback, status_line, seconds
+local visible = {}
 local bindings = {}
 local pet_labels, food_labels, team_labels = {}, {}, {}
 local pet_freeze_labels, food_freeze_labels = {}, {}
+
+local function show(control, enabled)
+    if visible[control] == enabled then return end
+    if enabled then control:SetActive(true) end
+    control:SetVisible(enabled)
+    if not enabled then control:SetActive(false) end
+    visible[control] = enabled
+end
+
+local function show_action(action, label, enabled)
+    show(child(action), enabled)
+    show(child(action .. "Face"), enabled)
+    show(child(label), enabled)
+end
+
+local function show_actions()
+    if offers ~= root then
+        show(offers, preparing)
+        show(market_gold, preparing)
+    end
+    for slot = 1, rules.team_size do show(child("Team" .. slot), preparing) end
+    for _, binding in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},
+        {"Reward", "RewardLabel"}, {"RewardNext", "RewardNextLabel"}}) do
+        show_action(binding[1], binding[2], preparing)
+    end
+    show_action("Ready", "ReadyLabel", preparing)
+    show_action("Advance", "AdvanceLabel", can_advance)
+    show_action("Leave", "LeaveLabel", can_leave)
+end
 
 local function transmit(command)
     local signal = game.ServerSignal("AP_DuelRequest")
@@ -113,13 +145,13 @@ local function render_market()
     for slot, label in ipairs(pet_labels) do
         local code = view.pets[slot]
         local pet = pets[math.abs(code)]
-        label.text = pet and string.format("%s  攻%d / 生%d\n%s", pet.name, pet.attack, pet.health, footer) or "售罄"
+        label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
         pet_freeze_labels[slot].text = code < 0 and "解冻动物" or "冻结动物"
     end
     for slot, label in ipairs(food_labels) do
         local code = view.foods[slot]
         local food = foods[math.abs(code)]
-        label.text = food and string.format("%s  +%d攻 / +%d生\n喂食 %d 金",
+        label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
             food.name, food.attack, food.health, rules.food_cost) or "售罄"
         food_freeze_labels[slot].text = code < 0 and "解冻食物" or "冻结食物"
     end
@@ -129,12 +161,12 @@ local function render_market()
             local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
             local prefix = slot == picked and "已选 · " or ""
-            label.text = string.format("%s%s  %d/%d\nLv%d  经验 %d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
+            label.text = string.format("%s%s\n%d/%d · Lv%d 经验%d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
         else
             label.text = string.format("阵位 %d  ·  空", slot)
         end
     end
-    team_label.text = string.format("阵容 %d / %d", #view.team, rules.team_size)
+    team_label.text = string.format("阵容 %d / %d · 右侧为前排", #view.team, rules.team_size)
     if reward_index > #view.rewards then reward_index = 1 end
     local reward = pets[view.rewards[reward_index]]
     reward_label.text = reward and string.format("奖励 %d/%d · %s", reward_index, #view.rewards, reward.name) or "暂无升级奖励"
@@ -205,14 +237,15 @@ local function forfeit()
     end
 end
 
-local function bind(name, callback)
-    bindings[#bindings + 1] = {object = root:GetChild(name), callback = callback}
+local function bind(name, callback, parent)
+    bindings[#bindings + 1] = {object = (parent or root):GetChild(name), callback = callback}
 end
 
 local event_text = {start = "入场", skill = "技能", attack = "攻击", damage = "受击", shield = "护盾",
     faint = "退场", buff = "强化", summon = "召唤", result = "结算"}
 
 local function show_replay()
+    show_action("Replay", "ReplayLabel", playback ~= nil)
     if not playback then
         replay_status.text = "等待战斗回放"
         replay_label.text = "回放"
@@ -309,16 +342,16 @@ bind("RewardNext", function()
 end)
 
 for slot = 1, rules.pet_slots do
-    pet_labels[slot] = root:GetChild("OfferLabel" .. slot)
-    pet_freeze_labels[slot] = root:GetChild("FreezePetLabel" .. slot)
-    bind("Buy" .. slot, function() acquire(slot, false) end)
-    bind("FreezePet" .. slot, function() freeze(slot, false) end)
+    pet_labels[slot] = offers:GetChild("OfferLabel" .. slot)
+    pet_freeze_labels[slot] = offers:GetChild("FreezePetLabel" .. slot)
+    bind("Buy" .. slot, function() acquire(slot, false) end, offers)
+    bind("FreezePet" .. slot, function() freeze(slot, false) end, offers)
 end
 for slot = 1, rules.food_slots do
-    food_labels[slot] = root:GetChild("FoodLabel" .. slot)
-    food_freeze_labels[slot] = root:GetChild("FreezeFoodLabel" .. slot)
-    bind("Food" .. slot, function() feed(slot) end)
-    bind("FreezeFood" .. slot, function() freeze(slot, true) end)
+    food_labels[slot] = offers:GetChild("FoodLabel" .. slot)
+    food_freeze_labels[slot] = offers:GetChild("FreezeFoodLabel" .. slot)
+    bind("Food" .. slot, function() feed(slot) end, offers)
+    bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)
@@ -328,28 +361,18 @@ end
 local function receive_market(_, parameters)
     local market_round, version, raw = table.unpack(parameters)
     if market_round < round or version < latest_version or (market and version <= market.version) then return end
-    if #raw == 1 then
-        market = nil
-        render_market()
-        return
-    end
-    local view = {round = market_round, version = version, tier = raw[2], gold = raw[3], pets = {}, foods = {}, team = {}, rewards = {}}
-    local cursor = 7
-    for _, shelf in ipairs({{view.pets, rules.pet_slots}, {view.foods, rules.food_slots}}) do
-        for slot = 1, shelf[2] do
-            shelf[1][slot] = raw[cursor]
-            cursor = cursor + 1
-        end
-    end
-    for slot = 1, raw[6] do
-        local at = cursor + (slot - 1) * 6
-        view.team[slot] = {code = raw[at], uid = raw[at + 1], attack = raw[at + 2], health = raw[at + 3],
-            level = raw[at + 4], xp = raw[at + 5]}
-    end
-    for at = cursor + rules.team_size * 6, #raw do view.rewards[#view.rewards + 1] = raw[at] end
+    local view = decode_shop(raw, rules)
     market = view
+    if not view then render_market(); return end
+    view.round, view.version = market_round, version
     print(string.format("AUTO_PETS_M2 market round=%d gold=%d team=%d version=%d", market_round, view.gold, #view.team, version))
     render_market()
+end
+
+local function draw_status()
+    local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
+    local content = status_line .. suffix
+    if status.text ~= content then status.text = content end
 end
 
 local function receive_snapshot(_, parameters)
@@ -387,7 +410,10 @@ local function receive_snapshot(_, parameters)
         end
     end
     local seat_text = seat > 0 and string.format("席位 %d", seat) or "等候席位"
-    status.text = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
+    status_line = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
+    seconds = players == 2 and seat > 0 and (phase == 0 or phase == 1) and math.max(0, remaining) or nil
+    draw_status()
+    show_actions()
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
     print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
@@ -400,11 +426,16 @@ function OnStart()
     script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
     for _, binding in ipairs(bindings) do binding.object:AddCursorEventListener(click, binding.callback) end
     render_market()
+    show_actions()
     show_replay()
     request_snapshot()
 end
 
 function OnUpdate(dt)
+    if seconds then
+        seconds = math.max(0, seconds - dt)
+        draw_status()
+    end
     if not playback or not playback.playing then return end
     playback.elapsed = playback.elapsed + dt
     if playback.elapsed < 0.18 then return end
@@ -423,7 +454,7 @@ function OnDestroy()
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
-    playback = nil
+    playback, status_line, seconds, visible = nil, nil, nil, {}
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

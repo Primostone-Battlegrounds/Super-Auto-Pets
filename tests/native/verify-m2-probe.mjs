@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { nativeShop } from '../../platform/versus-shop.mjs';
 import { bundleBattleReplay } from '../../platform/m1-bundle.mjs';
 import { nativeBattle } from '../../platform/m3-battle-opening.mjs';
+import { duelClientSource, duelGraphs, duelLayout, duelProbeButtons as buttons,
+  duelSignals as signals, duelVariables as variables } from '../../platform/m2-duel-native.mjs';
+import { duelFixture, duelReplayOracle } from './duel-verification.mjs';
 import { verifyGraph } from './m2-probe-graph.mjs';
 
 const [checkoutArg, scratch, lua, outputArg, profile = 'compatibility'] = process.argv.slice(2);
@@ -20,43 +23,7 @@ assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0', 'Set MILIASTRA_ALLOW_L
 const luaVersion = execFileSync(lua, ['-E', '-v'], { encoding: 'utf8', timeout: 10_000 }).trim();
 assert.match(luaVersion, /^Lua 5\.3\./, 'Use the Miliastra client Lua version');
 const project = fileURLToPath(new URL('../../', import.meta.url));
-const exportShop = executable => execFileSync(executable, ['-E', 'platform/m2_shop_data.lua', profile], {
-  cwd: project, encoding: 'utf8', timeout: 10_000,
-});
-const shopData = exportShop(lua);
-assert.equal(exportShop(process.env.LUA54 || 'lua5.4'), shopData);
-const catalog = [];
-const shelves = [];
-let startingLives;
-let shopFixture;
-for (const line of shopData.trimEnd().split('\n')) {
-  const [kind, ...fields] = line.split('\t');
-  if (kind === 'config') {
-    const [gold, price, teamSize, offerSlots] = fields.map(Number);
-    assert.equal(fields.length, 4);
-    assert.ok([gold, price, teamSize, offerSlots].every(value => Number.isSafeInteger(value) && value > 0));
-    assert.equal(teamSize, 5, 'The existing UI has five team slots');
-    assert.equal(offerSlots, 3, 'The existing UI has three pet offers');
-    shopFixture = { gold, price, teamSize, offerSlots, shelves };
-  } else if (kind === 'pet') {
-    const [code, id, name, attack, health, tier] = fields;
-    assert.equal(Number(code), catalog.length + 1);
-    assert.ok(/^[a-z0-9_]+$/.test(id) && name && /^\d+$/.test(attack) && /^\d+$/.test(health));
-    assert.ok(/^\d+$/.test(tier));
-    catalog.push({ code: Number(code), id, name, attack: Number(attack), health: Number(health), tier: Number(tier) });
-  } else if (kind === 'lives') {
-    [startingLives] = fields.map(Number);
-    assert.ok(Number.isSafeInteger(startingLives) && startingLives > 0);
-  } else {
-    assert.equal(kind, 'offers');
-    const [seat, round, ...offers] = fields.map(Number);
-    assert.equal((round - 1) * 2 + seat - 1, shelves.length);
-    assert.equal(offers.length, shopFixture.offerSlots);
-    assert.ok(offers.every(pet => Number.isInteger(pet) && pet >= 1 && pet <= catalog.length));
-    shelves.push(offers);
-  }
-}
-assert.ok(shopFixture && catalog.length && startingLives && shelves.length === 4);
+const { shopFixture, shopData, catalog, startingLives } = duelFixture(lua, process.env.LUA54 || 'lua5.4', project, profile);
 const resource = nativeShop(lua, process.env.LUA54 || 'lua5.4', profile);
 const rule = resource.rules;
 assert.equal(rule.PET_SLOTS, shopFixture.offerSlots);
@@ -112,88 +79,8 @@ async function stage(name, args) {
 }
 
 const script = 'm2_probe';
-const catalogLua = entries => entries.map(({ name, attack, health }) =>
-  `{name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
-const clientRules = ['PET_SLOTS', 'FOOD_SLOTS', 'TEAM_SIZE', 'PET_COST', 'FOOD_COST', 'MAX_LEVEL']
-  .map(key => `${key.toLowerCase()} = ${rule[key]},`).join('\n    ');
-const source = bundleBattleReplay(parse, './m2_probe.lua', release)
-  .replace('-- AP_DUEL_PETS', catalogLua(resource.catalog.pet))
-  .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
-  .replace('-- AP_DUEL_RULES', clientRules);
-assert.doesNotMatch(source, /-- AP_DUEL_/);
-const signals = {
-  AP_DuelRequest: ['action', 'round', 'sequence', 'token', 'from', 'to', 'flag'].map(name => [name, 'integer']),
-  AP_DuelSnapshot: [
-    ['players', 'integer'], ['seat', 'integer'], ['round', 'integer'], ['phase', 'integer'],
-    ['ready', 'boolean'], ['continued', 'boolean'], ['settlements', 'integer'], ['version', 'integer'],
-    ['sequence', 'integer'], ['winner', 'integer'], ['reason', 'integer'], ['remaining', 'integer'], ['ack', 'integer'],
-    ['lives', 'integer'], ['opponentLives', 'integer'], ['outcome', 'integer'],
-  ],
-  AP_DuelMarket: [['round', 'integer'], ['version', 'integer'], ['state', 'integerList']],
-  AP_DuelFightStart: [['round', 'integer'], ['attempt', 'integer'], ['seed', 'integer'],
-    ['first', 'integerList'], ['second', 'integerList']],
-  AP_DuelFightCancel: [['attempt', 'integer']],
-  AP_DuelReplay: [['round', 'integer'], ['seed', 'integer'], ['outcome', 'integer'],
-    ['first', 'integerList'], ['second', 'integerList']],
-};
-const variables = ['AP_readyRound', 'AP_continueRound', 'AP_shopSeat', 'AP_shopRound', 'AP_sequence'];
-const buttons = [
-  { name: 'AP_NativeRefresh', label: '1 刷新状态' },
-  { name: 'AP_NativeReady', label: '2 准备' },
-  { name: 'AP_NativeNext', label: '3 下一轮' },
-  ...Array.from({ length: 3 }, (_, index) => {
-    const slot = index + 1;
-    return {
-      name: `AP_NativeBuy${slot}`, label: `${index + 4} · 货位${slot}`,
-    };
-  }),
-  { name: 'AP_NativeReroll', label: '7 · 刷新货架' },
-].map((button, index) => ({ ...button, position: [(index - 3) * 145, -228],
-  placeholder: String(1073741901 + index), key: index + 1 }));
-function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
-  return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle' } };
-}
-function card(action, label, position, size, content, colour, fontSize = 22) {
-  return [
-    { name: `${action}Face`, kind: 'image', position, size, image: 100001, colour },
-    text(label, position, size, content, fontSize),
-    { name: action, kind: 'cursorArea', position, size },
-  ];
-}
-const stock = Array.from({ length: rule.PET_SLOTS + rule.FOOD_SLOTS }, (_, index) => {
-  const x = (index - 2) * 190;
-  const pet = index < rule.PET_SLOTS;
-  const slot = index + 1 - (pet ? 0 : rule.PET_SLOTS);
-  const name = pet ? 'Pet' : 'Food';
-  return [
-    ...card(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 149], [174, 66], '',
-      pet ? '#335b44' : '#605432'),
-    ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, 92], [174, 44], '冻结', '#286452', 19),
-  ];
-}).flat();
-const ui = {
-  name: 'AP_DuelProbe',
-  script,
-  showCursor: true,
-  blockCursor: false,
-  controls: [
-    { name: 'Background', kind: 'image', position: [0, 58], size: [1000, 478], image: 100001, colour: '#193931' },
-    text('Status', [0, 257], [900, 66], '等待服务端响应', 27),
-    text('MarketGold', [0, 204], [900, 35], '', 25, '#ffd887'),
-    ...stock,
-    text('Team', [0, 50], [900, 28], '', 21),
-    ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => card(`Team${index + 1}`, `TeamLabel${index + 1}`,
-      [(index - 2) * 190, 6], [174, 54], '', '#335b44', 20)).flat(),
-    ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
-      .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -55], [174, 52], content, '#286452')),
-    ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
-      .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -115], [208, 52], content, '#286452')),
-    text('ReplayStatus', [-75, -170], [774, 44], '', 18),
-    ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', '#335b44'),
-    ...buttons.map(({ label, position }, index) => text(`NativeLegend${index + 1}`,
-      [position[0], position[1] - 50], [140, 30], label, 18)),
-  ],
-};
+const source = duelClientSource(bundleBattleReplay(parse, './m2_probe.lua', release), resource);
+const ui = duelLayout(rule, true);
 for (const control of [...ui.controls, ...buttons.map(button => ({ ...button, size: [72, 72] }))]) {
   assert.ok(control.position.every((coordinate, axis) =>
     Math.abs(coordinate) + control.size[axis] / 2 <= [640, 360][axis]), `${control.name} outside the shared canvas`);
@@ -233,25 +120,8 @@ try {
   const graph = await stage('scene_add_graph', { name: 'AP_DuelProbe', attachTo: 'stage' });
   const buttonGraph = await stage('scene_add_graph', { name: 'AP_DuelButtons', attachToPrefab: 'player' });
   const fightGraph = await stage('scene_add_graph', { name: 'AP_DuelBattle', attachTo: 'stage' });
-  const literals = list => `[${list.map(value => `${value}n`).join(', ')}]`;
-  const stageSource = fs.readFileSync(new URL('../../platform/m2_probe.ts', import.meta.url), 'utf8')
-    .replace('id: 1073741825,', `id: ${graph.graphId},`)
-    .replace('0n; // AP_DUEL_STRIKE_LIMIT', `${battleGraph.strikeLimit}n;`)
-    .replace('0n; // AP_DUEL_LIVES', `${startingLives}n;`)
-    .replace('[0n], // AP_DUEL_START_ONE', `${literals(resource.start[0])},`)
-    .replace('[0n], // AP_DUEL_START_TWO', `${literals(resource.start[1])},`);
-  assert.doesNotMatch(stageSource, /\/\/ AP_DUEL_/);
-  const graphSource = `${resource.source}\n${stageSource}`;
-  const fightSource = fs.readFileSync(new URL('../../platform/m2_duel_battle.ts', import.meta.url), 'utf8')
-    .replace('id: 1073741827,', `id: ${fightGraph.graphId},`)
-    .replace("[0n], 'int'); // AP_DUEL_BOARD", `${literals(Array(66).fill(0))}, 'int');`)
-    .replace('outcome = gstsServerCollisionStep(f, board, fainting, false); // AP_DUEL_COLLISION', release ? `const opening = f.get('openingState');
-      outcome = ${battleGraph.collisionFunction}(f, board, fainting, metadata, opening, false);
-      f.set('openingState', opening);` : 'outcome = gstsServerCollisionStep(f, board, fainting, false);')
-    .replace('[0n], // AP_DUEL_FAINT', `${literals(battleGraph.faintMetadata)},`)
-    .replace('[0n], // AP_DUEL_OPENING', `${literals(battleGraph.openingMetadata)},`);
-  assert.doesNotMatch(fightSource, /\/\/ AP_DUEL_/);
-  const combatSource = `${resource.source}\n${battleGraph.source}\n${fightSource}`;
+  const [graphSource, combatSource] = duelGraphs(resource, battleGraph, graph.graphId, fightGraph.graphId,
+    startingLives, release);
   let buttonSource = fs.readFileSync(new URL('../../platform/m2_probe_buttons.ts', import.meta.url), 'utf8')
     .replace('id: 1073741826,', `id: ${buttonGraph.graphId},`);
   for (const [index, { placeholder }] of buttons.entries()) {
@@ -316,27 +186,7 @@ try {
   assert.ok(readUi.interface.controls.every(control => control.active !== false && control.visible !== false));
   const checked = await call('scene_check_client', { mapPath, scripts: [script] });
   assert.deepEqual(checked.problems, []);
-  function checkReplay({ seed, outcome, left, right }, board) {
-    const input = [seed, left.join(' '), right.join(' ')].join('\n') + '\n';
-    const oracle = executable => execFileSync(executable, ['-E', 'tests/native/m2-battle-oracle.lua', profile], {
-      cwd: project, encoding: 'utf8', input, timeout: 10_000,
-    });
-    const result = oracle(lua);
-    assert.equal(oracle(process.env.LUA54 || 'lua5.4'), result);
-    const [code, ...rows] = result.split('\n');
-    assert.equal(BigInt(code), outcome, 'server combat and shared replay resolver disagree');
-    for (let side = 0; side < 2; side += 1) {
-      const count = Number(board[60 + side]);
-      const head = Number(board[62 + side]);
-      const fields = [];
-      for (let slot = 0; slot < count; slot += 1) {
-        const offset = (side * 5 + (head + slot) % 5) * 6;
-        fields.push(...board.slice(offset, offset + 6));
-      }
-      assert.equal(fields.join(' '), rows[side], 'server and Lua terminal board disagree');
-    }
-    return rows[2] === '' ? [] : rows[2].split(' ');
-  }
+  const checkReplay = duelReplayOracle(lua, process.env.LUA54 || 'lua5.4', project, profile);
   const graphSimulation = verifyGraph(graphSource, buttonSource, combatSource, registeredButtons, toolRequire('typescript'),
     { ...shopFixture, foodSlots: rule.FOOD_SLOTS, startingLives, release }, checkReplay);
   const extracted = path.join(workspace, `${script}.lua`);

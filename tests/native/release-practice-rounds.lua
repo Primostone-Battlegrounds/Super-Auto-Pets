@@ -1,0 +1,17 @@
+return {
+    {"win", {"buy", 1}, {"buy", 2}, {"buy", 3}},
+    {"draw", {"buy", 1}, {"buy", 3}, {"feed", 1, 1}},
+    {"loss", {"feed", 1, 1}, {"feed", 2, 1}, {"combine", 1, 1}},
+    {"loss", {"combine", 2, 1}, {"feed", 2, 1}, {"combine", 1, 3}, {"move", 2, 3}},
+    {"loss", {"combine", 2, 2}, {"feed", 1, 1}, {"sell", 4}, {"reward", 1}, {"move", 5, 2}},
+    {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"combine", 3, 1}},
+    {"win", {"feed", 2, 1}, {"feed", 1, 1}, {"sell", 5}, {"buy", 1}, {"move", 5, 3}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"sell", 5}, {"buy", 1}, {"move", 5, 2}},
+    {"win", {"feed", 2, 1}, {"sell", 3}, {"buy", 1}, {"feed", 1, 1}, {"move", 5, 3}},
+    {"loss", {"feed", 2, 3}, {"sell", 5}, {"buy", 3}, {"feed", 1, 1}, {"move", 4, 5}, {"move", 2, 4}},
+    {"win", {"feed", 1, 2}, {"feed", 2, 1}, {"sell", 4}, {"buy", 3}, {"move", 4, 5}},
+    {"win", {"feed", 2, 2}, {"feed", 1, 2}, {"reroll"}, {"feed", 1, 2}},
+    {"win", {"feed", 1, 1}, {"sell", 5}, {"buy", 1}, {"feed", 2, 1}},
+    {"win", {"feed", 2, 1}, {"combine", 1, 1}, {"feed", 1, 1}},
+    {"win", {"feed", 1, 1}, {"feed", 2, 1}, {"reroll"}, {"feed", 2, 1}},
+}

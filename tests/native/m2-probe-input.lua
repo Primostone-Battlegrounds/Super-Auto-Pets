@@ -5,9 +5,17 @@ for _, pair in ipairs({{"OfferLabel", 3}, {"Buy", 3}, {"FreezePet", 3}, {"Freeze
     {"FoodLabel", 2}, {"Food", 2}, {"FreezeFood", 2}, {"FreezeFoodLabel", 2}, {"Team", 5}, {"TeamLabel", 5}}) do
     for slot = 1, pair[2] do names[#names + 1] = pair[1] .. slot end
 end
+for _, pair in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},
+    {"Reward", "RewardLabel"}, {"RewardNext", "RewardNextLabel"}, {"Ready", "ReadyLabel"}, {"Advance", "AdvanceLabel"},
+    {"Leave", "LeaveLabel"}, {"Replay", "ReplayLabel"}}) do
+    names[#names + 1] = pair[1] .. "Face"
+    names[#names + 1] = pair[2]
+end
 for _, name in ipairs(names) do
     controls[name] = {
         alive = true,
+        SetActive = function(self, value) self.active = value end,
+        SetVisible = function(self, value) self.visible = value end,
         AddCursorEventListener = function(self, event, callback)
             assert(event == 1 and self.callback == nil)
             self.callback = callback
@@ -108,7 +116,7 @@ market(1, 10, {1, 2, 3}, {})
 press("Buy1")
 market(2, 10, {1, 2, 3}, {})
 assert_text("MarketGold", "金币 10")
-assert_text("OfferLabel1", "芦纹龟  攻1 / 生4")
+assert_text("OfferLabel1", "芦纹龟\n攻1 / 命4")
 assert_text("FoodLabel1", "朝露莓")
 press("Food1")
 local first_token = press("Buy1", 11, 1)

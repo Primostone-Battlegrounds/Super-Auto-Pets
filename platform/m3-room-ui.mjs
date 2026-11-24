@@ -34,9 +34,9 @@ export const m3RoomLayout = {
       group('Shop', [0, 10], [832, 370], [
         label('Money', [0, 160], [810, 36], '', 22, pigment.ink, 'left'),
         ...slots.flatMap(slot => [
-          button(`Offer${slot}`, slotX(slot), 80, 154, 80, ''),
-          button(`Freeze${slot}`, slotX(slot), 14, 154, 48, '冻结'),
-          button(`Team${slot}`, -slotX(slot), -55, 154, 64, ''),
+          button(`Offer${slot}`, slotX(slot), -7, 154, 80, ''),
+          button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
+          button(`Team${slot}`, -slotX(slot), 94, 154, 76, ''),
         ]),
         ...browse.map(([name, text], index) => button(name, slotX(index + 1), -135, 154, 52, text)),
       ], false),
@@ -73,11 +73,15 @@ function catalogLua(items) {
   }).join(',');
 }
 
-export function m3RoomUiSource({ pet, food, battle = pet }, parse, release = false) {
+export function roomClientSource(template, { pet, food, battle = pet }) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
     `local standings = (function()\n${shared}\nend)()`,
     `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,
-    `local fighters = {${catalogLua(battle)}}`, bundleBattleReplay(parse, './m3_room_ui.lua', release),
+    `local fighters = {${catalogLua(battle)}}`, template,
   ].join('\n\n');
+}
+
+export function m3RoomUiSource(catalog, parse, release = false) {
+  return roomClientSource(bundleBattleReplay(parse, './m3_room_ui.lua', release), catalog);
 }

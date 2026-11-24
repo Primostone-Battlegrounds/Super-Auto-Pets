@@ -1,12 +1,14 @@
 local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
 local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
 local battle = require("autopets.battle")
+local decode_shop = require("autopets.shop_wire")
+local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
 local render_standings, panel
-local controls, bindings, keys, content = {}, {}, {}, {}
-local frames, frame_round, frame_index, following, canonical_round
+local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
+local frames, frame_round, frame_index, following, canonical_round, seconds
 local token = 0
 local source_ready = false
 
@@ -22,11 +24,12 @@ local function text(path, value)
 end
 
 local function visible(path, value)
+    if visibility[path] == value then return end
     local control = object(path)
-    if control.active ~= value then
-        control:SetActive(value)
-        control:SetVisible(value)
-    end
+    if value then control:SetActive(true) end
+    control:SetVisible(value)
+    if not value then control:SetActive(false) end
+    visibility[path] = value
 end
 
 local function transmit(action, round, sequence, from, to, flag, ack)
@@ -60,20 +63,6 @@ local function send(action, from, to, flag)
     transmit(table.unpack(pending))
 end
 
-local function parse_market(raw)
-    if #raw < 41 then return nil end
-    local view = {round = raw[1], tier = raw[2], gold = raw[3], pets = {}, foods = {}, team = {}, rewards = {}}
-    for slot = 1, 3 do view.pets[slot] = raw[6 + slot] end
-    for slot = 1, 2 do view.foods[slot] = raw[9 + slot] end
-    for slot = 1, math.min(raw[6], 5) do
-        local offset = 12 + (slot - 1) * 6
-        view.team[slot] = {code = raw[offset], uid = raw[offset + 1], attack = raw[offset + 2],
-            health = raw[offset + 3], level = raw[offset + 4], xp = raw[offset + 5]}
-    end
-    for offset = 42, #raw do view.rewards[#view.rewards + 1] = raw[offset] end
-    return view
-end
-
 local function chosen()
     if preview and selected then
         for slot, unit in ipairs(preview.team) do
@@ -84,7 +73,7 @@ end
 
 local function paint_shop()
     if not preview or preview.round ~= match.round then return end
-    text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5", preview.gold, preview.tier, #preview.team))
+    text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5 · 右侧为前排", preview.gold, preview.tier, #preview.team))
     local picked = chosen()
     for slot = 1, 5 do
         local is_pet = slot <= 3
@@ -96,7 +85,7 @@ local function paint_shop()
         local unit = preview.team[slot]
         local prefix = slot == picked and "已选 · " or ""
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
-        local stats = unit and string.format("\n%d 攻 · %d 命 / L%d  经验%d", unit.attack, unit.health, unit.level, unit.xp) or ""
+        local stats = unit and string.format("\n%d攻 %d命 · L%d\n经验 %d", unit.attack, unit.health, unit.level, unit.xp) or ""
         text("Shop/Team" .. slot .. "/Text", prefix .. name .. stats)
     end
     reward = math.min(reward, math.max(#preview.rewards, 1))
@@ -107,7 +96,11 @@ end
 
 local function paint_battle()
     local frame = frame_round == match.round and frames[frame_index]
-    if not frame or (frame.left ~= match.seat and frame.right ~= match.seat) then
+    local has_frame = frame and (frame.left == match.seat or frame.right == match.seat) or false
+    for _, name in ipairs({"Previous", "Forward", "Follow", "Ally", "Enemy"}) do
+        visible("Replay/" .. name, has_frame)
+    end
+    if not has_frame then
         local opponent = match.opponents[match.seat]
         local result = result_names[match.results[match.seat]]
         if not result then
@@ -161,10 +154,16 @@ local function paint_battle()
         result, opposing_seat, frame_index, #frames))
 end
 
+local function draw_status()
+    local label = phase_names[match.phase] or "等待房间"
+    if match.round > 0 then label = label .. (" · 第 " .. match.round .. " 轮") end
+    if seconds then label = label .. string.format(" · 余 %d 秒", math.ceil(seconds)) end
+    text("Status", label)
+end
+
 local function redraw()
     if not match then return end
-    local label = phase_names[match.phase] or "等待房间"
-    text("Status", label .. (match.round > 0 and (" · 第 " .. match.round .. " 轮") or ""))
+    draw_status()
     local shop_open = match.phase == 2 and preview ~= nil and alive()
     local replay_open = match.phase >= 3 and match.seat > 0
     visible("Shop", shop_open)
@@ -188,7 +187,7 @@ end
 
 local function receive_view(_, values)
     if not source_ready then return end
-    local revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, raw, ack =
+    local revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, raw, ack, remaining =
         table.unpack(values)
     if match and round < match.round then return end
     local acknowledged = pending and round == pending[2] and ack == pending[7]
@@ -211,7 +210,8 @@ local function receive_view(_, values)
     latest, forfeiting = revision, false
     match = {phase = phase, round = round, seat = seat, sequence = sequence, ready = ready, lives = lives,
         places = places, opponents = opponents, results = results}
-    preview = parse_market(raw)
+    seconds = (phase == 2 or phase == 4) and remaining or nil
+    preview = decode_shop(raw, shop_rules)
     local playing_seats = phase >= 1
     local view = {revision = revision, phase = phase == 0 and "lobby" or phase == 5 and "ended" or "preparation",
         phase_name = phase_names[phase], round = round, seat = seat, human_count = humans,
@@ -340,13 +340,14 @@ local function scrub(offset)
     frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
 end
 
-function OnStart()
-    local root = script.object
-    panel = assert(root:GetChild("Match"))
-    render_standings = standings.bind(assert(root:GetChild("Standings")), "room")
+function OnStart(view_root)
+    local root = view_root or script.object
+    local function child(name) return assert(root:GetChild(name), name) end
+    panel = child("Match")
+    render_standings = standings.bind(child("Standings"), "room")
     latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
     frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
-    controls, bindings, keys, content = {}, {}, {}, {}
+    controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
     source_ready = true
     visible("Ready", false)
     visible("Forfeit", false)
@@ -395,8 +396,15 @@ function OnStart()
     refresh()
 end
 
+function OnUpdate(dt)
+    if not seconds then return end
+    seconds = math.max(0, seconds - dt)
+    draw_status()
+end
+
 function OnDestroy()
     source_ready = false
+    seconds = nil
     script:UnregisterServerSignalHandler("AP_RoomView")
     script:UnregisterServerSignalHandler("AP_RoomBattle")
     script:UnregisterServerSignalHandler("AP_RoomReplay")
@@ -406,6 +414,6 @@ function OnDestroy()
     if panel and panel.alive then
         for _, item in ipairs(keys) do panel:RemoveKeyEventListener(item[1], item[2]) end
     end
-    controls, bindings, keys, content, frames = {}, {}, {}, {}, {}
+    controls, bindings, keys, content, visibility, frames = {}, {}, {}, {}, {}, {}
     render_standings, panel = nil, nil
 end
