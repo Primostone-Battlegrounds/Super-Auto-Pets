@@ -87,7 +87,8 @@ local function simulate()
         assert(next(signals) == nil)
         for _, c in pairs(controls) do assert(next(c.events) == nil and next(c.keys) == nil) end
     end
-    return {press = press, receive = receive, get = get, view = view, expect = expect, capture = capture, destroy = destroy}
+    return {press = press, receive = receive, get = get, view = view, expect = expect, capture = capture, destroy = destroy,
+        update = env.OnUpdate}
 end
 
 local function market(round)
@@ -102,7 +103,7 @@ end
 local function room_snapshot(revision, phase, human, lives, places, winner, ack)
     return {revision, phase, 1, 1, revision, human, winner or 0, false,
         lives or {5,5,5,5,5,5,5,5}, places or {0,0,0,0,0,0,0,0}, {2,1,4,3,6,5,8,7}, {0,0,0,0,0,0,0,0},
-        market(1), ack or 0}
+        market(1), ack or 0, 42}
 end
 
 local practice = simulate()
@@ -167,11 +168,17 @@ duel.view(2, 2)
 duel.expect("AP_DuelRequest:0,0,0,0,0,0,0")
 duel.receive("AP_DuelSnapshot", duel_snapshot(1, 0, false))
 duel.receive("AP_DuelMarket", {1, 1, market(1)})
+assert(duel.get("Duel/Status").text:find("余 30 秒"))
+duel.update(1)
+assert(duel.get("Duel/Status").text:find("余 29 秒"))
 duel.press("Duel/MarketOffers/Buy1")
 duel.expect("AP_DuelRequest:11,1,1,1,1,0,0")
 duel.capture("duel_shop")
 duel.receive("AP_DuelSnapshot", duel_snapshot(2, 2, false, 2, 1))
 assert(duel.get("Duel/Status").text:find("告负"))
+for _, name in ipairs({"MarketOffers", "Ready", "Advance", "Leave", "Replay"}) do
+    assert(not duel.get("Duel/" .. name).active and not duel.get("Duel/" .. name).visible, name)
+end
 duel.capture("duel_result")
 duel.press("Duel/Back/Hit")
 duel.view(0, 2)
@@ -189,6 +196,9 @@ room.expect("AP_GameChooseMode:8,true")
 room.view(8, 1)
 room.expect("AP_RoomRequest:0,0,0,0,0,0,0")
 room.receive("AP_RoomView", room_snapshot(1, 2, 1))
+assert(room.get("Room/Match/Status").text:find("余 42 秒"))
+room.update(1)
+assert(room.get("Room/Match/Status").text:find("余 41 秒"))
 assert(room.get("Room/Match/Shop").active and room.get("Room/Match/Shop").visible)
 assert(room.get("Room/Standings/Count").text:find("7 机器人"))
 room.press("Room/Match/Shop/Offer1/Hit")
@@ -196,6 +206,9 @@ room.expect("AP_RoomRequest:11,1,1,1,0,0,1")
 room.capture("room_shop")
 room.receive("AP_RoomView", room_snapshot(2, 5, 1, {3,0,0,0,0,0,0,0}, {1,2,3,4,5,6,7,8}, 1, 1))
 assert(room.get("Room/Match/Hint").text:find("第 1 名"))
+for _, name in ipairs({"Previous", "Forward", "Follow"}) do
+    assert(not room.get("Room/Match/Replay/" .. name).active and not room.get("Room/Match/Replay/" .. name).visible, name)
+end
 room.capture("room_result")
 room.press("Room/Back/Hit")
 room.expect("AP_GameChooseMode:0,false")

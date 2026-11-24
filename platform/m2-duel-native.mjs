@@ -67,7 +67,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
       ]),
       text('Team', [0, 170], [900, 28], '', 21),
       ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => card(`Team${index + 1}`, `TeamLabel${index + 1}`,
-        [(index - 2) * 190, 120], [174, 56], '', '#335b44', 20)).flat(),
+        [(2 - index) * 190, 120], [174, 56], '', '#335b44', 20)).flat(),
       ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452')),
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]

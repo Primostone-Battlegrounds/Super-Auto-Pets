@@ -243,7 +243,8 @@ function session(sources, ts, count, settings, delayedSignals = false) {
 function read(rows, target) {
   const result = rows.find(entry => entry.target === target && entry.name === viewSignal);
   assert.ok(result, 'expected targeted acknowledgement');
-  const [revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, market, ack] = result.values;
+  const [revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, market, ack, remaining] = result.values;
+  assert.ok(typeof remaining === 'bigint' && remaining >= 0n);
   assert.ok(revision > 0n);
   for (const list of [lives, places, opponents, results]) assert.equal(list.length, 8);
   if (market.length) {

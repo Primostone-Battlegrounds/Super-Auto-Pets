@@ -24,7 +24,7 @@ local function show_section(next_section)
     section = next_section
     if not section then return end
     set_visible(root:GetChild(section), true)
-    script:EnableUpdate(section ~= "Room")
+    script:EnableUpdate(true)
 end
 
 local function main_menu()
@@ -36,7 +36,7 @@ end
 local function show_online()
     local board = mode == 2 and "Duel" or "Room"
     show_section(board)
-    if online then return end
+    if online then online.refresh(); return end
     online = (mode == 2 and duel_view or room_view)(root:GetChild(board))
     online.start(root:GetChild(board))
 end
@@ -106,7 +106,7 @@ function OnEnable()
     if section == "Practice" then
         practice.enable()
     elseif section then
-        script:EnableUpdate(section ~= "Room")
+        script:EnableUpdate(true)
     end
 end
 
@@ -126,7 +126,7 @@ function OnUpdate(dt)
         end
     elseif section == "Practice" then
         practice.update(dt)
-    elseif section == "Duel" and online then
+    elseif section ~= "Lobby" and online then
         online.update(dt)
     end
 end

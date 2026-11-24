@@ -33,10 +33,40 @@ local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
-local playback
+local playback, status_line, seconds
+local visible = {}
 local bindings = {}
 local pet_labels, food_labels, team_labels = {}, {}, {}
 local pet_freeze_labels, food_freeze_labels = {}, {}
+
+local function show(control, enabled)
+    if visible[control] == enabled then return end
+    if enabled then control:SetActive(true) end
+    control:SetVisible(enabled)
+    if not enabled then control:SetActive(false) end
+    visible[control] = enabled
+end
+
+local function show_action(action, label, enabled)
+    show(child(action), enabled)
+    show(child(action .. "Face"), enabled)
+    show(child(label), enabled)
+end
+
+local function show_actions()
+    if offers ~= root then
+        show(offers, preparing)
+        show(market_gold, preparing)
+    end
+    for slot = 1, rules.team_size do show(child("Team" .. slot), preparing) end
+    for _, binding in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},
+        {"Reward", "RewardLabel"}, {"RewardNext", "RewardNextLabel"}}) do
+        show_action(binding[1], binding[2], preparing)
+    end
+    show_action("Ready", "ReadyLabel", preparing)
+    show_action("Advance", "AdvanceLabel", can_advance)
+    show_action("Leave", "LeaveLabel", can_leave)
+end
 
 local function transmit(command)
     local signal = game.ServerSignal("AP_DuelRequest")
@@ -136,7 +166,7 @@ local function render_market()
             label.text = string.format("阵位 %d  ·  空", slot)
         end
     end
-    team_label.text = string.format("阵容 %d / %d", #view.team, rules.team_size)
+    team_label.text = string.format("阵容 %d / %d · 右侧为前排", #view.team, rules.team_size)
     if reward_index > #view.rewards then reward_index = 1 end
     local reward = pets[view.rewards[reward_index]]
     reward_label.text = reward and string.format("奖励 %d/%d · %s", reward_index, #view.rewards, reward.name) or "暂无升级奖励"
@@ -215,6 +245,7 @@ local event_text = {start = "入场", skill = "技能", attack = "攻击", damag
     faint = "退场", buff = "强化", summon = "召唤", result = "结算"}
 
 local function show_replay()
+    show_action("Replay", "ReplayLabel", playback ~= nil)
     if not playback then
         replay_status.text = "等待战斗回放"
         replay_label.text = "回放"
@@ -338,6 +369,12 @@ local function receive_market(_, parameters)
     render_market()
 end
 
+local function draw_status()
+    local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
+    local content = status_line .. suffix
+    if status.text ~= content then status.text = content end
+end
+
 local function receive_snapshot(_, parameters)
     local players, seat, new_round, phase, is_ready, continued, settlements, version,
         next_sequence, winner, reason, remaining, ack, lives, opponent_lives, outcome = table.unpack(parameters)
@@ -373,7 +410,10 @@ local function receive_snapshot(_, parameters)
         end
     end
     local seat_text = seat > 0 and string.format("席位 %d", seat) or "等候席位"
-    status.text = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
+    status_line = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
+    seconds = players == 2 and seat > 0 and (phase == 0 or phase == 1) and math.max(0, remaining) or nil
+    draw_status()
+    show_actions()
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
     print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
@@ -386,11 +426,16 @@ function OnStart()
     script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
     for _, binding in ipairs(bindings) do binding.object:AddCursorEventListener(click, binding.callback) end
     render_market()
+    show_actions()
     show_replay()
     request_snapshot()
 end
 
 function OnUpdate(dt)
+    if seconds then
+        seconds = math.max(0, seconds - dt)
+        draw_status()
+    end
     if not playback or not playback.playing then return end
     playback.elapsed = playback.elapsed + dt
     if playback.elapsed < 0.18 then return end
@@ -409,7 +454,7 @@ function OnDestroy()
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
-    playback = nil
+    playback, status_line, seconds, visible = nil, nil, nil, {}
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

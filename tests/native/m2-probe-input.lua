@@ -5,9 +5,17 @@ for _, pair in ipairs({{"OfferLabel", 3}, {"Buy", 3}, {"FreezePet", 3}, {"Freeze
     {"FoodLabel", 2}, {"Food", 2}, {"FreezeFood", 2}, {"FreezeFoodLabel", 2}, {"Team", 5}, {"TeamLabel", 5}}) do
     for slot = 1, pair[2] do names[#names + 1] = pair[1] .. slot end
 end
+for _, pair in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},
+    {"Reward", "RewardLabel"}, {"RewardNext", "RewardNextLabel"}, {"Ready", "ReadyLabel"}, {"Advance", "AdvanceLabel"},
+    {"Leave", "LeaveLabel"}, {"Replay", "ReplayLabel"}}) do
+    names[#names + 1] = pair[1] .. "Face"
+    names[#names + 1] = pair[2]
+end
 for _, name in ipairs(names) do
     controls[name] = {
         alive = true,
+        SetActive = function(self, value) self.active = value end,
+        SetVisible = function(self, value) self.visible = value end,
         AddCursorEventListener = function(self, event, callback)
             assert(event == 1 and self.callback == nil)
             self.callback = callback

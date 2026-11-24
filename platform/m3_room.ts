@@ -467,7 +467,7 @@ g.server({
         const next = f.getCorrespondingValueFromList(table, roomSequenceAt + seat) + 1n;
         const ready = f.getCorrespondingValueFromList(table, roomReadyAt + seat) === 1n;
         f.sendSignal(roomView, player, revision, phase, round, seat + 1n, next, f.getListLength(owners), winner, ready,
-          lives, places, opponents, f.get('results'), market, 0n);
+          lives, places, opponents, f.get('results'), market, 0n, f.takeLargerValue(deadline - now, 0n));
       }
       seat += 1n;
     }
@@ -497,6 +497,7 @@ g.server({
   }
   const phase = f.get('phase');
   const round = f.get('round');
+  const now = f.queryGameTimeElapsed();
   const table = f.copyList(f.get('table'));
   const stocks = f.get('stocks');
   const action = event.params.action;
@@ -521,7 +522,7 @@ g.server({
           f.set('broadcast', true);
           accepted = true;
         }
-      } else if (phase === preparation && f.queryGameTimeElapsed() < f.get('deadline')
+      } else if (phase === preparation && now < f.get('deadline')
           && f.getCorrespondingValueFromList(table, roomReadyAt + seat) === 0n) {
         const stock = f.copyList(f.queryDictionaryValueByKey(stocks, seat));
         if (action === 1n && f.getCorrespondingValueFromList(stock, shopCountAt) > 0n) {
@@ -563,7 +564,8 @@ g.server({
   f.set('revision', revision);
   f.sendSignal(roomView, player, revision, phase, round, seat + 1n, next, f.getListLength(owners), f.get('winner'), ready,
     gstsServerRoomPublic(f, table, roomLivesAt), gstsServerRoomPublic(f, table, roomPlacesAt),
-    gstsServerRoomPublic(f, table, roomOpponentAt), f.get('results'), market, event.params.token);
+    gstsServerRoomPublic(f, table, roomOpponentAt), f.get('results'), market, event.params.token,
+    f.takeLargerValue(f.get('deadline') - now, 0n));
 })
 .onSignal(roomFightDone, (event, f) => {
   const self = f.getSelfEntity();
