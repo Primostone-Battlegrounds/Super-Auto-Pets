@@ -62,7 +62,8 @@ function roomLayout(unified) {
       group('Match', [-139, 0], [866, 642], [
         image('Border', [0, 0], [866, 642], pigment.edge),
         image('Paper', [0, 0], [860, 636], pigment.canvas),
-        label('Heading', [-207, 276], [412, 54], '八席淘汰赛', unified ? 35 : 33, pigment.ink, 'left'),
+        label('Heading', unified ? [-277, 276] : [-207, 276], [unified ? 270 : 412, 54],
+          '八席淘汰赛', unified ? 35 : 33, pigment.ink, 'left'),
         label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
         group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
           ...(unified ? [

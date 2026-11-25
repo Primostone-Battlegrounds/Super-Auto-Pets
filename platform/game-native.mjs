@@ -55,8 +55,8 @@ function layout(duelRules) {
         label('Feedback', [0, -165], [586, 44], '', 19, pigment.gold),
       ]),
       view('Practice', practice),
-      view('Duel', [...duelLayout(duelRules).controls, back(500, 331)]),
-      view('Room', [...unifiedRoomLayout.controls, back(0, 333)]),
+      view('Duel', [...duelLayout(duelRules).controls, back(221, 278)]),
+      view('Room', [...unifiedRoomLayout.controls, back(-145, 276)]),
     ],
   };
 }

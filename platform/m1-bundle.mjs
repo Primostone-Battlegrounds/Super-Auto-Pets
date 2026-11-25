@@ -10,7 +10,8 @@ function plateInitializer(controls) {
   function visit(nodes, prefix) {
     for (const node of nodes) {
       const path = prefix + node.name;
-      if (sliceImages.has(node.image)) paths.push(JSON.stringify(path));
+      const onlineCapsule = node.image === 107034 && (path.startsWith('Duel/') || path.startsWith('Room/'));
+      if (sliceImages.has(node.image) || onlineCapsule) paths.push(JSON.stringify(path));
       if (node.children) visit(node.children, `${path}/`);
     }
   }

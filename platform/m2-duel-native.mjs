@@ -127,7 +127,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
         image('ShopSky', [0, 130], [1064, 228], '#c4dcc0', { visible: false }),
         image('ShopGround', [0, -45], [1064, 144], '#edca89', { visible: false }),
       ] : []),
-      text('Status', includeProbeButtons ? [0, 257] : [-99, 285], includeProbeButtons ? [900, 66] : [728, 68],
+      text('Status', includeProbeButtons ? [0, 257] : [-201, 285], includeProbeButtons ? [900, 66] : [660, 68],
         '等待服务端响应', 27, statusInk),
       text('MarketGold', includeProbeButtons ? [0, 204] : [-83, 224], includeProbeButtons ? [900, 42] : [820, 38], '',
         includeProbeButtons ? 25 : 27, accentInk),
