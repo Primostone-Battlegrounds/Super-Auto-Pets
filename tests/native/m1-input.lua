@@ -112,7 +112,8 @@ local function capture(frame)
             :gsub("\t", "%%09"):gsub("\n", "%%0A"):gsub("\r", "%%0D"):gsub("~", "%%7E")
         capture_file:write(table.concat({frame, path, flag(node.active), flag(node.visible),
             node.x or "", node.y or "", node.width or "", node.height or "", node.image or "",
-            node.imageColor or "", node.fontColor or "", content}, "\t"), "\n")
+            node.imageColor or "", node.fontColor or "", content,
+            node.parent == sandbox.script.object and "root" or ""}, "\t"), "\n")
     end
 end
 

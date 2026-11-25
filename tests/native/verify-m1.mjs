@@ -167,11 +167,11 @@ function verifyFrameHitAreas(name, items) {
 function readFrames(file, records) {
   const frames = new Map();
   for (const line of fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)) {
-    const [name, key, active, visible, x, y, width, height, image, colour, textColour, content] = line.split('\t');
+    const [name, key, active, visible, x, y, width, height, image, colour, textColour, content, parent] = line.split('\t');
     if (!frames.has(name)) frames.set(name, new Map());
     const frame = frames.get(name);
     assert.ok(!frame.has(key), `Duplicate frame control: ${name} ${key}`);
-    frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content });
+    frame.set(key, { active, visible, x, y, width, height, image, colour, textColour, content, parent });
   }
   const expectedFrames = release ? [
     'battle_full', 'menu', 'release_summon', 'tier_five', 'tier_four', 'tier_six', 'victory',
@@ -190,6 +190,7 @@ function readFrames(file, records) {
         const patch = dynamic.get(base.path);
         const item = {
           ...base,
+          parent: patch.parent === 'root' ? null : base.parent,
           active: patch.active === '' ? base.active : patch.active === '1',
           visible: patch.visible === '' ? base.visible : patch.visible === '1',
           position: patch.x === '' ? base.position : [Number(patch.x), Number(patch.y)],
@@ -207,8 +208,11 @@ function readFrames(file, records) {
         sizes.set(item.path, item.size);
         return item;
       });
-      verifyFrameHitAreas(name, items);
-      return [name, items];
+      const lifted = items.find(item => dynamic.get(item.path).parent === 'root');
+      const isLifted = item => lifted && (item.path === lifted.path || item.path.startsWith(`${lifted.path}/`));
+      const paintOrder = lifted ? [...items.filter(item => !isLifted(item)), ...items.filter(isLifted)] : items;
+      verifyFrameHitAreas(name, paintOrder);
+      return [name, paintOrder];
     })),
   };
 }
