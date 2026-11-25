@@ -263,7 +263,6 @@ local function offer_card(path, kind, index)
     local face = selected and 0xfff4ce or 0xead19a
     local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
-    show(path .. "/PriceTicket", item ~= nil)
     show(path .. "/Price", item ~= nil)
     local frozen = item and item.frozen == true
     show(path .. "/Tag", frozen or (item ~= nil and kind == "reward"))

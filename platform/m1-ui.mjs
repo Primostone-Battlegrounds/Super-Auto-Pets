@@ -64,9 +64,10 @@ function card(name, position, width, type, interactive = true, visible = true, f
     label('Tag', [0, 61], [Math.min(width - 4, 90), 29], '', 18, market ? pigment.ice : '#58431f'),
   ];
   if (market) {
+    const price = label('Price', [55, 46], [54, 32], '', 21, '#634016');
+    Object.assign(price.text, { background: '#ffdc80', backgroundOpacity: 1 });
     children.push(
-      roundedPlate('PriceTicket', [55, 46], [54, 34], ticket, '#ffdc80'),
-      label('Price', [55, 46], [50, 32], '', 21, '#634016'),
+      price,
       image('Frozen', [-39, 61], [19, 19], pigment.ice, { image: 102004, visible: false }),
     );
   } else {
