@@ -1,6 +1,6 @@
 local root, offers = script.object, script.object
 local function child(name)
-    local parent = name:match("^InspectTeam") and root:GetChild("TeamInspection") or root
+    local parent = name:match("^InspectTeam") and root:FindChild("TeamInspection") or root
     return assert(parent:GetChild(name), name)
 end
 local animal_ability = require("autopets.animal_ability")
@@ -399,7 +399,7 @@ for slot = 1, rules.food_slots do
     bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
-    bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end, root:GetChild("TeamInspection"))
+    bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end, root:FindChild("TeamInspection"))
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)
     bind("Team" .. slot, function() select_unit(slot) end)
 end
