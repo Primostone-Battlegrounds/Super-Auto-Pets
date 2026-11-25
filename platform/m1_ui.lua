@@ -1,6 +1,7 @@
 local rules_data = native_catalog
 local run = require("autopets.run")
 local art = require("autopets.art")
+local animal_ability = require("autopets.animal_ability")
 local root
 local view_enabled = false
 local rules = rules_data.rules
@@ -8,7 +9,6 @@ local rules = rules_data.rules
 local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
 local styles = {guardian = "守护", striker = "强攻", swarm = "群战"}
 local difficulty_names = {standard = "标准", beginner = "入门"}
-local trigger_names = {start = "开场", faint = "退场", hurt = "首次受伤存活", attack = "出击", summon = "友方召唤"}
 local phases = {preparation = "准备", battle = "战斗", settlement = "结算", ended = "终局"}
 local primary = {preparation = "开战", battle = "结算", settlement = "下一轮", ended = "再挑战本局"}
 local events = {
@@ -240,40 +240,11 @@ local function offer_card(path, kind, index)
     card(path, definition.name, detail, selected, item.id, face, rim)
 end
 
-local function pet_ability(pet, level)
-    local skill = pet.ability
-    local heading = pet.name .. " · " .. skill.name
-    local trigger = assert(trigger_names[skill.trigger])
-    local power = skill.power * level
-    if skill.effect == "shield_front" then
-        return heading, string.format("%s · 前排 %d 名队员各获得 %d 盾", trigger, skill.targets, power)
-    elseif skill.effect == "hit_random" then
-        return heading, string.format("%s · 随机 %d 名对手各受 %d 伤", trigger, skill.targets, power)
-    elseif skill.effect == "buff_front" then
-        return heading, string.format("%s · 前排队员获得 %d 命", trigger, power)
-    elseif skill.effect == "shield_next" then
-        return heading, string.format("%s · 身后首位加 %d 盾", trigger, power)
-    elseif skill.effect == "hit_front" then
-        return heading, string.format("%s · 对手前排受 %d 伤", trigger, power)
-    elseif skill.effect == "hit_back" then
-        return heading, string.format("%s · 对手末位受 %d 伤", trigger, power)
-    elseif skill.effect == "splash" then
-        return heading, string.format("%s · 对手第 2 位受 %d 伤", trigger, power)
-    elseif skill.effect == "rally_summon" then
-        return heading, string.format("%s · 新单位加 %d 攻和 %d 命", trigger, power, power)
-    elseif skill.effect == "summon" then
-        local token = rules_data.token_by_id[skill.token]
-        return heading, string.format("%s · 召唤 %d 只%s，%d攻 %d命",
-            trigger, skill.power, token.name, token.attack + level - 1, token.health)
-    end
-    return heading, trigger
-end
-
 local function selected_info(picked)
     local kind, index = picked.kind, picked.index
     if kind == "team" then
         local unit = state.shop.team[index]
-        return pet_ability(rules_data.pet_by_id[unit.id], unit.level)
+        return animal_ability.describe(rules_data, rules_data.pet_by_id[unit.id], unit.level)
     end
     local item = offer(kind, index)
     if kind == "food" then
@@ -287,7 +258,7 @@ local function selected_info(picked)
         if food.health > 0 then stats[#stats + 1] = string.format("生命 +%d", food.health) end
         return food.name .. " · 食物", "一名队员获得 " .. table.concat(stats, "，")
     end
-    return pet_ability(rules_data.pet_by_id[item.id], 1)
+    return animal_ability.describe(rules_data, rules_data.pet_by_id[item.id], 1)
 end
 
 local function draw_tooltip(preparing)

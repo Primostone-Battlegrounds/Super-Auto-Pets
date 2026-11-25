@@ -4,7 +4,7 @@
   "implementation": "v2.0.0",
   "revisions": {
     "v1.0.0": {
-      "status": "Active",
+      "status": "Superseded",
       "gameVersion": "0.4.0",
       "original": {
         "version": "sap-turtle-grounded-2026-03-16",
@@ -14,7 +14,7 @@
       "importedFrom": "ab73443adee5a2b5b37268779356c2fe67220886"
     },
     "v2.0.0": {
-      "status": "Proposed",
+      "status": "Active",
       "gameVersion": "0.5.0",
       "original": {
         "version": null,
@@ -41,7 +41,15 @@
         "v2.0.0/steam-trailer/hls_h264.txt",
         "v2.0.0/steam-trailer/movie-metadata.json",
         "v2.0.0/steam-trailer/trace.json"
-      ]
+      ],
+      "approval": {
+        "reviewer": "prototype_review",
+        "author": "design",
+        "reviewedRevision": "758a189111a03cfd9c9dc4f0d4068ac36cdf953b",
+        "designFingerprint": "56692f9e449d520a969bfcca4de5ce6e2c1b07d0ed42f6af64833c282af0bc47",
+        "evidence": "docs/evidence/v2-design-basis-review.md",
+        "evidenceSha256": "cdf20a2fb5b474cb992056faa03c6544d7a0c72d03276f7f72583194e1654647"
+      }
     }
   }
 }

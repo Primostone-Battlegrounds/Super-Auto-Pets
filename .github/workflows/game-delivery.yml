@@ -28,23 +28,34 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-      - name: Install Lua
+      - name: Install rules and renderer dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.4 lua5.3
+          sudo apt-get install -y lua5.4 lua5.3 fonts-noto-cjk
+          npm install --prefix "$RUNNER_TEMP/backlog" --no-audit --no-fund backlog.md@1.53.0
+          printf '%s\n' "$RUNNER_TEMP/backlog/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Prepare pinned Miliastra MCP
         run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
       - name: Verify Active implementation before delivery
         run: node scripts/check-design.mjs active-implementation
+      - name: Verify both Lua rule runtimes
+        shell: bash
+        run: sh scripts/check-rules.sh | tee "$RUNNER_TEMP/sap-rules.log"
+      - name: Prepare pinned Beyond Simulator
+        run: sh scripts/simulator-setup.sh "$RUNNER_TEMP/beyond-simulator" "$RUNNER_TEMP/simulator-setup"
       - name: Build and verify the game package
         id: build
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
+          SIMULATOR_REQUIRE_TEXT: '1'
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           package="$RUNNER_TEMP/game-package"
           node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/game-validation" lua5.3 "$package"
           node scripts/check-design.mjs delivery "$package"
+          node scripts/simulator-verify.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
+            "$package/super-auto-pets.gil" "$RUNNER_TEMP/simulator-evidence"
+          node scripts/record-acceptance.mjs "$package" "$RUNNER_TEMP/sap-rules.log" "$RUNNER_TEMP/simulator-evidence"
           gate=$(node scripts/acceptance-gate.mjs "$package")
           verdict=$(node -p 'JSON.parse(process.argv[1]).verdict' "$gate")
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
@@ -55,13 +66,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ steps.build.outputs.name }}
-          path: |
-            ${{ runner.temp }}/game-package/super-auto-pets.gil
-            ${{ runner.temp }}/game-package/SHA256SUMS
-            ${{ runner.temp }}/game-package/BUILD.json
-            ${{ runner.temp }}/game-package/ACCEPTANCE.json
-            ${{ runner.temp }}/game-package/README.md
-            ${{ runner.temp }}/game-package/MCP-FIXTURE-LICENSE.txt
+          path: ${{ runner.temp }}/game-package
           if-no-files-found: error
           retention-days: 30
           overwrite: true

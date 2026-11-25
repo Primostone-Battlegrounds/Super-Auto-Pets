@@ -118,7 +118,10 @@ export function readDesign(root, { selected, base, delivery = false, forBuild = 
       git(root, ['merge-base', '--is-ancestor', reviewedRevision, 'HEAD']);
       assert.equal(designFingerprint, digest, `Approval must cover the exact design assets: ${version}`);
       const reviewed = fileTree(root, reviewedRevision);
-      assert.equal(readManifest(reviewed).revisions[version]?.status, 'Proposed', `Review must cover the proposed design: ${version}`);
+      const reviewedEntry = readManifest(reviewed).revisions[version];
+      assert.equal(reviewedEntry?.status, 'Proposed', `Review must cover the proposed design: ${version}`);
+      const { approval, ...designMetadata } = withoutStatus(entry);
+      assert.deepEqual(designMetadata, withoutStatus(reviewedEntry), `Reviewed design metadata changed: ${version}`);
       assert.equal(fingerprint(reviewed, version, entry), digest,
         `Reviewed Git revision contains different design assets: ${version}`);
       assert.equal(createHash('sha256').update(tree.read(checkedPath(evidence))).digest('hex'), evidenceSha256,

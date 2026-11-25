@@ -84,6 +84,11 @@ test('activation requires an independent review that binds the reviewed Git cont
   save();
   assert.equal(readDesign(root, { base, delivery: true }).designVersion, 'v2.0.0');
   assert.throws(() => readDesign(root, { selected: 'v1.0.0', base }), /unavailable/);
+  candidate.original = { version: 'new-claim', verification: 'verified' };
+  save();
+  assert.throws(() => readDesign(root, { base }), /Reviewed design metadata changed/);
+  candidate.original = { version: null, verification: 'unverified' };
+  save();
   write('docs/design/references/v2/source.md', 'drift');
   assert.throws(() => readDesign(root, { base }), /exact design assets/);
 });
