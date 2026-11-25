@@ -76,16 +76,27 @@ local function replay_portraits(duel)
                 label = label, label_x = lx, label_y = ly, width = width, height = height,
             }
             picture.parent = replay
-            picture:SetAnchoredPosition(lx, ly + (duel and 40 or 37))
-            label:SetAnchoredPosition(lx, ly - (duel and 40 or 37))
-            label:SetSizeDelta(width, duel and 76 or 68)
-            pictures[side .. slot] = picture
+            picture:SetAsLastSibling()
+            local y = ly + (duel and 42 or 39)
+            picture:SetAnchoredPosition(lx, y)
+            label:SetAnchoredPosition(lx, ly - (duel and 40 or 35))
+            label:SetSizeDelta(width, duel and 90 or 84)
+            pictures[side .. slot] = {control = picture, x = lx, y = y, lunge = 0}
         end
     end
-    return bind_portrait(function(path)
+    local paint = bind_portrait(function(path)
         local key, layer = path:match("^([^/]+)/([^/]+)$")
-        return pictures[key]:GetChild(layer)
+        return pictures[key].control:GetChild(layer)
     end, 1.42)
+    return function(slot, id, mirrored, attacking)
+        paint(slot, id, mirrored)
+        local picture = pictures[slot]
+        local lunge = attacking and (mirrored and -9 or 9) or 0
+        if picture.lunge ~= lunge then
+            picture.lunge = lunge
+            picture.control:SetAnchoredPosition(picture.x + lunge, picture.y)
+        end
+    end
 end
 
 local function show_online()

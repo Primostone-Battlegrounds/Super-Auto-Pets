@@ -20,6 +20,7 @@ local function simulate()
             GetSizeDelta = function(self) return tonumber(self.width), tonumber(self.height) end,
             GetSiblingIndex = function(self) return self.sibling_index or 2 end,
             SetSiblingIndex = function(self, index) self.sibling_index = index end,
+            SetAsLastSibling = function(self) self.sibling_index = 99 end,
             SetImage = function(self, _, image) self.image = image end,
             AddCursorEventListener = function(self, event, callback) assert(not self.events[event]); self.events[event] = callback end,
             RemoveCursorEventListener = function(self, event, callback)

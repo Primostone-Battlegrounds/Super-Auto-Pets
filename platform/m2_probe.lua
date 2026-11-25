@@ -318,13 +318,20 @@ local function show_replay()
             local display = "空位"
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-                local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
-                display = seat .. replay_view.mark(event, unit, key) .. definition.name
-                    .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
+                if portrait then
+                    display = replay_view.stats(definition.name, unit.attack, unit.health, unit.shield)
+                else
+                    local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
+                    display = seat .. replay_view.mark(event, unit, key) .. definition.name
+                        .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
+                end
             end
             local path = (side == 1 and "Own" or "Enemy") .. slot
             board_root:GetChild(path).text = display
-            if portrait then portrait(path, unit and unit.id, side == 2) end
+            if portrait then
+                local attacking = unit and event.type == "attack" and event.uid == unit.uid and event.side == key
+                portrait(path, unit and unit.id, side == 2, attacking)
+            end
         end
     end
     replay_status.text = string.format("第 %d 轮  %d/%d  %s", playback.round,

@@ -152,14 +152,21 @@ local function paint_battle()
     for slot = 1, 5 do
         for side = 0, 1 do
             local name = side == allied_side and "Own" or "Enemy"
-            local display, id = "空位", nil
+            local display, id, attacking = "空位", nil, false
             if frame.teams then
-                local unit = frame.teams[side == 0 and "player" or "enemy"][slot]
+                local key = side == 0 and "player" or "enemy"
+                local unit = frame.teams[key][slot]
                 if unit then
                     id = unit.id
                     local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-                    local marker = frame.event and replay_view.mark(frame.event, unit, side == 0 and "player" or "enemy") or ""
-                    display = string.format("%s%s\n%d攻 · %d命\n盾 %d", marker, def.name, unit.attack, unit.health, unit.shield)
+                    local event = frame.event
+                    if portrait then
+                        display = replay_view.stats(def.name, unit.attack, unit.health, unit.shield)
+                        attacking = event and event.type == "attack" and event.uid == unit.uid and event.side == key
+                    else
+                        local marker = event and replay_view.mark(event, unit, key) or ""
+                        display = string.format("%s%s\n%d攻 · %d命\n盾 %d", marker, def.name, unit.attack, unit.health, unit.shield)
+                    end
                 end
             elseif slot <= board[61 + side] then
                 local head = board[63 + side]
@@ -167,12 +174,16 @@ local function paint_battle()
                 local item = fighters[board[offset]] or pets[board[offset]]
                 if item then
                     id = item.id
-                    display = string.format("%s\n%d攻 · %d命\n盾 %d", item.name, board[offset + 1],
-                        board[offset + 2], board[offset + 4])
+                    if portrait then
+                        display = replay_view.stats(item.name, board[offset + 1], board[offset + 2], board[offset + 4])
+                    else
+                        display = string.format("%s\n%d攻 · %d命\n盾 %d", item.name, board[offset + 1],
+                            board[offset + 2], board[offset + 4])
+                    end
                 end
             end
             text("Replay/" .. name .. slot, display)
-            if portrait then portrait(name .. slot, id, name == "Enemy") end
+            if portrait then portrait(name .. slot, id, name == "Enemy", attacking) end
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
