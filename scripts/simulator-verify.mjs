@@ -426,6 +426,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         ? [2, 42, 1, [1, 1, 999, 999, 3], [2, 2, 1, 4, 1]]
         : [2, 1, 2, 1, 42, [1, 1, 1, 999, 999, 3, 0], [1, 2, 2, 1, 4, 1, 0]], 'Player1');
       const stats = duel ? 'Duel/ReplayBoard/Own1' : 'Room/Match/Replay/Own1';
+      const statsId = control(stats).Id;
+      for (let step = 0; step < 50; step++) {
+        const label = api.playSnapshot(session, { paint: true }).paint.find(item => item.id === statsId);
+        if (label?.text?.includes('盾')) break;
+        api.stepPlay(session, 0.05);
+      }
       await capture('client-1-replay-long-stats');
       const { textLayout } = visibleText(stats) ?? {};
       assert.ok(textLayout?.fits && textLayout.visibleLineCount === 3, 'Long combat values must leave the shield visible');
