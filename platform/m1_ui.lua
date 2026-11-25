@@ -121,8 +121,8 @@ end
 
 local function team_card(path, unit, index, selected, effect)
     local mirrored = selected == nil
-    local background = mirrored and 0xb79389 or 0x8aaf9c
-    local rim = selected and 0x9b6021 or 0x9fb2aa
+    local background = mirrored and 0xcf9b72 or 0x9cc28e
+    local rim = selected and 0xa86214 or 0x52785d
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
     local preparing = state.phase == "preparation"
@@ -214,8 +214,8 @@ end
 local function offer_card(path, kind, index)
     local item = offer(kind, index)
     local selected = matches(drag or selection, kind, index)
-    local face = selected and 0xfff9e9 or 0xe9d3a0
-    local rim = selected and 0xa66c27 or (item and item.frozen and 0x406f82 or 0xd2ba86)
+    local face = selected and 0xfff4ce or 0xeec786
+    local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
     text(path .. "/Tag", item and item.frozen and "已冻结" or "")
     if not item then
@@ -390,7 +390,7 @@ local function draw(refresh)
     text("Round/Value", string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
-    text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x984434 or 0x286452)
+    text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x9c3328 or 0x733b31)
     text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
@@ -966,7 +966,7 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Reset", function() show_restart("board") end)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
-    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Divider",
+    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Divider", "Field/FarHill", "Field/Ground",
         "Shop/Paper", "Shop/Rail", "Shop/Rule", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
         "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
         "Menu/Rule", "Menu/Heading"}) do

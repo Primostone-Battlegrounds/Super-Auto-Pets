@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { bundleRun } from './m1-bundle.mjs';
-import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
+import { button, group, image, label, nativeRun, pigment, roundedPlate } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
@@ -39,12 +39,12 @@ function layout(duelRules) {
   return {
     name: gameInterface, script: gameScript, showCursor: true, blockCursor: true, blockKeys: true,
     controls: [
-      { ...image('GameBackdrop', [0, 0], [1, 1], pigment.field), anchor: { min: [0, 0], max: [1, 1] } },
+      { ...image('GameBackdrop', [0, 0], [1, 1], '#649c89'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        image('Border', [0, 0], [652, 596], pigment.edge),
-        image('Paper', [0, 0], [642, 586], pigment.cream),
-        label('Title', [0, 221], [560, 76], '小动物自走棋', 44),
-        label('Status', [0, 158], [560, 43], '正在连接千星关卡', 23),
+        roundedPlate('Border', [0, 0], [652, 596], 107011, '#24443c'),
+        roundedPlate('Paper', [0, 4], [640, 580], 107102, '#fff5d7'),
+        label('Title', [0, 221], [560, 76], '小动物自走棋', 52),
+        label('Status', [0, 158], [560, 43], '正在连接千星关卡', 24, pigment.muted),
         group('Choices', [0, -5], [396, 270], [
           modeButton('Room', 92, '八人吃鸡', true),
           modeButton('Duel', 0, '好友 1v1'),
