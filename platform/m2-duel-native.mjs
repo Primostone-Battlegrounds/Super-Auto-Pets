@@ -73,7 +73,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452')),
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -118], [208, 52], content, '#286452')),
-      text('ReplayStatus', [-75, -170], [774, 44], '', 18),
+      text('ReplayStatus', [-75, -170], [774, 50], '', 18),
       ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', '#335b44'),
       ...(includeProbeButtons ? duelProbeButtons : []).map(({ label, position }, index) => text(`NativeLegend${index + 1}`,
         [position[0], position[1] - 50], [140, 30], label, 18)),
