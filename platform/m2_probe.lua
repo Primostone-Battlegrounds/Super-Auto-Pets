@@ -29,6 +29,7 @@ local preparing = false
 local can_advance = false
 local can_leave = false
 local confirm_leave = false
+local inspected
 local selected_uid
 local merge_mode = false
 local reward_index = 1
@@ -64,6 +65,17 @@ local function show_actions()
         {"Reward", "RewardLabel"}, {"RewardNext", "RewardNextLabel"}}) do
         show_action(binding[1], binding[2], preparing)
     end
+    for slot = 1, rules.pet_slots do
+        for _, suffix in ipairs({"", "Face", "Label"}) do
+            show(offers:GetChild("InspectPet" .. slot .. suffix), preparing)
+        end
+    end
+    for slot = 1, rules.team_size do
+        show_action("InspectTeam" .. slot, "InspectTeam" .. slot .. "Label", preparing)
+    end
+    show_action("InspectReward", "InspectRewardLabel", preparing)
+    show(child("AbilityTitle"), preparing)
+    show(child("AbilityBody"), preparing)
     show_action("Ready", "ReadyLabel", preparing)
     show_action("Advance", "AdvanceLabel", can_advance)
     show_action("Leave", "LeaveLabel", can_leave)
@@ -111,8 +123,25 @@ local function selected_slot(view)
     end
 end
 
+local function render_ability(view)
+    local picked = inspected or {kind = "pet", slot = 1}
+    local code, level
+    if picked.kind == "team" then
+        local unit = view and view.team[picked.slot]
+        code, level = unit and unit.code, unit and unit.level
+    else
+        local shelf = view and (picked.kind == "reward" and view.rewards or view.pets)
+        code, level = shelf and shelf[picked.slot], 1
+    end
+    local pet = code and native_catalog.pets[math.abs(code)]
+    local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
+    if pet then title, body = animal_ability.describe(native_catalog, pet, level) end
+    child("AbilityTitle").text, child("AbilityBody").text = title, body
+end
+
 local function render_market()
     local view = current_market()
+    render_ability(view)
     if not view then
         market_gold.text = "同步商店中"
         team_label.text = "阵容 —"
@@ -203,6 +232,7 @@ local function freeze(slot, food)
 end
 
 local function select_unit(slot)
+    inspected = {kind = "team", slot = slot}
     local view = editable_market()
     if not view or not view.team[slot] then return end
     local picked = selected_slot(view)
@@ -348,7 +378,11 @@ bind("RewardNext", function()
     end
 end)
 
+bind("InspectReward", function()
+    inspected = {kind = "reward", slot = reward_index}; render_market()
+end)
 for slot = 1, rules.pet_slots do
+    bind("InspectPet" .. slot, function() inspected = {kind = "pet", slot = slot}; render_market() end, offers)
     pet_labels[slot] = offers:GetChild("OfferLabel" .. slot)
     pet_freeze_labels[slot] = offers:GetChild("FreezePetLabel" .. slot)
     bind("Buy" .. slot, function() acquire(slot, false) end, offers)
@@ -361,6 +395,7 @@ for slot = 1, rules.food_slots do
     bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
+    bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end)
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)
     bind("Team" .. slot, function() select_unit(slot) end)
 end
@@ -390,7 +425,7 @@ local function receive_snapshot(_, parameters)
     if acknowledged then pending = nil end
     if new_round < round or version <= latest_version then return end
     if pending and (new_round > pending.round or next_sequence > pending.sequence or phase == 2) then pending = nil end
-    if new_round > round then reward_index = 1 end
+    if new_round > round then reward_index = 1; inspected = nil end
     hint = rejected and "操作未生效，已同步服务端状态" or nil
     latest_version = version
     round = new_round

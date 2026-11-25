@@ -6,6 +6,7 @@ local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
+local inspected
 local render_standings, panel
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
@@ -71,9 +72,27 @@ local function chosen()
     end
 end
 
+local function paint_ability()
+    local picked = inspected or {kind = "pet", slot = 1}
+    local code, level
+    if picked.kind == "team" then
+        local unit = preview and preview.team[picked.slot]
+        code, level = unit and unit.code, unit and unit.level
+    else
+        local shelf = preview and (picked.kind == "reward" and preview.rewards or preview.pets)
+        code, level = shelf and shelf[picked.slot], 1
+    end
+    local pet = code and native_catalog.pets[math.abs(code)]
+    local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
+    if pet then title, body = animal_ability.describe(native_catalog, pet, level) end
+    text("Shop/AbilityTitle", title)
+    text("Shop/AbilityBody", body)
+end
+
 local function paint_shop()
     if not preview or preview.round ~= match.round then return end
     text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5 · 右侧为前排", preview.gold, preview.tier, #preview.team))
+    paint_ability()
     local picked = chosen()
     for slot = 1, 5 do
         local is_pet = slot <= 3
@@ -197,7 +216,7 @@ local function receive_view(_, values)
     end
     local transitioned = not match or round ~= match.round or phase ~= match.phase
     if transitioned then
-        selected, merge, reward, hint = nil, false, 1, nil
+        selected, merge, reward, hint, inspected = nil, false, 1, nil, nil
     elseif acknowledged and sequence == pending[3] then
         hint = "操作未生效，已同步服务端状态"
     else
@@ -296,6 +315,7 @@ local function buy(slot, is_reward)
 end
 
 local function choose(slot)
+    inspected = {kind = "team", slot = slot}
     if not editable() or not preview.team[slot] then return end
     local picked = chosen()
     if not picked then selected = preview.team[slot].uid
@@ -350,10 +370,16 @@ function OnStart(view_root)
     latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
     frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
     controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
+    inspected = nil
     source_ready = true
     visible("Ready", false)
     visible("Forfeit", false)
+    button("Shop/InspectReward", function() inspected = {kind = "reward", slot = reward} end)
     for slot = 1, 5 do
+        button("Shop/InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot} end)
+        if slot <= 3 then
+            button("Shop/InspectOffer" .. slot, function() inspected = {kind = "pet", slot = slot} end)
+        end
         button("Shop/Offer" .. slot, function()
             if slot <= 3 then
                 buy(slot, false)
