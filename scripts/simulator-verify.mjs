@@ -40,6 +40,8 @@ if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
     { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
     { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
+    { canvasId: 'mobile-19.5-9', playerCount: 2, mode: 2 },
+    { canvasId: 'mobile-19.5-9', playerCount: 8, mode: 8 },
   );
 }
 for(const {canvasId,playerCount,mode} of configurations) {
@@ -175,6 +177,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.setPlayView(session,1);
     const duel = mode === 2;
     const shop = duel ? 'Duel' : 'Room/Match/Shop';
+    const rerollButton = duel ? 'Duel/Reroll' : `${shop}/Reroll/Hit`;
+    const readyButton = duel ? 'Duel/Ready' : 'Room/Match/Ready/Hit';
+    const between = duel ? 'Duel/InspectReward' : 'Room/Match/Hint';
+    requirePlayButton(rerollButton, [readyButton, between]);
+    requirePlayButton(readyButton, [rerollButton, between]);
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
@@ -270,6 +277,31 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
     await capture('client-1-reenter');
+    function nextMarket(version, gold) {
+      const next = [...market];
+      next[0] = 2;
+      next[2] = gold;
+      if (duel) {
+        api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 2, 0, false, false, 1, version, version,
+          0, 0, 30, 0, 5, 4, 0], 'Player1');
+        api.sendPlaySignal(session, 'AP_DuelMarket', [2, version, next], 'Player1');
+      } else {
+        api.sendPlaySignal(session, 'AP_RoomView', [version, 2, 2, 1, version, playerCount, 0, false,
+          Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), next, 0, 42], 'Player1');
+      }
+    }
+    function requireSingleRequest(trail, action) {
+      const before = requests();
+      click(trail);click(trail);
+      const after = api.playSnapshot(session).server.inbound.filter(row => row.name === requestName);
+      assert.equal(after.length, before + 1, `Expected one pending request from ${trail}`);
+      assert.equal(after.at(-1).values[0], action);
+    }
+    nextMarket(4, 10);
+    requireSingleRequest(rerollButton, 10);
+    nextMarket(5, 9);
+    requireSingleRequest(readyButton, 1);
+    await capture('client-1-next-round-actions-fixture');
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
