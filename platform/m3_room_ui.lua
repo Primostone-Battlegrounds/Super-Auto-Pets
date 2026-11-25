@@ -104,8 +104,14 @@ local function paint_shop()
             local definition = (is_pet and native_catalog.pets or native_catalog.foods)[math.abs(code)]
             portrait.shop(5 + slot, definition and definition.id)
         end
-        local detail = is_pet and "%s\n%d 攻 · %d 命" or "%s\n+%d 攻 · +%d 命"
-        text("Shop/Offer" .. slot .. "/Text", item and detail:format(item.name, item.attack, item.health) or "售罄")
+        local offer = "售罄"
+        if item and portrait then
+            offer = item.name .. "\n" .. replay_view.combat_values(item.attack, item.health, not is_pet)
+        elseif item then
+            local detail = is_pet and "%s\n%d 攻 · %d 命" or "%s\n+%d 攻 · +%d 命"
+            offer = detail:format(item.name, item.attack, item.health)
+        end
+        text("Shop/Offer" .. slot .. "/Text", offer)
         text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
         local unit = preview.team[slot]
         if portrait then
@@ -113,7 +119,12 @@ local function paint_shop()
             portrait.shop(slot, definition and definition.id)
         end
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
-        local stats = unit and string.format("\n%d攻 %d命\nL%d · 经验%d", unit.attack, unit.health, unit.level, unit.xp) or ""
+        local stats = ""
+        if unit then
+            local values = portrait and replay_view.combat_values(unit.attack, unit.health)
+                or string.format("%d攻 %d命", unit.attack, unit.health)
+            stats = string.format("\n%s\nL%d · 经验%d", values, unit.level, unit.xp)
+        end
         text("Shop/Team" .. slot .. "/Text", name .. stats)
     end
     reward = math.min(reward, math.max(#preview.rewards, 1))

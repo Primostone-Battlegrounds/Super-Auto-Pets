@@ -144,6 +144,7 @@ local function render_ability(view)
     local pet = code and native_catalog.pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
     if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
+    if portrait then title = title:gsub("(.*) · (.+)", "%1\n%2") end
     child("AbilityTitle").text, child("AbilityBody").text = title, body
 end
 
@@ -194,7 +195,8 @@ local function render_market()
         if portrait then
             local animal = native_catalog.pets[math.abs(code)]
             portrait.shop(rules.team_size + slot, animal and animal.id)
-            label.text = pet and string.format("%s\n%d攻%d命 · %d金", pet.name, pet.attack, pet.health, rules.pet_cost) or "售罄"
+            label.text = pet and string.format("%s\n%s · %d金", pet.name,
+                replay_view.combat_values(pet.attack, pet.health), rules.pet_cost) or "售罄"
         else
             label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
         end
@@ -206,7 +208,8 @@ local function render_market()
         if portrait then
             local item = native_catalog.foods[math.abs(code)]
             portrait.shop(rules.team_size + rules.pet_slots + slot, item and item.id)
-            label.text = food and string.format("%s\n+%d攻 +%d命 · %d金", food.name, food.attack, food.health, rules.food_cost) or "售罄"
+            label.text = food and string.format("%s\n%s · %d金", food.name,
+                replay_view.combat_values(food.attack, food.health, true), rules.food_cost) or "售罄"
         else
             label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
                 food.name, food.attack, food.health, rules.food_cost) or "售罄"
@@ -224,7 +227,8 @@ local function render_market()
             local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
             if portrait then
-                label.text = string.format("%s\n%d/%d L%d 经验%d", name, unit.attack, unit.health, unit.level, unit.xp)
+                label.text = string.format("%s\n%s\nL%d · 经验%d", name,
+                    replay_view.combat_values(unit.attack, unit.health), unit.level, unit.xp)
             else
                 local prefix = slot == picked and "已选 · " or ""
                 label.text = string.format("%s%s\n%d/%d · Lv%d 经验%d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)

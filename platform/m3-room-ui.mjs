@@ -27,7 +27,7 @@ function roomLayout(unified) {
     if (unified && art) {
       const team = art === 'team';
       surface = terrain('Surface', [-10, -6], [width - 20, 82], team ? '#d7e2b3' : fill);
-      captionSize[1] = team ? 68 : 50;
+      captionSize[1] = team ? 84 : 62;
       captionPosition[1] = team ? -19 : -14;
       visualSize[1] = team ? 128 : 110;
       fontSize = 18;
@@ -99,8 +99,8 @@ function roomLayout(unified) {
             image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
           ]),
           ...slots.flatMap(slot => [
-            label(`Own${slot}`, [-48 - (slot - 1) * 80, unified ? 31 : 24], [78, 112], '', unified ? 19 : 14, pigment.ink),
-            label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [78, 112], '', unified ? 19 : 14, pigment.ink),
+            label(`Own${slot}`, [-48 - (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
+            label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
           ]),
           label('Event', [0, unified ? -85 : -72], [800, unified ? 42 : 50], '', unified ? 22 : 18, unified ? '#65441d' : pigment.ink),
           ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]

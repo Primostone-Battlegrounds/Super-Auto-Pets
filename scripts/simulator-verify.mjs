@@ -290,13 +290,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const beforeInspect = requests();
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
-    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/u);
+    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);
     requireText(`${shop}/AbilityBody`, /开场.*随机.*1 伤/u);
     click(duel ? `${shop}/TeamInspection/InspectTeam1` : `${shop}/InspectTeam1/Hit`);
     await capture('client-1-inspect-team');
-    requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/u);
+    requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/su);
     requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
-    if (!duel) requireText(`${shop}/Team1/Text`, /3攻 2命\nL2 · 经验1/u);
+    const teamStats = visibleText(duel ? `${shop}/TeamLabel1` : `${shop}/Team1/Text`).textLayout;
+    assert.ok(teamStats.fits && teamStats.lines.slice(1).join('\n') === '3攻 2命\nL2 · 经验1');
+    const [attack, health] = teamStats.richLines[1].runs.filter(run => run.bold);
+    assert.ok(attack?.fontSize > 20 && health?.fontSize > 20 && attack.color !== health.color,
+      'Combat numerals must stand out as two readable values');
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
     await capture('client-1-buy-request');

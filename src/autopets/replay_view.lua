@@ -11,8 +11,14 @@ function M.board(events, position)
         if events[index].board then return events[index].board end
     end
 end
+function M.combat_values(attack, health, is_boost)
+    local prefix = is_boost and "+" or ""
+    return string.format("<b><color=#714718><size=22>%s%d</size></color></b><size=13>攻 </size><b><color=#803D35><size=22>%s%d</size></color></b><size=13>命</size>",
+        prefix, attack, prefix, health)
+end
 function M.stats(name, attack, health, shield)
-    return string.format("%s\n%d攻 %d命%s", name, attack, health, (shield or 0) > 0 and ("\n盾 " .. shield) or "")
+    local guard = (shield or 0) > 0 and ("\n盾 " .. shield) or ""
+    return "<size=16>" .. name .. "</size>\n" .. M.combat_values(attack, health) .. guard
 end
 function M.describe(event, catalog, sides)
     sides = sides or {player = "席1", enemy = "席2"}

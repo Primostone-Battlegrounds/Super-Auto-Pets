@@ -41,7 +41,7 @@ function card(action, label, position, size, content, { fill, ink, sprite, portr
   let face = image(`${action}Face`, position, size, fill, sprite && { image: sprite });
   if (portrait) {
     caption.position = [position[0], position[1] - 23];
-    caption.size = [size[0], 68];
+    caption.size = [size[0], 81];
     caption.text.fontSize = 18;
     face = terrain(`${action}Face`, [position[0] - inset, position[1] - 10], [size[0] - 2 * inset - 12, 47], fill);
   } else if (compact) {
