@@ -168,6 +168,15 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const box = trail => api.runtimeLayout(session).get(control(trail).Id);
     const slot = box(`${team}/Hit`);
     const outside = box('Practice/TeamCaption');
+    function requireLiftedClearance(trail) {
+      const lifted = box(trail);
+      assert.equal(lifted.centerX, slot.centerX);
+      for (const target of ['Portrait', 'DropLabel']) {
+        const obstacle = box(`${team}/${target}`);
+        assert.ok(lifted.centerY - lifted.height / 2 > obstacle.centerY + obstacle.height / 2,
+          `Dragged portrait obscures the destination ${target}`);
+      }
+    }
     const picture = control(`${pet}/Portrait`);
     const petHome = picture.parent;
     const petBefore = visibleText(`${pet}/Name`).text;
@@ -176,9 +185,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('practice-drag-pet-target');
     requireText(`${team}/DropLabel`, /^购买$/u);
     assert.notEqual(picture.parent, petHome, 'Dragged portrait must lift out of the source card');
-    const lifted = api.runtimeLayout(session).get(picture.Id);
-    assert.equal(lifted.centerX, slot.centerX);
-    assert.ok(lifted.centerY > slot.centerY, 'Portrait stays above the drop target');
+    requireLiftedClearance('Practice/Portrait');
     pointer('move', outside);
     pointer('up', outside);
     await capture('practice-drag-cancel');
@@ -199,15 +206,19 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(!visibleText(`${team}/DropLabel`));
 
     const statsBefore = visibleText(`${team}/Detail`).text;
+    const nearBottom = { centerX: slot.centerX, centerY: slot.centerY - slot.height / 2 + 2 };
     pointer('down', box(`${food}/Hit`));
-    pointer('move', slot);
+    pointer('move', nearBottom);
     await capture('practice-drag-food-target');
     requireText(`${team}/DropLabel`, /^喂食$/u);
-    pointer('up', slot);
+    requireLiftedClearance('Practice/Portrait');
+    assert.ok(!visibleText(`${team}/XP`), 'Drop feedback replaces the experience label');
+    pointer('up', nearBottom);
     await capture('practice-drag-feed');
     requireText('Practice/Money/Value', /^3$/u);
     requireText(`${food}/Name`, /^空商品$/u);
     assert.notEqual(visibleText(`${team}/Detail`).text, statsBefore);
+    requireText(`${team}/XP`, /^L1/u);
     assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {

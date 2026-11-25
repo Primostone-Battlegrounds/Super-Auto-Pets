@@ -403,8 +403,13 @@ local function draw(refresh)
             hit and event.side == "player" and effect)
         local drop = drop_label and drag.target == index
         show("Team" .. index .. "/DropTarget", drop == true)
-        if drop then text("Team" .. index .. "/DropLabel", drop_label)
-        else show("Team" .. index .. "/DropLabel", false) end
+        if drop then
+            show("Team" .. index .. "/XP", false)
+            show("Team" .. index .. "/XPPaper", false)
+            text("Team" .. index .. "/DropLabel", drop_label)
+        else
+            show("Team" .. index .. "/DropLabel", false)
+        end
     end
     show("Shop", preparing)
     show("Battle", not preparing)
@@ -515,15 +520,24 @@ local function choose_team(index)
     apply_to_team(action, selection, destination)
 end
 
-local function move_drag_picture(event)
+local function move_drag_picture(event, target)
     local x, y = event:GetUIPos()
     local width, height = game.GetUICanvasSize()
-    -- Lift the existing portrait above the input point so the drop target stays visible.
-    local half_width, half_height = drag.picture:GetSizeDelta()
-    half_width, half_height = half_width / 2, half_height / 2
-    local left = math.max(half_width, math.min(width - half_width, x))
-    local bottom = math.max(half_height, math.min(height - half_height, y + 40))
-    drag.picture:SetAnchoredPosition(left - width / 2, bottom - height / 2)
+    -- Keep the dragged portrait clear of the target portrait and the drop label.
+    local picture_width, picture_height = drag.picture:GetSizeDelta()
+    local half_width, half_height = picture_width / 2, picture_height / 2
+    local center_x = math.max(half_width, math.min(width - half_width, x))
+    local lift = y + 40
+    if target then
+        local path = "Team" .. target
+        local _, slot_y = control(path):GetAnchoredPosition()
+        local label = control(path .. "/DropLabel")
+        local _, label_y = label:GetAnchoredPosition()
+        local _, label_height = label:GetSizeDelta()
+        lift = math.max(lift, height / 2 + slot_y + label_y + label_height / 2 + half_height + 4)
+    end
+    local center_y = math.max(half_height, math.min(height - half_height, lift))
+    drag.picture:SetAnchoredPosition(center_x - width / 2, center_y - height / 2)
 end
 
 local function begin_drag(event, path, kind, index)
@@ -561,8 +575,8 @@ end
 
 local function update_drag(event)
     if not drag or drag.touch ~= event.touchId then return end
-    move_drag_picture(event)
     local target = drop_slot(event)
+    move_drag_picture(event, target)
     if drag.target == target then return end
     drag.target = target
     draw(false)
