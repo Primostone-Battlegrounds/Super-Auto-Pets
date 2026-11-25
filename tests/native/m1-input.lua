@@ -21,6 +21,9 @@ function node_methods:SetAnchoredPosition(x, y) self.x, self.y = x, y end
 function node_methods:SetSizeDelta(width, height) self.width, self.height = width, height end
 function node_methods:GetAnchoredPosition() return self.x, self.y end
 function node_methods:GetSizeDelta() return self.width, self.height end
+function node_methods:GetSiblingIndex() return self.sibling or 0 end
+function node_methods:SetSiblingIndex(index) self.sibling = index end
+function node_methods:SetAsLastSibling() self.sibling = 99 end
 function node_methods:SetImage(source, image)
     assert(source == "StaticReference" and (image == 100001 or image == 106025))
     self.image = image
@@ -109,7 +112,8 @@ local function capture(frame)
             :gsub("\t", "%%09"):gsub("\n", "%%0A"):gsub("\r", "%%0D"):gsub("~", "%%7E")
         capture_file:write(table.concat({frame, path, flag(node.active), flag(node.visible),
             node.x or "", node.y or "", node.width or "", node.height or "", node.image or "",
-            node.imageColor or "", node.fontColor or "", content}, "\t"), "\n")
+            node.imageColor or "", node.fontColor or "", content,
+            node.parent == sandbox.script.object and "root" or ""}, "\t"), "\n")
     end
 end
 
@@ -223,6 +227,7 @@ local function drag_to(source, target, touch, offset_x, offset_y)
     callbacks.CursorDrag(drop)
     callbacks.CursorEndDrag(drop)
     callbacks.CursorClick(drop)
+    if nodes[target .. "/DropTarget"].active then click(target, touch) end
 end
 
 local function destroy_script()
@@ -646,12 +651,14 @@ merge_drag.CursorEndDrag(cursor_event(12, hit_centre("Team1")))
 assert(label("Team2/Name") == "棉尾兔")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 assert(label("Team1/DropLabel") == "合并" and nodes["Team1/DropTarget"].active)
-assert(label("Hint"):find("队员会被消耗", 1, true) and label("Team2/Name") == "棉尾兔")
+assert(label("Hint"):find("确认合并后会消耗拖动的队员", 1, true) and label("Team2/Name") == "棉尾兔")
 capture("merge_preview")
 merge_drag.CursorDrag(cursor_event(11, 0, 0))
 assert(not nodes["Team1/DropTarget"].active and label("Team2/Name") == "棉尾兔")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 merge_drag.CursorEndDrag(cursor_event(11, hit_centre("Team1")))
+assert(label("Team2/Name") == "棉尾兔" and nodes["Team1/DropTarget"].active)
+click("Team1", 11)
 assert(label("Team2/Name") == "空位 2" and not nodes["Team2/Selected"].active)
 assert(label("Team1/XP") == "L1  经验 1/2" and not nodes["Team1/DropTarget"].active)
 finish(nil)
@@ -729,6 +736,14 @@ sandbox.OnEnable()
 pending_drag.CursorEndDrag(pending_drop)
 assert(label("Money/Value") == "10" and not nodes["Team1/DropTarget"].active)
 assert(installs == before_disable, "enabling the existing view added listeners")
+
+local staged_drag = start_drag("Shop/Pet1", main_touch)
+staged_drag.CursorDrag(pending_drop)
+staged_drag.CursorEndDrag(pending_drop)
+assert(label("Money/Value") == "10" and nodes["Team1/DropTarget"].active)
+sandbox.OnDisable()
+sandbox.OnEnable()
+assert(label("Money/Value") == "10" and not nodes["Team1/DropTarget"].active)
 
 shop("buy", 1)
 click("Primary")
