@@ -107,7 +107,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Lobby/Feedback', /仍在加载/u);
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
-    click('Practice/Menu/Continue/Hit');await capture('practice-shop');
+    click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
+    const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
+    assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
+      'Practice primary action must use its sliced native plate');
+    for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
+      requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
+    }
     requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Shop/RewardNext/Hit', 'Practice/Hint']);
     requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Shop/Buy/Hit', 'Practice/Shop/Freeze/Hit', 'Practice/Hint']);
     requireText('Practice/Money/Value', /^10$/u);
@@ -404,8 +410,13 @@ const textDefects = results.flatMap(result => result.frames.flatMap(frame => fra
   .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))
   .map(text => ({ canvasId: result.canvasId, frame: frame.name, path: text.path, text: text.text,
     height: text.height, requiredHeight: text.textLayout?.requiredHeight }))));
-const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status:results.some(r=>r.runtimeExceptions.length||r.frames.some(f=>f.mountError||f.logs.length))?'runtime-failed':textDefects.length?'observed-text-defects':'executed',mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
+const assetDefects = results.flatMap(result => result.frames.flatMap(frame => frame.assetWarnings
+  .map(warning => ({ canvasId: result.canvasId, mode: result.mode, frame: frame.name, ...warning }))));
+const runtimeFailed = results.some(result => result.runtimeExceptions.length || result.frames.some(frame => frame.mountError || frame.logs.length));
+const status = runtimeFailed ? 'runtime-failed' : assetDefects.length ? 'observed-asset-defects'
+  : textDefects.length ? 'observed-text-defects' : 'executed';
+const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,assetDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status,mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
 fs.writeFileSync(path.join(output,'receipt.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify({status:report.status,output,controls:receipt.controls,results:results.map(r=>({canvasId:r.canvasId,playerCount:r.playerCount,runtimeExceptions:r.runtimeExceptions,frames:r.frames.map(f=>({name:f.name,mountError:f.mountError,errors:f.logs}))}))},null,2));
 
-if(report.status==='runtime-failed'||(process.env.SIMULATOR_REQUIRE_TEXT==='1'&&textDefects.length))process.exitCode=1;
+if(runtimeFailed || assetDefects.length || (process.env.SIMULATOR_REQUIRE_TEXT==='1'&&textDefects.length))process.exitCode=1;
