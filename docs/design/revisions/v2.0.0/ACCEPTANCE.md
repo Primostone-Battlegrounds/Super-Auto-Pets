@@ -1,19 +1,25 @@
 # v2.0.0 acceptance and evidence contract
 
-Status: **Proposed / NO-GO**. A passing HTML study does not satisfy native/runtime, source-reuse, multiplayer, license, balance or release gates. Evidence records must use actual observations and immutable artifact references. Never replace `not_run` with an inferred pass.
+Design status: **Proposed**. Product/release decision: **NO-GO**; these are separate axes. A passing HTML study does not satisfy native/runtime, source-reuse, multiplayer, license, balance or release gates. Evidence records must use actual observations and immutable artifact references. Never replace `not_run` with an inferred pass.
 
-## Gates
+## Independent design-basis review
+
+An independent reviewer may approve the exact design as the implementation basis while official-device checks remain pending. Bind the review to full Git SHA, design fingerprint, source references and reviewed artifacts. Assess the complete intended design, observed-source mapping, justified Miliastra adaptations, implementation-map accuracy, screen/state coverage, causal clarity, usability and honest limitations. Record substantive findings and resolutions; a mere document presence check or HTML smoke pass is insufficient. Clearly state whether approval covers the design basis, the implemented candidate or release; never conflate them.
+
+Pending physical runs and incomplete current-client access must remain explicit in the approval. The reviewer can accept a bounded design assumption with a named follow-up and risk, but cannot call it source-verified. Later manifest activation is a separate authorized lifecycle action under repository policy. No status is activated here. An independently reviewed Proposed revision may be selected for isolated implementation according to that policy. Selection/approval does not close the product gates below.
+
+## Product/release gates
 
 | ID | Acceptance | Required independent evidence |
 |---|---|---|
 | D01 | All three entries distinguish player counts and destination; 1v1 waits, eight-seat shows bot-fill | PC + mobile native recordings from menu through lobby/start; pending/failure/retry invites |
-| D02 | Five team slots, recruitment inventory and costs, selected trigger/target/value, buy/roll/freeze/sell/reorder are readable and operable | Actual source sequence evidence, justified platform deviations, both-device uncut transaction trace |
+| D02 | Five team slots, recruitment inventory and costs, selected trigger/target/value, buy/roll/freeze/sell/reorder are readable and operable | Official trailer source mapping with its limits, justified platform deviations and current-client gaps; both-device uncut candidate transaction trace |
 | D03 | Confirmed ordered events → damage/trigger/death → final result; speed/skip do not change outcome | Same authoritative round at each speed, skip, late/duplicate/gap recovery, before/after state hashes |
 | D04 | Result reflects real round/lives/placements; continue/replay/restart work | Practice complete 10-win or 5-life run; two-device 1v1; 8-seat real/bot/odd-survivor/quit matrix |
 | D05 | Wide PC and mobile landscape have no clipped text, inaccessible primary actions or horizontal overflow; no precision-only drag | Native viewport capture, measured text/target sizes, keyboard/touch run; font fallback/offline run |
 | D06 | Original visual identity/assets; provenance and source ledgers complete | Asset-by-asset license/original evidence review; do not reuse source art |
 | D07 | Every scored screen reaches requested quality bar independently | Same anchored rubric, actual baseline and current captures, reviewer/SHA, criterion-level scores |
-| D08 | Source interactions/timing/info priority reused unless real platform constraint | Direct observed original action trace + approved mapping; screenshots alone cannot verify sequence/timing |
+| D08 | Source interactions/timing/info priority reused unless real platform constraint | Approved mapping of observed trailer actions versus unverified raw input/timing/current-client gaps; justified platform adaptations; further current-client trace when accessible. Stills cannot prove raw events or exact pacing |
 
 ## Visual rubric (0–10 per screen, five 0–2 criteria)
 
@@ -55,4 +61,8 @@ Score record sample: `{"screen":"shop","device":"mobile-landscape","before":null
 
 Browser: installed Chromium 154.0.8037.57, Playwright, headless; local HTTP; viewports 1440×960 and 844×390. This is **browser emulation**, not official PC/mobile runtime. Executed cases: three mode entry paths; 1v1 start disabled before guest; simulated invite feedback; buy through detail and target slot; reorder; freeze/roll/next-round preservation; gold changes; battle speed/skip; result; three-round fixture end; restart reset; sell; no horizontal landscape overflow; Ready inside the viewport; first attack highlights the right-side preparation front and both battle fronts face the center (measured DOM geometry); no uncaught page errors. Whole-screen fading was removed from state updates and the fixed victory is labeled a demonstration result. Final script run record is supplied separately with captures. This evidence does not verify production combat, abilities, original interaction timing, platform invitations, reconnection, sound, native performance, or full accessibility.
 
-Captures under `/workspace/work/sap-evidence/prototype/`: `menu-wide.png`, `lobby-wide.png`, `shop-wide.png`, `shop-landscape.png`, `battle-wide.png`, `result-wide.png`. Full-page images are labeled accordingly and must not substitute for viewport-fit checks. A later independent visual review owns score conclusions and activation remains blocked until all production gates close.
+Captures under `/workspace/work/sap-evidence/prototype/`: `menu-wide.png`, `lobby-wide.png`, `shop-wide.png`, `shop-landscape.png`, `battle-wide.png`, `result-wide.png`. Full-page images are labeled accordingly and must not substitute for viewport-fit checks. A later independent visual review owns score conclusions and product/release remains NO-GO until applicable product gates close. Design-basis approval is assessed separately as above; it is not barred solely because physical-device runs remain pending.
+
+## Separate decision record sample
+
+`{"git_sha":"FULL_SHA","design_fingerprint":"ACTUAL_FINGERPRINT","independent_reviewer":"ACTUAL_REVIEWER","design_basis":"approved|changes_requested|not_reviewed","review_artifacts":["ACTUAL_IMMUTABLE_PATH"],"substantive_findings":["ACTUAL_FINDING_AND_RESOLUTION"],"accepted_assumptions":["BOUNDED_GAP_WITH_FOLLOWUP"],"official_pc":"pending","official_mobile":"pending","product_release":"NO-GO","manifest_status":"Proposed"}`. This is a schema example, not an approval. The reviewer owns the real decision and must justify it from actual evidence.
