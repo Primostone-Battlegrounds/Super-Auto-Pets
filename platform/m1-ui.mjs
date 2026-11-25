@@ -89,6 +89,7 @@ function stat(name, x, title) {
 
 const slots = [1, 2, 3, 4, 5];
 const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
+const playButtonHeight = 82;
 const actions = [
   ['Buy', '购买'], ['Freeze', '冻结 / 解冻'], ['Sell', '出售'], ['Merge', '合并队员'],
   ['Reroll', '刷新'], ['RewardNext', '下个奖励'],
@@ -155,20 +156,20 @@ export const nativeRun = {
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),
-    group('Battle', [0, -165], [1152, 143], [
-      image('Border', [0, 0], [1152, 143], pigment.edge),
-      image('Surface', [0, 0], [1148, 139], '#eaf0d7'),
-      image('Rule', [-540, 37], [4, 35], pigment.gold),
-      label('Outcome', [0, 43], [1038, 30], '', 25, pigment.ink, 'left'),
-      label('Event', [0, 12], [1038, 30], '', 18, pigment.ink, 'left'),
-      button('Replay', [-430, -37], [202, 48], '下一条战斗事件'),
-      button('Auto', [-216, -37], [202, 48], '暂停回放'),
-      button('Fast', [-2, -37], [202, 48], '速度：1 倍'),
-      button('Rewatch', [212, -37], [202, 48], '重新回放'),
-      button('NewSeed', [426, -37], [202, 48], '新一局'),
+    group('Battle', [0, -165], [1152, 170], [
+      image('Border', [0, 0], [1152, 170], pigment.edge),
+      image('Surface', [0, 0], [1148, 166], '#eaf0d7'),
+      image('Rule', [-540, 48], [4, 35], pigment.gold),
+      label('Outcome', [0, 54], [1038, 30], '', 25, pigment.ink, 'left'),
+      label('Event', [0, 22], [1038, 30], '', 18, pigment.ink, 'left'),
+      button('Replay', [-430, -36], [202, playButtonHeight], '下一条战斗事件'),
+      button('Auto', [-216, -36], [202, playButtonHeight], '暂停回放'),
+      button('Fast', [-2, -36], [202, playButtonHeight], '速度：1 倍'),
+      button('Rewatch', [212, -36], [202, playButtonHeight], '重新回放'),
+      button('NewSeed', [426, -36], [202, playButtonHeight], '新一局'),
     ], false),
     image('FooterLine', [0, -262], [1152, 2], pigment.edge),
-    button('Primary', [411, -293], [329, 58], '开战', true),
+    button('Primary', [411, -293], [329, playButtonHeight], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
     { ...group('Menu', [0, 0], [1202, 684], [
       image('Backdrop', [0, 0], [1202, 684], '#dce9e4'),

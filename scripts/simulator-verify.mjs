@@ -45,7 +45,7 @@ if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
 for(const {canvasId,playerCount,mode} of configurations) {
   const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
   const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,canvasId,playerCount,language:'zh-CN'});
-  const inputs=[];
+  const inputs=[],playButtons=[];
   const control = trail => {
     let node = session.runtime.roots[0];
     for (const name of trail.split('/')) node = node?.children.find(child => child.name === name);
@@ -53,6 +53,27 @@ for(const {canvasId,playerCount,mode} of configurations) {
     return node;
   };
   const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
+  function requirePlayButton(name) {
+    const trail = `Practice/${name}/Hit`;
+    const { Id } = control(trail);
+    const boxes = api.runtimeLayout(session);
+    const { centerX, centerY, width, height } = boxes.get(Id);
+    const { canvasWidth, canvasHeight } = api.playSnapshot(session);
+    const scale = Math.min(844 / canvasWidth, 390 / canvasHeight);
+    if (canvasId === 'mobile-19.5-9') {
+      assert.ok(Math.min(width, height) * scale >= 44, `Touch target too small at 844×390: ${trail}`);
+    }
+    assert.ok(centerX - width / 2 >= 0 && centerX + width / 2 <= canvasWidth &&
+      centerY - height / 2 >= 0 && centerY + height / 2 <= canvasHeight, `Offscreen play button: ${trail}`);
+    if (name.startsWith('Battle/')) {
+      const event = boxes.get(control('Practice/Battle/Event').Id);
+      assert.ok(centerY + height / 2 <= event.centerY - event.height / 2, `Button overlaps replay text: ${trail}`);
+    }
+    for (const [dx, dy] of [[0, 0], [2 - width / 2, 0], [width / 2 - 2, 0], [0, 2 - height / 2], [0, height / 2 - 2]]) {
+      assert.equal(api.hitPlayControl(session, centerX + dx, centerY + dy)?.Id, Id, `Button edge is occluded: ${trail}`);
+    }
+    playButtons.push({ trail, width, height, projectedWidth: width * scale, projectedHeight: height * scale });
+  }
   const frames=[],runtimeExceptions=[];
   const capture=async name=>{const paths=new Map();const visit=(node,trail)=>{paths.set(node.Id,trail);for(const child of node.children)visit(child,trail?trail+'/'+child.name:child.name);};visit(session.runtime.roots[0],'');const s=api.playSnapshot(session,{inspect:true,paint:true});fs.writeFileSync(path.join(output,prefix+'-'+name+'.json'),JSON.stringify(s));const prepared=await imageAssets.prepare(s.paint);const png=renderPaintPng(s.paint,s.canvasWidth,s.canvasHeight,prepared).data;fs.writeFileSync(path.join(output,prefix+'-'+name+'.png'),png);frames.push({name,assetWarnings:prepared.warnings,sha256:sha256(png),mountError:s.mountError,logs:s.logs.filter(l=>/error/.test(l.level)),visibleTexts:s.paint.filter(p=>p.kind==='textbox').map(p=>({path:paths.get(p.id),name:p.name,text:p.text,textLayout:p.textLayout,left:p.left,bottom:p.bottom,width:p.width,height:p.height}))});return s;};
   const requireText = (trail, expected) => {
@@ -80,6 +101,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');await capture('practice-shop');
+    requirePlayButton('Primary');
     requireText('Practice/Money/Value', /^10$/u);
     requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
@@ -105,10 +127,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         requireText('Practice/Battle/Event', /攻击/u);
         for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
         await capture('practice-replay');
+        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Battle/${name}`);
       }
       press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
     }
     const final=await capture('practice-complete');
+    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Battle/${name}`);
     assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
     requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
@@ -225,7 +249,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
-  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
 }
 const buildPath=path.join(path.dirname(gil),'BUILD.json');
 const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
