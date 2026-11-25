@@ -1,6 +1,5 @@
 -- Read-only presentation of the validated canonical event stream.
 local M = {}
-local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
 local function who(side, name, sides)
     return (sides[side] or "双方") .. (name and " " .. name or "")
 end
@@ -33,7 +32,8 @@ function M.describe(event, catalog, sides)
     elseif event.type == "buff" then
         return actor .. string.format(" +%d攻 +%d命", event.attack_amount or 0, event.amount)
     elseif event.type == "result" then
-        return "战斗结束 · " .. (event.reason == "strike_limit" and "步数上限" or outcomes[event.outcome] or event.outcome)
+        local winner = event.outcome == "win" and sides.player or event.outcome == "loss" and sides.enemy
+        return "战斗结束 · " .. (event.reason == "strike_limit" and "步数上限" or winner and (winner .. "获胜") or "平局")
     end
     return "双方入场"
 end
