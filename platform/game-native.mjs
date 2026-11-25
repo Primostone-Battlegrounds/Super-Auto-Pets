@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { bundleRun } from './m1-bundle.mjs';
-import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
+import { button, group, image, label, nativeRun, pigment, roundedPlate } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
@@ -39,12 +39,12 @@ function layout(duelRules) {
   return {
     name: gameInterface, script: gameScript, showCursor: true, blockCursor: true, blockKeys: true,
     controls: [
-      { ...image('GameBackdrop', [0, 0], [1, 1], pigment.field), anchor: { min: [0, 0], max: [1, 1] } },
+      { ...image('GameBackdrop', [0, 0], [1, 1], '#649c89'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        image('Border', [0, 0], [652, 596], pigment.edge),
-        image('Paper', [0, 0], [642, 586], pigment.cream),
-        label('Title', [0, 221], [560, 76], '小动物自走棋', 44),
-        label('Status', [0, 158], [560, 43], '正在连接千星关卡', 23),
+        roundedPlate('Border', [0, 0], [652, 596], 107011, '#24443c'),
+        roundedPlate('Paper', [0, 4], [640, 580], 107102, '#fff5d7'),
+        label('Title', [0, 221], [560, 76], '小动物自走棋', 52),
+        label('Status', [0, 158], [560, 43], '正在连接千星关卡', 24, pigment.muted),
         group('Choices', [0, -5], [396, 270], [
           modeButton('Room', 92, '八人吃鸡', true),
           modeButton('Duel', 0, '好友 1v1'),
@@ -55,8 +55,8 @@ function layout(duelRules) {
         label('Feedback', [0, -165], [586, 44], '', 19, pigment.gold),
       ]),
       view('Practice', practice),
-      view('Duel', [...duelLayout(duelRules).controls, back(500, 331)]),
-      view('Room', [...unifiedRoomLayout.controls, back(0, 333)]),
+      view('Duel', [...duelLayout(duelRules).controls, back(221, 278)]),
+      view('Room', [...unifiedRoomLayout.controls, back(-145, 276)]),
     ],
   };
 }
@@ -83,6 +83,7 @@ export function nativeGame(lua53, lua54, parse, ids) {
     ".on('whenTimerIsTriggered', (event, f) => {", '.onSignal(request, (event, f) => {',
   ], 2);
   const lobbySource = read('./game_lobby.ts').replace('id: 1073741825,', `id: ${ids.lobby},`);
+  const clientLayout = layout(shop.rules);
   const source = bundleRun(parse, true, convert => {
     const wrap = (name, code, callbacks, argument = '') => [
       `local function ${name}(${argument})`,
@@ -101,10 +102,10 @@ export function nativeGame(lua53, lua54, parse, ids) {
     const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
     const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
-  });
+  }, clientLayout);
   parse(source, { luaVersion: '5.3' });
   return {
-    layout: layout(shop.rules), source, roomSettings: room.settings,
+    layout: clientLayout, source, roomSettings: room.settings,
     shopRules: shop.rules, shopLevelThresholds: shop.levelThresholds, stockBaseLength: shop.start[0].length,
     graphs: [
       { graphId: ids.lobby, code: lobbySource }, { graphId: ids.duel, code: duelSource },

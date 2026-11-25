@@ -121,8 +121,8 @@ end
 
 local function team_card(path, unit, index, selected, effect)
     local mirrored = selected == nil
-    local background = mirrored and 0xb79389 or 0x8aaf9c
-    local rim = selected and 0x9b6021 or 0x9fb2aa
+    local background = mirrored and 0xcf9b72 or 0x9cc28e
+    local rim = selected and 0xa86214 or 0x52785d
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
     local preparing = state.phase == "preparation"
@@ -156,7 +156,7 @@ local function team_card(path, unit, index, selected, effect)
     local bar = control(health_path)
     if width > 0 then
         bar:SetSizeDelta(width, 4)
-        bar:SetAnchoredPosition((width - 88) / 2, -61)
+        bar:SetAnchoredPosition((width - 88) / 2, -71)
     end
     bar.imageColor = colour(ratio <= 0.35 and 0x984434 or 0x448269)
 end
@@ -214,8 +214,8 @@ end
 local function offer_card(path, kind, index)
     local item = offer(kind, index)
     local selected = matches(drag or selection, kind, index)
-    local face = selected and 0xfff9e9 or 0xe9d3a0
-    local rim = selected and 0xa66c27 or (item and item.frozen and 0x406f82 or 0xd2ba86)
+    local face = selected and 0xfff4ce or 0xeec786
+    local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
     text(path .. "/Tag", item and item.frozen and "已冻结" or "")
     if not item then
@@ -262,10 +262,11 @@ local function draw_tooltip(preparing)
     local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
     local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
     local card_x = control(path):GetAnchoredPosition()
-    local x = math.max(-394, math.min(394, card_x))
-    caption:SetAnchoredPosition(x < -185 and 452 or -465, 106)
-    control("Tooltip"):SetAnchoredPosition(x, -10)
-    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, picked.kind == "team" and 33 or -33)
+    local x = math.max(-370, math.min(370, card_x))
+    caption:SetAnchoredPosition(x < -150 and 452 or -465, 106)
+    local beside_team = picked.kind == "team"
+    control("Tooltip"):SetAnchoredPosition(x, beside_team and -18 or -2)
+    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, beside_team and 40 or -40)
     local heading, body = selected_info(picked)
     text("Tooltip/Heading", heading)
     text("Tooltip/Body", body)
@@ -296,11 +297,12 @@ local function arrange(preparing)
     show("Field/PrepRail", preparing)
     show("Field/AllyRail", not preparing)
     show("Field/RivalRail", not preparing)
-    show("Field/Clash", not preparing)
+    control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
+    control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
     control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
     control("Hint"):SetSizeDelta(preparing and 590 or 824, 53)
     for index = 1, rules.team_size do
-        local x, y = 91 + (index - 1) * 112, 115 - (index - 1) * 9
+        local x, y = 91 + (index - 1) * 112, 67 - (index - 1) * 9
         local team_path = "Team" .. index
         control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 104 or y)
         show(team_path .. "/Hit", preparing)
@@ -324,7 +326,7 @@ local function draw_battle_cue(event, passed)
     show("BattleFX/Impact", impact == true)
     if strike then
         local direction = event.side == "player" and 1 or -1
-        local lunge = direction * 12 * intensity
+        local lunge = direction * 10 * intensity
         control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
         local x, y = control(actor):GetAnchoredPosition()
         local target_x, target_y = control(unit_path(event.target_side, event.target_slot)):GetAnchoredPosition()
@@ -390,7 +392,7 @@ local function draw(refresh)
     text("Round/Value", string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
-    text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x984434 or 0x286452)
+    text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x9c3328 or 0x733b31)
     text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
@@ -453,8 +455,6 @@ local function draw(refresh)
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
         local accent = replaying and 0x286452 or accents[battle.outcome]
         text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
-        control("Battle/Rule").imageColor = colour(accent)
-        control("Battle/Border").imageColor = colour(state.final and accent or 0x90aa91)
         text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events, battle_event(event)))
         text("Battle/Auto/Title", playing and "暂停回放" or "继续回放")
         text("Battle/Fast/Title", string.format("速度：%d 倍", replay_speed))
@@ -929,7 +929,8 @@ end
 function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
-    portrait = bind_portrait(control, 1.56)
+    if not view_root then set_visual_plates(root) end
+    portrait = bind_portrait(control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1
@@ -966,13 +967,13 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Reset", function() show_restart("board") end)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
-    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Divider",
-        "Shop/Paper", "Shop/Rail", "Shop/Rule", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
-        "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
-        "Menu/Rule", "Menu/Heading"}) do
+    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/Ground",
+        "Shop/Paper", "Shop/Rail", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
+        "Battle/Surface", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
+        "Menu/Heading"}) do
         show(path, true)
     end
-    for _, name in ipairs({"Shade", "Rim", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
+    for _, name in ipairs({"Shade", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
     for _, path in ipairs({"Tooltip/Border", "Tooltip/Paper", "Tooltip/Pointer",
         "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper", "BattleFX/Strike/Lower",
         "BattleFX/Impact/Burst", "BattleFX/Impact/Flash", "BattleFX/Impact/Spark"}) do show(path, true) end

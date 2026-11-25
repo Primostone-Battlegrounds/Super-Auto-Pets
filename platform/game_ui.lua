@@ -57,46 +57,95 @@ local function main_menu()
     request(0)
 end
 
-local function replay_portraits(duel)
-    -- The unified GIL has room for one portrait pool. Practice and online play
-    -- are mutually exclusive once the server has selected an online mode.
+local function online_portraits(duel)
+    -- One authored pool serves the mutually exclusive preparation and replay
+    -- views. Keep the original parent/transform so practice can mount fresh.
     local practice_board = root:GetChild("Practice")
     local replay = root:FindChild(duel and "Duel/ReplayBoard" or "Room/Match/Replay")
-    local pictures = {}
+    local room_shop = not duel and root:FindChild("Room/Match/Shop")
+    local market = duel and root:FindChild("Duel/MarketOffers")
+    local duel_board = duel and root:GetChild("Duel")
+    local pictures, replay_slots = {}, {}
     for slot = 1, 5 do
         for _, side in ipairs({"Own", "Enemy"}) do
-            local parent = practice_board:GetChild((side == "Own" and "Team" or "Enemy") .. slot)
-            local picture = parent:GetChild("Portrait")
+            local own = side == "Own"
+            local source = practice_board:GetChild((own and "Team" or "Enemy") .. slot)
+            local picture = source:GetChild("Portrait")
             local label = replay:GetChild(side .. slot)
             local px, py = picture:GetAnchoredPosition()
             local lx, ly = label:GetAnchoredPosition()
             local width, height = label:GetSizeDelta()
             borrowed_portraits[#borrowed_portraits + 1] = {
-                picture = picture, parent = parent, index = picture:GetSiblingIndex(), x = px, y = py,
+                picture = picture, parent = source, index = picture:GetSiblingIndex(), x = px, y = py,
                 label = label, label_x = lx, label_y = ly, width = width, height = height,
             }
-            picture.parent = replay
-            picture:SetAsLastSibling()
-            local y = ly + (duel and 42 or 39)
-            picture:SetAnchoredPosition(lx, y)
             label:SetAnchoredPosition(lx, ly - (duel and 40 or 35))
             label:SetSizeDelta(width, duel and 90 or 84)
-            pictures[side .. slot] = {control = picture, x = lx, y = y, lunge = 0}
+            local shop, hit
+            if duel then
+                shop = own and duel_board or market
+                local name = own and ("Team" .. slot) or slot <= 3 and ("Buy" .. slot) or ("Food" .. (slot - 3))
+                hit = shop:GetChild(name)
+            else
+                shop = room_shop:GetChild((own and "Team" or "Offer") .. slot)
+                hit = shop:GetChild("Hit")
+            end
+            local sx, sy = hit:GetAnchoredPosition()
+            local slot_id = own and slot or 5 + slot
+            replay_slots[side .. slot] = slot_id
+            pictures[slot_id] = {
+                control = picture, shown = false, lunge = 0,
+                replay = {parent = replay, x = lx, y = ly + (duel and 42 or 39)},
+                shop = {parent = shop, x = sx, y = sy + (duel and 22 or own and 30 or 25)},
+            }
+            set_visible(picture, false)
         end
     end
-    local paint = bind_portrait(function(path)
-        local key, layer = path:match("^([^/]+)/([^/]+)$")
-        return pictures[key].control:GetChild(layer)
-    end, 1.42)
-    return function(slot, id, mirrored, attacking)
-        paint(slot, id, mirrored)
+
+    local view, draw
+    local function select(next_view)
+        if view == next_view then return end
+        view = next_view
+        draw = bind_portrait(function(path)
+            local slot, layer = path:match("^([^/]+)/([^/]+)$")
+            return pictures[tonumber(slot)].control:GetChild(layer)
+        end, view == "shop" and (duel and 1.32 or 1.25) or 1.78)
+        for _, picture in ipairs(pictures) do
+            set_visible(picture.control, false)
+            picture.shown, picture.lunge = false, 0
+            local target = picture[view]
+            if target then
+                picture.control.parent = target.parent
+                picture.control:SetAsLastSibling()
+                picture.control:SetAnchoredPosition(target.x, target.y)
+            end
+        end
+    end
+
+    local function paint(slot, id, mirrored, attacking)
         local picture = pictures[slot]
+        local shown = id ~= nil
+        if picture.shown ~= shown then
+            picture.shown = shown
+            set_visible(picture.control, shown)
+        end
+        if shown then draw(tostring(slot), id, mirrored) end
         local lunge = attacking and (mirrored and -9 or 9) or 0
         if picture.lunge ~= lunge then
             picture.lunge = lunge
-            picture.control:SetAnchoredPosition(picture.x + lunge, picture.y)
+            local target = picture[view]
+            picture.control:SetAnchoredPosition(target.x + lunge, target.y)
         end
     end
+
+    select("replay")
+    return {
+        view = select,
+        shop = function(slot, id) if view == "shop" then paint(slot, id, false, false) end end,
+        replay = function(slot, id, mirrored, attacking)
+            if view == "replay" then paint(replay_slots[slot], id, mirrored, attacking) end
+        end,
+    }
 end
 
 local function show_online()
@@ -105,7 +154,7 @@ local function show_online()
     show_section(board)
     if online then online.refresh(); return end
     online = (duel and duel_view or room_view)(root:GetChild(board))
-    online.start(root:GetChild(board), replay_portraits(duel))
+    online.start(root:GetChild(board), online_portraits(duel))
 end
 
 local function receive_lobby(_, values)
@@ -151,6 +200,7 @@ end
 
 function OnStart()
     root, active, mode = script.object, true, 0
+    set_visual_plates(root)
     lobby = root:GetChild("Lobby")
     bind(lobby, "Choices/Room/Hit", function()
         if pending then return end
@@ -230,6 +280,7 @@ function OnDestroy()
             entry.picture.parent = entry.parent
             entry.picture:SetSiblingIndex(entry.index)
             entry.picture:SetAnchoredPosition(entry.x, entry.y)
+            set_visible(entry.picture, true)
         end
         if entry.label.alive then
             entry.label:SetAnchoredPosition(entry.label_x, entry.label_y)

@@ -107,7 +107,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Lobby/Feedback', /仍在加载/u);
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
-    click('Practice/Menu/Continue/Hit');await capture('practice-shop');
+    click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
+    const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
+    assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
+      'Practice primary action must use its sliced native plate');
+    for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
+      requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
+    }
     requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Shop/RewardNext/Hit', 'Practice/Hint']);
     requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Shop/Buy/Hit', 'Practice/Shop/Freeze/Hit', 'Practice/Hint']);
     requireText('Practice/Money/Value', /^10$/u);
@@ -250,6 +256,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
   }
   if(mode) {
     const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
+    const foodPortrait = control('Practice/Enemy4/Portrait/Layer1').Id;
+    const shopPortraits = [...portraits, foodPortrait];
+    function requireShopPortraits(frame) {
+      assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),
+        'The online shop must show the pooled lineup, pet and food artwork');
+    }
     // Client-only fixture from the native wire schema. No graph output claimed.
     const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
     api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
@@ -260,7 +272,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
       personalMarket[15] = 2;
       if(mode===2){api.sendPlaySignal(session,'AP_DuelSnapshot',[2,player,1,0,false,false,0,1,1,0,0,30,0,5,5,0],target);api.sendPlaySignal(session,'AP_DuelMarket',[1,1,personalMarket],target);}
       else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
-      api.setPlayView(session,player);await capture('client-'+player+'-preparation-fixture');
+      api.setPlayView(session,player);
+      requireShopPortraits(await capture('client-'+player+'-preparation-fixture'));
       requireText(mode === 2 ? 'Duel/MarketGold' : 'Room/Match/Shop/Money', new RegExp('金币 ' + (11 - player) + '(?: |$)', 'u'));
       if (mode === 8) requireText('Room/Standings/Count', new RegExp(`${playerCount} 真人 · ${8 - playerCount} 机器人`, 'u'));
     }
@@ -275,15 +288,23 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
+    if (duel) {
+      const offer = visibleText('Duel/MarketOffers/OfferLabel1').textLayout;
+      assert.ok(offer.fits && offer.lines.at(-1) === '3金', 'Offer price should stay on one visible line');
+    }
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
-    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/u);
+    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);
     requireText(`${shop}/AbilityBody`, /开场.*随机.*1 伤/u);
     click(duel ? `${shop}/TeamInspection/InspectTeam1` : `${shop}/InspectTeam1/Hit`);
     await capture('client-1-inspect-team');
-    requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/u);
+    requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/su);
     requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
-    if (!duel) requireText(`${shop}/Team1/Text`, /3攻 2命\nL2 · 经验1/u);
+    const teamStats = visibleText(duel ? `${shop}/TeamLabel1` : `${shop}/Team1/Text`).textLayout;
+    assert.ok(teamStats.fits && teamStats.lines.slice(1).join('\n') === '3攻 2命\nL2 · 经验1');
+    const [attack, health] = teamStats.richLines[1].runs.filter(run => run.bold);
+    assert.ok(attack?.fontSize > 20 && health?.fontSize > 20 && attack.color !== health.color,
+      'Combat numerals must stand out as two readable values');
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
     await capture('client-1-buy-request');
@@ -329,6 +350,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
           const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
           assert.ok(own && enemy && own.left + own.width < enemy.left,
             'The original portraits must appear on opposing lanes');
+          assert.ok(!replayFrame.paint.some(item => item.id === foodPortrait),
+            'A food offer must not appear in battle');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
@@ -362,7 +385,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     const returned = await capture('client-1-return');
-    assert.ok(!returned.paint.some(item => portraits.includes(item.id)), 'Replay portraits must be hidden in the lobby');
+    assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id)), 'Pooled portraits must be hidden in the lobby');
     requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
@@ -391,7 +414,30 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireSingleRequest(rerollButton, 10);
     nextMarket(5, 9);
     requireSingleRequest(readyButton, 1);
-    await capture('client-1-next-round-actions-fixture');
+    requireShopPortraits(await capture('client-1-next-round-actions-fixture'));
+    if (canvasId === 'mobile-19.5-9') {
+      if (duel) {
+        api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 2, 3, true, false, 1, 6, 6, 0, 0, 0, 0, 5, 4, 0], 'Player1');
+      } else {
+        api.sendPlaySignal(session, 'AP_RoomView', [6, 3, 2, 1, 6, playerCount, 0, true,
+          Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
+      }
+      api.sendPlaySignal(session, replaySignal, duel
+        ? [2, 42, 1, [1, 1, 999, 999, 3], [2, 2, 1, 4, 1]]
+        : [2, 1, 2, 1, 42, [1, 1, 1, 999, 999, 3, 0], [1, 2, 2, 1, 4, 1, 0]], 'Player1');
+      const stats = duel ? 'Duel/ReplayBoard/Own1' : 'Room/Match/Replay/Own1';
+      const statsId = control(stats).Id;
+      for (let step = 0; step < 50; step++) {
+        const label = api.playSnapshot(session, { paint: true }).paint.find(item => item.id === statsId);
+        if (label?.text?.includes('盾')) break;
+        api.stepPlay(session, 0.05);
+      }
+      await capture('client-1-replay-long-stats');
+      const { textLayout } = visibleText(stats) ?? {};
+      assert.ok(textLayout?.fits && textLayout.visibleLineCount === 3, 'Long combat values must leave the shield visible');
+      assert.match(textLayout.lines[1], /^999攻 99[89]命$/u);
+      assert.match(textLayout.lines[2], /^盾 \d+$/u);
+    }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
@@ -404,8 +450,13 @@ const textDefects = results.flatMap(result => result.frames.flatMap(frame => fra
   .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))
   .map(text => ({ canvasId: result.canvasId, frame: frame.name, path: text.path, text: text.text,
     height: text.height, requiredHeight: text.textLayout?.requiredHeight }))));
-const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status:results.some(r=>r.runtimeExceptions.length||r.frames.some(f=>f.mountError||f.logs.length))?'runtime-failed':textDefects.length?'observed-text-defects':'executed',mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
+const assetDefects = results.flatMap(result => result.frames.flatMap(frame => frame.assetWarnings
+  .map(warning => ({ canvasId: result.canvasId, mode: result.mode, frame: frame.name, ...warning }))));
+const runtimeFailed = results.some(result => result.runtimeExceptions.length || result.frames.some(frame => frame.mountError || frame.logs.length));
+const status = runtimeFailed ? 'runtime-failed' : assetDefects.length ? 'observed-asset-defects'
+  : textDefects.length ? 'observed-text-defects' : 'executed';
+const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,assetDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status,mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
 fs.writeFileSync(path.join(output,'receipt.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify({status:report.status,output,controls:receipt.controls,results:results.map(r=>({canvasId:r.canvasId,playerCount:r.playerCount,runtimeExceptions:r.runtimeExceptions,frames:r.frames.map(f=>({name:f.name,mountError:f.mountError,errors:f.logs}))}))},null,2));
 
-if(report.status==='runtime-failed'||(process.env.SIMULATOR_REQUIRE_TEXT==='1'&&textDefects.length))process.exitCode=1;
+if(runtimeFailed || assetDefects.length || (process.env.SIMULATOR_REQUIRE_TEXT==='1'&&textDefects.length))process.exitCode=1;
