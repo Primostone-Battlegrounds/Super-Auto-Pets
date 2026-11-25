@@ -155,7 +155,8 @@ local function show_online()
     show_section(board)
     if online then online.refresh(); return end
     online = (duel and duel_view or room_view)(root:GetChild(board))
-    online.start(root:GetChild(board), online_portraits(duel))
+    local badges = root:FindChild("Duel/ReplayBoard/BadgePool")
+    online.start(root:GetChild(board), online_portraits(duel), badges)
 end
 
 local function receive_lobby(_, values)

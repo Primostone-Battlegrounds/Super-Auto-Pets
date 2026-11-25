@@ -265,6 +265,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
   if(mode) {
     const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
     const foodPortrait = control('Practice/Shop/Food1/Portrait/Layer1').Id;
+    const priceId = control('Duel/ReplayBoard/BadgePool/Price1').Id;
     const shopPortraits = [...portraits, foodPortrait];
     function requireShopPortraits(frame) {
       assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),
@@ -288,6 +289,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.setPlayView(session,1);
     const duel = mode === 2;
     const shop = duel ? 'Duel' : 'Room/Match/Shop';
+    const shopBadges = duel ? 'Duel/MarketOffers/BadgePool' : `${shop}/BadgePool`;
+    const replayBadges = duel ? 'Duel/ReplayBoard/BadgePool' : 'Room/Match/Replay/BadgePool';
     const rerollButton = duel ? 'Duel/Reroll' : `${shop}/Reroll/Hit`;
     const readyButton = duel ? 'Duel/Ready' : 'Room/Match/Ready/Hit';
     const between = duel ? 'Duel/InspectReward' : 'Room/Match/Hint';
@@ -296,10 +299,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
-    if (duel) {
-      const offer = visibleText('Duel/MarketOffers/OfferLabel1').textLayout;
-      assert.ok(offer.fits && offer.lines.at(-1) === '3金', 'Offer price should stay on one visible line');
-    }
+    requireText(`${shopBadges}/Price1`, /^3 金$/u);
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
     requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);
@@ -308,11 +308,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('client-1-inspect-team');
     requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/su);
     requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
-    const teamStats = visibleText(duel ? `${shop}/TeamLabel1` : `${shop}/Team1/Text`).textLayout;
-    assert.ok(teamStats.fits && teamStats.lines.slice(1).join('\n') === '3攻 2命\nL2 · 经验1');
-    const [attack, health] = teamStats.richLines[1].runs.filter(run => run.bold);
-    assert.ok(attack?.fontSize > 20 && health?.fontSize > 20 && attack.color !== health.color,
-      'Combat numerals must stand out as two readable values');
+    requireText(`${shop}/AbilityBody`, /经验 1/u);
+    requireText(`${shopBadges}/Attack1`, /^攻3$/u);
+    requireText(`${shopBadges}/Life1`, /^命2$/u);
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
     await capture('client-1-buy-request');
@@ -358,8 +356,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
           const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
           assert.ok(own && enemy && own.left + own.width < enemy.left,
             'The original portraits must appear on opposing lanes');
-          assert.ok(!replayFrame.paint.some(item => item.id === foodPortrait),
-            'A food offer must not appear in battle');
+          assert.ok(!replayFrame.paint.some(item => item.id === foodPortrait || item.id === priceId),
+            'A food offer or price must not appear in battle');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
@@ -393,7 +391,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     const returned = await capture('client-1-return');
-    assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id)), 'Pooled portraits must be hidden in the lobby');
+    assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id) || item.id === priceId),
+      'Pooled portraits and prices must be hidden in the lobby');
     requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
@@ -441,10 +440,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
         api.stepPlay(session, 0.05);
       }
       await capture('client-1-replay-long-stats');
-      const { textLayout } = visibleText(stats) ?? {};
-      assert.ok(textLayout?.fits && textLayout.visibleLineCount === 3, 'Long combat values must leave the shield visible');
-      assert.match(textLayout.lines[1], /^999攻 99[89]命$/u);
-      assert.match(textLayout.lines[2], /^盾 \d+$/u);
+      requireText(stats, /盾 \d+/u);
+      requireText(`${replayBadges}/Attack1`, /^攻999$/u);
+      requireText(`${replayBadges}/Life1`, /^命99[89]$/u);
     }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
