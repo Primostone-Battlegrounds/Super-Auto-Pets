@@ -75,11 +75,11 @@ function card(name, position, width, type, interactive = true, visible = true) {
 }
 
 export function button(name, position, size, title, primary = false, fontSize = primary ? 28 : 20) {
-  const blue = name === 'Freeze' || name === 'Auto' || name === 'Fast';
-  const fill = primary ? 107015 : blue ? 107013 : 107102;
+  const blue = ['OpenMenu', 'Reset', 'Freeze', 'Auto', 'Fast'].includes(name);
+  const fill = primary ? 107015 : blue ? 107034 : 107102;
   return group(name, position, size, [
-    roundedPlate('Rim', [0, 0], size, 107011, primary ? '#685130' : '#325650'),
-    roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], fill, blue ? '#6d91af' : '#ffffff'),
+    roundedPlate('Rim', [0, 0], size, blue ? 107034 : 107011, primary ? '#685130' : '#637b63'),
+    roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], fill, blue ? '#bbffec' : '#ffffff'),
     label('Title', [0, 2], [size[0] - 20, size[1] - 10], title, fontSize, blue ? '#fffdf2' : '#242819'),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
@@ -118,21 +118,22 @@ export const nativeRun = {
     stat('Money', 69, '金币', '#ffedba', '#7c4618'),
     stat('Wins', 243, '胜场', '#dcedc3', '#2b5c40'),
     stat('Lives', 417, '生命', '#f9dfcb', '#893e2e'),
-    group('Field', [0, 119], [1172, 218], [
-      image('Surface', [0, 0], [1172, 218], '#b9e4e7'),
-      image('Divider', [-235, 22], [678, 154], '#79af9d', { image: 100003 }),
-      image('FarHill', [185, 4], [800, 144], '#82ac7c', { image: 100002 }),
-      image('Ground', [0, -68], [1172, 82], '#8fb66e'),
-      roundedPlate('PrepRail', [0, -20], [874, 142], 107102, '#f9e6ad'),
-      { ...roundedPlate('AllyRail', [-305, -20], [548, 142], 107102, '#e6efc5'), visible: false },
-      { ...roundedPlate('RivalRail', [305, -20], [548, 142], 107102, '#f2cbab'), visible: false },
-      ellipse('Clash', [0, 4], [23, 23], '#faf5e6', { visible: false }),
+    group('Field', [0, 61], [1172, 334], [
+      image('Surface', [0, 0], [1172, 334], '#b9e1e7'),
+      image('Cloud', [263, 124], [247, 32], '#e3f2e0', { image: 100002 }),
+      image('Ridge', [43, 67], [706, 184], '#79a9a7', { image: 100003 }),
+      image('Divider', [-237, 56], [688, 154], '#6da794', { image: 100003 }),
+      image('FarHill', [190, 34], [790, 138], '#86b086', { image: 100002 }),
+      image('Ground', [0, -80], [1172, 174], '#90b76c'),
+      roundedPlate('PrepRail', [0, 37], [1028, 130], 107102, '#f9e5af'),
+      { ...roundedPlate('AllyRail', [-305, 7], [548, 152], 107102, '#e9edb8'), visible: false },
+      { ...roundedPlate('RivalRail', [305, 7], [548, 152], 107102, '#f4c5a5'), visible: false },
+      ellipse('Clash', [0, 12], [23, 23], '#faf5e6', { visible: false }),
     ]),
     label('TeamCaption', [-309, 208], [521, 32], '', 19, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
-    ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
-    image('FooterLine', [0, -262], [1152, 2], pigment.edge),
+    ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 67 - (slot - 1) * 9], 106, 'enemy', false, false)),
     group('Shop', [0, -124], [1164, 428], [
       roundedPlate('Paper', [0, 0], [1164, 268], 107102, '#ffeaca'),
       roundedPlate('Rail', [0, 0], [1128, 164], 107102, '#ebc389'),
@@ -166,17 +167,15 @@ export const nativeRun = {
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),
-    group('Battle', [0, -137], [1152, 220], [
-      roundedPlate('Border', [0, 0], [1152, 220], 107011, pigment.edge),
-      roundedPlate('Surface', [0, 1], [1144, 212], 107102, '#eff2d7'),
-      roundedPlate('Rule', [-537, 63], [9, 48], 107015),
-      label('Outcome', [0, 72], [1038, 38], '', 32, pigment.ink, 'left'),
-      label('Event', [0, 34], [1038, 32], '', 22, pigment.ink, 'left'),
-      button('Replay', [-430, -45], [202, playButtonHeight], '下一条战斗事件'),
-      button('Auto', [-216, -45], [202, playButtonHeight], '暂停回放'),
-      button('Fast', [-2, -45], [202, playButtonHeight], '速度：1 倍'),
-      button('Rewatch', [212, -45], [202, playButtonHeight], '重新回放'),
-      button('NewSeed', [426, -45], [202, playButtonHeight], '新一局'),
+    group('Battle', [0, -174], [1152, 154], [
+      roundedPlate('Surface', [0, 0], [1148, 154], 107102, '#eff4d7'),
+      label('Outcome', [0, 60], [1038, 34], '', 28, pigment.ink, 'left'),
+      label('Event', [0, 29], [1038, 28], '', 20, pigment.ink, 'left'),
+      button('Replay', [-430, -33], [202, playButtonHeight], '下一条战斗事件'),
+      button('Auto', [-216, -33], [202, playButtonHeight], '暂停回放'),
+      button('Fast', [-2, -33], [202, playButtonHeight], '速度：1 倍'),
+      button('Rewatch', [212, -33], [202, playButtonHeight], '重新回放'),
+      button('NewSeed', [426, -33], [202, playButtonHeight], '新一局'),
     ], false),
     button('Primary', [411, -296], [329, playButtonHeight], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),

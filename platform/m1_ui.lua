@@ -297,10 +297,12 @@ local function arrange(preparing)
     show("Field/AllyRail", not preparing)
     show("Field/RivalRail", not preparing)
     show("Field/Clash", not preparing)
+    control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
+    control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
     control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
     control("Hint"):SetSizeDelta(preparing and 590 or 824, 53)
     for index = 1, rules.team_size do
-        local x, y = 91 + (index - 1) * 112, 115 - (index - 1) * 9
+        local x, y = 91 + (index - 1) * 112, 67 - (index - 1) * 9
         local team_path = "Team" .. index
         control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 104 or y)
         show(team_path .. "/Hit", preparing)
@@ -453,8 +455,6 @@ local function draw(refresh)
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
         local accent = replaying and 0x286452 or accents[battle.outcome]
         text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
-        control("Battle/Rule").imageColor = colour(accent)
-        control("Battle/Border").imageColor = colour(state.final and accent or 0x90aa91)
         text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events, battle_event(event)))
         text("Battle/Auto/Title", playing and "暂停回放" or "继续回放")
         text("Battle/Fast/Title", string.format("速度：%d 倍", replay_speed))
@@ -967,9 +967,9 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Reset", function() show_restart("board") end)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
-    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Divider", "Field/FarHill", "Field/Ground",
+    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/FarHill", "Field/Ground",
         "Shop/Paper", "Shop/Rail", "Shop/Rule", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
-        "FooterLine", "Battle/Border", "Battle/Surface", "Battle/Rule", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
+        "Battle/Surface", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
         "Menu/Rule", "Menu/Heading"}) do
         show(path, true)
     end
