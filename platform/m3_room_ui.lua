@@ -200,7 +200,7 @@ local function paint_battle()
         badges.select("replay", object("Replay"), function(slot)
             local label = object("Replay/" .. (slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5))))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 39, x, y + 90
+            return x, y - 39, x, y + 35
         end)
     end
     local allied_side = frame.left == match.seat and 0 or 1

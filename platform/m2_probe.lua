@@ -375,7 +375,7 @@ local function show_replay()
         badges.select("replay", board_root, function(slot)
             local label = board_root:GetChild(slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5)))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 40, x, y + 101
+            return x, y - 40, x, y + 23
         end)
     elseif badges and not preparing then badges.hide() end
     for slot = 1, rules.team_size do
