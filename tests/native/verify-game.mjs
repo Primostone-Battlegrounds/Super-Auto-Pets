@@ -137,6 +137,10 @@ function readControls(expected, actual, parent, bounds) {
     assert.equal(control.active === false, definition.active === false, key);
     assert.equal(control.visible === false, definition.visible === false, key);
     assert.deepEqual(control.anchor, definition.anchor, key);
+    if (definition.kind === 'image') {
+      assert.equal(control.image, definition.image, key);
+      assert.equal(control.colour ?? '#ffffff', definition.colour ?? '#ffffff', key);
+    }
     if (definition.text) {
       for (const textKey of ['content', 'fontSize', 'align', 'valign', 'autoSize', 'minFontSize']) {
         const fallback = { content: '', autoSize: false, minFontSize: 20 }[textKey];

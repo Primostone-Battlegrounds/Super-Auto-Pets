@@ -27,11 +27,6 @@ export function label(name, position, size, content = '', fontSize = 20, colour 
   };
 }
 
-export function displayLabel(...args) {
-  const node = label(...args);
-  return { ...node, text: { ...node.text, outline: true, outlineColour: node.text.colour, outlineOpacity: 0.28 } };
-}
-
 export function group(name, position, size, children, visible = true) {
   return { name, kind: 'container', position, size, children, visible };
 }
@@ -85,7 +80,7 @@ export function button(name, position, size, title, primary = false, fontSize = 
   return group(name, position, size, [
     roundedPlate('Rim', [0, 0], size, 107011, primary ? '#685130' : '#325650'),
     roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], fill, blue ? '#6d91af' : '#ffffff'),
-    (primary ? displayLabel : label)('Title', [0, 2], [size[0] - 20, size[1] - 10], title, fontSize, blue ? '#fffdf2' : '#242819'),
+    label('Title', [0, 2], [size[0] - 20, size[1] - 10], title, fontSize, blue ? '#fffdf2' : '#242819'),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
 }
@@ -94,7 +89,7 @@ function stat(name, x, title, paper, number) {
   return group(name, [x, 281], [152, 65], [
     roundedPlate('Surface', [0, 0], [152, 65], 107102, paper),
     label('Label', [0, 18], [144, 28], title, 17, pigment.muted),
-    displayLabel('Value', [0, -15], [144, 35], '', name === 'Round' ? 23 : 28, number),
+    label('Value', [0, -15], [144, 35], '', name === 'Round' ? 23 : 28, number),
   ]);
 }
 
@@ -116,7 +111,7 @@ export const nativeRun = {
     roundedPlate('Border', [0, 0], [1202, 684], 107011, '#24443c'),
     roundedPlate('Panel', [0, 0], [1192, 674], 107102, '#fff1ce'),
     roundedPlate('Header', [0, 280], [1172, 98], 107102, '#e8f6e7'),
-    displayLabel('Heading', [-373, 303], [374, 46], '小动物自走棋', 39, pigment.ink, 'left'),
+    label('Heading', [-373, 303], [374, 46], '小动物自走棋', 39, pigment.ink, 'left'),
     button('OpenMenu', [-486, 255], [142, 48], '菜单'),
     button('Reset', [-328, 255], [142, 48], '重开本局'),
     stat('Round', -105, '回合', '#d5efe9', pigment.ink),
@@ -175,7 +170,7 @@ export const nativeRun = {
       roundedPlate('Border', [0, 0], [1152, 220], 107011, pigment.edge),
       roundedPlate('Surface', [0, 1], [1144, 212], 107102, '#eff2d7'),
       roundedPlate('Rule', [-537, 63], [9, 48], 107015),
-      displayLabel('Outcome', [0, 72], [1038, 38], '', 32, pigment.ink, 'left'),
+      label('Outcome', [0, 72], [1038, 38], '', 32, pigment.ink, 'left'),
       label('Event', [0, 34], [1038, 32], '', 22, pigment.ink, 'left'),
       button('Replay', [-430, -45], [202, playButtonHeight], '下一条战斗事件'),
       button('Auto', [-216, -45], [202, playButtonHeight], '暂停回放'),

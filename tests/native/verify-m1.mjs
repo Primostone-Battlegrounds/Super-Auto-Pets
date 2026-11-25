@@ -119,7 +119,7 @@ function verifyControls(expected, decoded, records, prefix = '', parentSize) {
     assert.deepEqual(observed.position, control.position ?? [0, 0], `${key} position`);
     assert.deepEqual(observed.size, control.size, `${key} size`);
     assert.equal(observed.image, control.image);
-    assert.equal(observed.colour, control.colour);
+    if (control.kind === 'image') assert.equal(observed.colour ?? '#ffffff', control.colour ?? '#ffffff', key);
     assert.equal(observed.visible, control.visible === false ? false : undefined);
     if (control.text) {
       assert.equal(observed.text.content ?? '', control.text.content);
