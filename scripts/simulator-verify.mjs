@@ -162,6 +162,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
     }
     await capture('client-1-replay-wait');
+    if (duel) requireText('Duel/Status', /战斗计算中/u);
     sendReplay(2);
     const rejected = await capture('client-1-replay-bad-outcome');
     assert.ok(rejected.logs.some(entry => entry.text.includes('replay_mismatch')), 'A contradictory result must be rejected');
@@ -182,11 +183,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
       if (eventText && pattern.test(eventText)) {
         await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
+        if (duel && name === 'attack') requireText('Duel/Status', /正在播放本轮战斗/u);
+        if (duel && name === 'result') requireText('Duel/Status', /回放结束 · 等待结算/u);
         if (name === 'attack') {
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
           assert.equal(renderedEvent(), eventText, 'Paused playback changed the rendered event');
+          if (duel) {
+            await capture('client-1-replay-paused');
+            requireText('Duel/Status', /本轮回放已暂停/u);
+          }
           click(playback);
         }
         expectEvents.shift();
@@ -194,6 +201,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
       api.stepPlay(session, 0.05);
     }
     assert.deepEqual(expectEvents.map(([name]) => name), [], 'Replay must visibly progress through authority-derived phases');
+    if (duel) {
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 1, true, false, 1, 3, 3, 0, 0, 7, 0, 5, 4, 1], 'Player1');
+      await capture('client-1-settlement');
+      requireText('Duel/Status', /本轮获胜 · 确认下一轮/u);
+    }
     if (!duel && playerCount > 1) {
       api.sendPlaySignal(session, 'AP_RoomView', [2, 3, 1, 2, 2, playerCount, 0, true,
         Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player2');

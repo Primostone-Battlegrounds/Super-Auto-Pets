@@ -39,7 +39,8 @@ local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
-local playback, status_line, seconds, hint
+local playback, status_header, status_message, seconds, hint
+local awaiting_settlement = false
 local draw_status
 local visible = {}
 local bindings = {}
@@ -284,6 +285,7 @@ local function bind(name, callback, parent)
 end
 
 local function show_replay()
+    draw_status()
     show_action("Replay", "ReplayLabel", playback ~= nil)
     local board_root = child("ReplayBoard")
     show(board_root, playback ~= nil and not preparing)
@@ -433,8 +435,17 @@ local function receive_market(_, parameters)
 end
 
 draw_status = function()
+    if not status_header then return end
+    local message = status_message
+    if awaiting_settlement and playback and playback.round == round then
+        if playback.position == #playback.events then
+            message = "回放结束 · 等待结算"
+        else
+            message = playback.playing and "正在播放本轮战斗" or "本轮回放已暂停"
+        end
+    end
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
-    local content = status_line .. suffix .. (hint and ("\n" .. hint) or "")
+    local content = status_header .. "\n" .. message .. suffix .. (hint and ("\n" .. hint) or "")
     if status.text ~= content then status.text = content end
 end
 
@@ -476,9 +487,10 @@ local function receive_snapshot(_, parameters)
         end
     end
     local seat_text = seat > 0 and string.format("席位 %d", seat) or "等候席位"
-    status_line = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
+    status_header = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d", seat_text, round, lives, opponent_lives)
+    status_message = message
+    awaiting_settlement = players == 2 and seat > 0 and phase == 3
     seconds = players == 2 and seat > 0 and (phase == 0 or phase == 1) and math.max(0, remaining) or nil
-    draw_status()
     show_actions()
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
@@ -521,7 +533,8 @@ function OnDestroy()
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
-    playback, status_line, seconds, hint, visible = nil, nil, nil, nil, {}
+    playback, status_header, status_message, seconds, hint, visible = nil, nil, nil, nil, nil, {}
+    awaiting_settlement = false
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end
