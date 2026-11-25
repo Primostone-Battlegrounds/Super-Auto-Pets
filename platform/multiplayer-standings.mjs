@@ -34,7 +34,6 @@ local function bind_online_badges(pool)
     if not pool then return nil end
     local source = pool.parent
     local index = pool:GetSiblingIndex()
-    local impact = pool:GetChild("Price1")
     local state, fields = nil, {}
     local function set(control, value)
         local visible = value ~= nil
@@ -46,6 +45,7 @@ local function bind_online_badges(pool)
         fields[slot] = {pool:GetChild("Attack" .. slot), pool:GetChild("Life" .. slot),
             slot > 5 and pool:GetChild("Price" .. (slot - 5)) or nil}
     end
+    local impact = fields[6][3]
     local function hide()
         if state then
             set(impact, nil)
