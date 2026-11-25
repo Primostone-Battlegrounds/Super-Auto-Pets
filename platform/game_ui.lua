@@ -151,6 +151,7 @@ end
 
 function OnStart()
     root, active, mode = script.object, true, 0
+    set_visual_plates(root)
     lobby = root:GetChild("Lobby")
     bind(lobby, "Choices/Room/Hit", function()
         if pending then return end

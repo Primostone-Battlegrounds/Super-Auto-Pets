@@ -83,6 +83,7 @@ export function nativeGame(lua53, lua54, parse, ids) {
     ".on('whenTimerIsTriggered', (event, f) => {", '.onSignal(request, (event, f) => {',
   ], 2);
   const lobbySource = read('./game_lobby.ts').replace('id: 1073741825,', `id: ${ids.lobby},`);
+  const clientLayout = layout(shop.rules);
   const source = bundleRun(parse, true, convert => {
     const wrap = (name, code, callbacks, argument = '') => [
       `local function ${name}(${argument})`,
@@ -101,10 +102,10 @@ export function nativeGame(lua53, lua54, parse, ids) {
     const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
     const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
-  });
+  }, clientLayout);
   parse(source, { luaVersion: '5.3' });
   return {
-    layout: layout(shop.rules), source, roomSettings: room.settings,
+    layout: clientLayout, source, roomSettings: room.settings,
     shopRules: shop.rules, shopLevelThresholds: shop.levelThresholds, stockBaseLength: shop.start[0].length,
     graphs: [
       { graphId: ids.lobby, code: lobbySource }, { graphId: ids.duel, code: duelSource },

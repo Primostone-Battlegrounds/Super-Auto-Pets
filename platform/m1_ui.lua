@@ -929,6 +929,7 @@ end
 function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
+    if not view_root then set_visual_plates(root) end
     portrait = bind_portrait(control, 1.56)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"

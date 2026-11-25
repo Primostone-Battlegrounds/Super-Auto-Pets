@@ -13,7 +13,7 @@ export function image(name, position, size, colour, options = {}) {
 }
 
 export function roundedPlate(name, position, size, imageId, colour = '#ffffff') {
-  return image(name, position, size, colour, { image: imageId, imageType: 'stretch' });
+  return image(name, position, size, colour, { image: imageId });
 }
 
 function ellipse(name, position, size, colour, options = {}) {
