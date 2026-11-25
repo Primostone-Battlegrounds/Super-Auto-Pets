@@ -140,23 +140,34 @@ local function play_sound(sound)
     if ok and math.type(instance) == "integer" then sound_instance = instance end
 end
 
-local function card(path, title, detail, selected, id, face, rim, mirrored)
+local function card(path, title, selected, id, face, rim, mirrored)
     show(path, true)
     show(path .. "/Rim", true)
     show(path .. "/Face", true)
     control(path .. "/Face").imageColor = colour(face)
     control(path .. "/Rim").imageColor = colour(rim)
-    text(path .. "/Name", title)
-    show(path .. "/StatsPaper", detail ~= "")
-    text(path .. "/Detail", detail)
+    if drag and drag.parent == control(path) then title = "拖动中" end
+    if title then text(path .. "/Name", title) else show(path .. "/Name", false) end
     portrait(path .. "/Portrait", id, mirrored)
     if selected ~= nil then show(path .. "/Selected", selected) end
 end
 
-local function team_card(path, unit, index, selected, effect)
+local function card_stats(path, attack, health, boosted)
+    local occupied = attack ~= nil
+    for _, child in ipairs({"StatsPaper", "LifePaper", "Detail", "LifeValue"}) do
+        show(path .. "/" .. child, occupied)
+    end
+    if occupied then
+        local format = boosted and "%+d" or "%d"
+        text(path .. "/Detail", string.format(format, attack) .. "攻")
+        text(path .. "/LifeValue", string.format(format, health) .. "命")
+    end
+end
+
+local function team_card(path, unit, selected, effect)
     local mirrored = selected == nil
-    local background = mirrored and 0xcf9b72 or 0x9cc28e
-    local rim = selected and 0xa86214 or 0x52785d
+    local background = not unit and 0xe0cea2 or mirrored and 0xd6b38a or 0xc0c88d
+    local rim = selected and 0xa86214 or not unit and 0x947e52 or mirrored and 0x815d40 or 0x667645
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
     local preparing = state.phase == "preparation"
@@ -173,13 +184,14 @@ local function team_card(path, unit, index, selected, effect)
         end
     end
     if not unit then
-        card(path, "空位 " .. index, "", selected, nil, background, rim)
-        text(path .. "/Tag", "")
+        card(path, nil, selected, nil, background, rim, mirrored)
+        card_stats(path)
+        show(path .. "/Tag", false)
         return
     end
     local pet = rules_data.pet_by_id[unit.id] or rules_data.token_by_id[unit.id]
-    card(path, pet.name, string.format("%d攻  %d命", unit.attack, unit.health),
-        selected, unit.id, background, rim, mirrored)
+    card(path, pet.name, selected, unit.id, background, rim, mirrored)
+    card_stats(path, unit.attack, unit.health)
     local tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield
         or (not preparing and "L" .. unit.level or ""))
     text(path .. "/Tag", tag, effect and effect.ink or 0x315a6d)
@@ -248,20 +260,26 @@ end
 local function offer_card(path, kind, index)
     local item = offer(kind, index)
     local selected = matches(drag or selection, kind, index)
-    local face = selected and 0xfff4ce or 0xeec786
+    local face = selected and 0xfff4ce or 0xead19a
     local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
-    text(path .. "/Tag", item and item.frozen and "已冻结" or "")
+    show(path .. "/PriceTicket", item ~= nil)
+    show(path .. "/Price", item ~= nil)
+    local frozen = item and item.frozen == true
+    show(path .. "/Tag", frozen or (item ~= nil and kind == "reward"))
+    if frozen then text(path .. "/Tag", "已冻结") end
     if not item then
-        card(path, kind == "reward" and "升级奖励" or "空商品", "", selected, nil, face, rim)
+        card(path, kind == "reward" and "升级奖励" or "空商品", selected, nil, face, rim)
+        card_stats(path)
         return
     end
     local is_food = kind == "food"
     local definition = (is_food and rules_data.food_by_id or rules_data.pet_by_id)[item.id]
     local cost = is_food and rules.food_cost or rules.pet_cost
-    local detail = string.format("%d金  %d攻 %d命", cost, definition.attack, definition.health)
     if kind == "reward" then text(path .. "/Tag", string.format("%d/%d", index, #state.shop.rewards)) end
-    card(path, definition.name, detail, selected, item.id, face, rim)
+    card(path, definition.name, selected, item.id, face, rim)
+    text(path .. "/Price", string.format("%d金", cost))
+    card_stats(path, definition.attack, definition.health, is_food)
 end
 
 local function selected_info(picked)
@@ -329,15 +347,13 @@ local function arrange(preparing)
     if preparing_layout == preparing then return end
     preparing_layout = preparing
     arrange_portraits(preparing)
-    show("Field/PrepRail", preparing)
-    show("Field/AllyRail", not preparing)
-    show("Field/RivalRail", not preparing)
+    control("Field/PrepRail"):SetAnchoredPosition(0, preparing and -7 or -26)
     control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
     control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
     control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
     control("Hint"):SetSizeDelta(preparing and 590 or 824, 53)
     for index = 1, rules.team_size do
-        local x, y = 91 + (index - 1) * 112, 67 - (index - 1) * 9
+        local x, y = 82 + (index - 1) * 112, 54
         local team_path = "Team" .. index
         control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 104 or y)
         show(team_path .. "/Hit", preparing)
@@ -439,18 +455,20 @@ local function draw(refresh)
     for index = 1, rules.team_size do
         local hit = effect and event.slot == index
         if not preparing then
-            team_card("Enemy" .. index, enemy[index], index, nil, hit and event.side == "enemy" and effect)
+            team_card("Enemy" .. index, enemy[index], nil, hit and event.side == "enemy" and effect)
         end
-        team_card("Team" .. index, player[index], index, matches(drag or selection, "team", index),
+        local path = "Team" .. index
+        team_card(path, player[index], matches(drag or selection, "team", index),
             hit and event.side == "player" and effect)
         local drop = drop_label and drop_source.target == index
-        show("Team" .. index .. "/DropTarget", drop == true)
+        local _, _, legal = drag_feedback(drag and {kind = drag.kind, index = drag.index, merge = drag.merge, target = index})
+        show(path .. "/DropTarget", drop == true or legal ~= nil)
+        if drop or legal then control(path .. "/DropTarget").imageColor = colour(drop and 0x20655e or 0x508774) end
         if drop then
-            show("Team" .. index .. "/XP", false)
-            show("Team" .. index .. "/XPPaper", false)
-            text("Team" .. index .. "/DropLabel", drop_label)
+            show(path .. "/Name", false)
+            text(path .. "/DropLabel", drop_label)
         else
-            show("Team" .. index .. "/DropLabel", false)
+            show(path .. "/DropLabel", false)
         end
     end
     show("Shop", preparing)
@@ -570,14 +588,11 @@ local function move_drag_picture(event, target)
     local picture_width, picture_height = drag.picture:GetSizeDelta()
     local half_width, half_height = picture_width / 2, picture_height / 2
     local center_x = math.max(half_width, math.min(width - half_width, x))
-    local lift = y + 40
+    local lift = y + 42
     if target then
         local path = "Team" .. target
         local _, slot_y = control(path):GetAnchoredPosition()
-        local label = control(path .. "/DropLabel")
-        local _, label_y = label:GetAnchoredPosition()
-        local _, label_height = label:GetSizeDelta()
-        lift = math.max(lift, height / 2 + slot_y + label_y + label_height / 2 + half_height + 4)
+        lift = math.max(lift, height / 2 + slot_y + 71 + half_height)
     end
     local center_y = math.max(half_height, math.min(height - half_height, lift))
     drag.picture:SetAnchoredPosition(center_x - width / 2, center_y - height / 2)
@@ -1005,14 +1020,15 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
     for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/Ground",
-        "Shop/Paper", "Shop/Rail", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
+        "Field/PrepRail", "Field/LeftBrush", "Field/RightBrush", "Field/Foreground", "Team1/Front", "Enemy1/Front",
+        "Shop/Paper", "Shop/Rail", "TeamCaption",
         "Battle/Surface", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
         "Menu/Heading"}) do
         show(path, true)
     end
     for _, name in ipairs({"Shade", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
     for _, path in ipairs({"Tooltip/Border", "Tooltip/Paper", "Tooltip/Pointer",
-        "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper", "BattleFX/Strike/Lower",
+        "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper",
         "BattleFX/Impact/Burst", "BattleFX/Impact/Flash", "BattleFX/Impact/Spark"}) do show(path, true) end
     for _, path in ipairs({"Round", "Money", "Wins", "Lives"}) do
         show(path, true)

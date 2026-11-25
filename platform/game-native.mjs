@@ -42,10 +42,10 @@ function layout(duelRules) {
   return {
     name: gameInterface, script: gameScript, showCursor: true, blockCursor: true, blockKeys: true,
     controls: [
-      { ...image('GameBackdrop', [0, 0], [1, 1], '#649c89'), anchor: { min: [0, 0], max: [1, 1] } },
+      { ...image('GameBackdrop', [0, 0], [1, 1], '#587454'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        roundedPlate('Border', [0, 0], [652, 596], 107011, '#24443c'),
-        roundedPlate('Paper', [0, 4], [640, 580], 107102, '#fff5d7'),
+        roundedPlate('Border', [0, 0], [652, 596], 106046, '#3c5140'),
+        roundedPlate('Paper', [0, 4], [640, 580], 106046, '#fff3d9'),
         label('Title', [0, 221], [560, 76], '小动物自走棋', 52),
         label('Status', [0, 158], [560, 43], '正在连接千星关卡', 24, pigment.muted),
         group('Choices', [0, -5], [396, 270], [

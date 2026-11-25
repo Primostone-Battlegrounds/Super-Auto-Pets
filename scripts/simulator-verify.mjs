@@ -109,8 +109,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
     const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
-    assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
+    assert.ok(primarySkin?.imageId === 106046 && primarySkin.imageType === 'Stretch',
       'Practice primary action must use its sliced native plate');
+    requireText('Practice/Shop/Pet1/Price', /^3金$/u);
+    requireText('Practice/Shop/Pet1/Detail', /^\d+攻$/u);
+    requireText('Practice/Shop/Pet1/LifeValue', /^\d+命$/u);
+    assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
     for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
       requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
     }
@@ -130,7 +134,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
       if(roundIndex===10)await capture('practice-tier-six');
       press('Primary');
       if (roundIndex === 0) {
-        await capture('practice-battle');
+        const battle = await capture('practice-battle');
+        assert.ok(battle.paint.some(item => item.id === control('Practice/Enemy1/Portrait/Layer1').Id));
         let strike = false;
         for (let frame = 0; frame < 75 && !strike; frame++) {
           api.stepPlay(session, 0.1);
@@ -190,13 +195,14 @@ for(const {canvasId,playerCount,mode} of configurations) {
     pointer('move', slot);
     await capture('practice-drag-pet-target');
     requireText(`${team}/DropLabel`, /^购买$/u);
+    requireText(`${pet}/Name`, /^拖动中$/u);
     assert.notEqual(picture.parent, petHome, 'Dragged portrait must lift out of the source card');
     requireLiftedClearance('Practice/Portrait');
     pointer('move', outside);
     pointer('up', outside);
     await capture('practice-drag-cancel');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText(`${team}/Name`, /^空位/u);
+    assert.ok(!visibleText(`${team}/Name`));
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     assert.equal(picture.parent, petHome);
     assert.ok(!visibleText(`${team}/DropLabel`));
@@ -206,7 +212,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     pointer('cancel', slot);
     await capture('practice-drag-interrupted');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText(`${team}/Name`, /^空位/u);
+    assert.ok(!visibleText(`${team}/Name`));
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     assert.equal(picture.parent, petHome);
     press('Shop/Reroll');
@@ -220,7 +226,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     pointer('up', slot);
     await capture('practice-drag-purchase-preview');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText(`${team}/Name`, /^空位/u);
+    assert.ok(!visibleText(`${team}/Name`));
     requireText('Practice/Hint', /购买需 3 金.*点击标记站位确认/u);
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     press('Team1');
@@ -231,25 +237,26 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.equal(picture.parent, petHome);
     assert.ok(!visibleText(`${team}/DropLabel`));
 
-    const statsBefore = visibleText(`${team}/Detail`).text;
+    const stats = () => ['Detail', 'LifeValue'].map(name => visibleText(`${team}/${name}`).text);
+    const statsBefore = stats();
     const nearBottom = { centerX: slot.centerX, centerY: slot.centerY - slot.height / 2 + 2 };
     pointer('down', box(`${food}/Hit`));
     pointer('move', nearBottom);
     await capture('practice-drag-food-target');
     requireText(`${team}/DropLabel`, /^喂食$/u);
     requireLiftedClearance('Practice/Portrait');
-    assert.ok(!visibleText(`${team}/XP`), 'Drop feedback replaces the experience label');
+    assert.ok(!visibleText(`${team}/Name`), 'Drop feedback occupies the destination caption');
     assert.ok(!visibleText('Practice/OpponentCaption'), 'The lifted portrait must not cover the board caption');
     pointer('up', nearBottom);
     await capture('practice-drag-feed-preview');
     requireText('Practice/Money/Value', /^6$/u);
-    assert.equal(visibleText(`${team}/Detail`).text, statsBefore);
+    assert.deepEqual(stats(), statsBefore);
     requireText('Practice/Hint', /喂食需 3 金.*点击标记站位确认/u);
     press('Team1');
     await capture('practice-drag-feed');
     requireText('Practice/Money/Value', /^3$/u);
     requireText(`${food}/Name`, /^空商品$/u);
-    assert.notEqual(visibleText(`${team}/Detail`).text, statsBefore);
+    assert.notDeepEqual(stats(), statsBefore);
     requireText(`${team}/XP`, /^L1/u);
     requireText('Practice/OpponentCaption', /下一位电脑对手/u);
     assert.ok(!visibleText(`${team}/DropLabel`));

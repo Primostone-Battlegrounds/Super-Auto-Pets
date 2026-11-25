@@ -5,7 +5,7 @@ import { nativeRun, portraitLayers, sharedPortraitHomes } from './m1-ui.mjs';
 // The GIL authoring service accepts the sprite ID on a control. Set its
 // nine-slice mode through the native widget API after the tree is mounted.
 function plateInitializer(controls) {
-  const sliceImages = new Set([107011, 107012, 107013, 107015, 107102]);
+  const sliceImages = new Set([106046, 107011, 107012, 107013, 107015, 107102]);
   const paths = [];
   function visit(nodes, prefix) {
     for (const node of nodes) {
