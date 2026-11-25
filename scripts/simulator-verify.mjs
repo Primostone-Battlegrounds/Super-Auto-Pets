@@ -288,6 +288,10 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
+    if (duel) {
+      const offer = visibleText('Duel/MarketOffers/OfferLabel1').textLayout;
+      assert.ok(offer.fits && offer.lines.at(-1) === '3金', 'Offer price should stay on one visible line');
+    }
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
     requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);

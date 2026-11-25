@@ -195,7 +195,7 @@ local function render_market()
         if portrait then
             local animal = native_catalog.pets[math.abs(code)]
             portrait.shop(rules.team_size + slot, animal and animal.id)
-            label.text = pet and string.format("%s\n%s · %d金", pet.name,
+            label.text = pet and string.format("%s\n%s\n%d金", pet.name,
                 replay_view.combat_values(pet.attack, pet.health), rules.pet_cost) or "售罄"
         else
             label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
@@ -208,7 +208,7 @@ local function render_market()
         if portrait then
             local item = native_catalog.foods[math.abs(code)]
             portrait.shop(rules.team_size + rules.pet_slots + slot, item and item.id)
-            label.text = food and string.format("%s\n%s · %d金", food.name,
+            label.text = food and string.format("%s\n%s\n%d金", food.name,
                 replay_view.combat_values(food.attack, food.health, true), rules.food_cost) or "售罄"
         else
             label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",

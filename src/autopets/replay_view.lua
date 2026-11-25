@@ -13,8 +13,11 @@ function M.board(events, position)
 end
 function M.combat_values(attack, health, is_boost)
     local prefix = is_boost and "+" or ""
-    return string.format("<b><color=#714718><size=22>%s%d</size></color></b><size=13>攻 </size><b><color=#803D35><size=22>%s%d</size></color></b><size=13>命</size>",
-        prefix, attack, prefix, health)
+    local attack_text, health_text = prefix .. attack, prefix .. health
+    local digits = #attack_text + #health_text
+    local size = digits <= 3 and 22 or digits <= 4 and 20 or 18
+    return string.format("<b><color=#714718><size=%d>%s</size></color></b><size=12>攻 </size><b><color=#803D35><size=%d>%s</size></color></b><size=12>命</size>",
+        size, attack_text, size, health_text)
 end
 function M.stats(name, attack, health, shield)
     local guard = (shield or 0) > 0 and ("\n盾 " .. shield) or ""
