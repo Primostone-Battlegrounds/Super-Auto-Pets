@@ -3,7 +3,7 @@ name: Project verification
 on:
   pull_request:
     branches: [develop]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -27,9 +28,16 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/backlog-tools" --no-audit --no-fund backlog.md@1.53.0
           echo "$RUNNER_TEMP/backlog-tools/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Check project
+        id: design
         env:
           LUA: lua5.4
-        run: sh scripts/check.sh
+          SAP_PR_BODY: ${{ github.event.pull_request.body }}
+          SAP_BASE_REVISION: ${{ github.event.pull_request.base.sha }}
+        run: |
+          design=$(node scripts/check-design.mjs pr "$SAP_BASE_REVISION")
+          version=$(node -p 'JSON.parse(process.argv[1]).designVersion' "$design")
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          sh scripts/check.sh
       - name: Check domain compatibility on Lua 5.3
         run: |
           for suite in tests/*.lua; do
@@ -239,8 +247,17 @@ jobs:
         if: hashFiles('tests/native/verify-game.mjs') != ''
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
+          SAP_DESIGN_VERSION: ${{ steps.design.outputs.version }}
         run: |
           package="$RUNNER_TEMP/verified-game"
           node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" \
             "$RUNNER_TEMP/native-validation" lua5.3 "$package"
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
+          node scripts/acceptance-gate.mjs "$package"
+      - name: Upload unified candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unified-candidate-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/verified-game
+          if-no-files-found: error
+          retention-days: 30

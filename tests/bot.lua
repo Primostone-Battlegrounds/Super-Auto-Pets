@@ -20,6 +20,17 @@ local function same(expected, actual)
     return true
 end
 
+-- The simulator's Lua VM lacks string.pack. Its trace must still replay on the native Lua path.
+local pack = string.pack
+string.pack = nil
+local portable_bot = assert(loadfile("src/autopets/bot.lua"))()
+string.pack = pack
+local native_pool = bot.new_pool(8, "guardian", "beginner", release)
+local portable_pool = portable_bot.new_pool(8, "guardian", "beginner", release)
+assert(bot.advance_to_round(native_pool, 5, math.maxinteger))
+assert(portable_bot.advance_to_round(portable_pool, 5, math.maxinteger))
+assert(same(bot.trace(native_pool), portable_bot.trace(portable_pool)), "portable training changed the canonical trace")
+
 local styles = {"guardian", "striker", "swarm"}
 local actions_seen = {}
 local styles_seen = {}

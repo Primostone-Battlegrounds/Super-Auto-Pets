@@ -14,7 +14,7 @@ export const stageVariables = ['AP_GameMode', 'AP_RoomTicket'];
 export const playerVariables = duelVariables;
 export const signals = {
   AP_GameChooseMode: [{ name: 'mode', type: 'integer' }, { name: 'fill', type: 'boolean' }],
-  AP_GameLobby: ['mode', 'present', 'waiting'].map(name => ({ name, type: 'integer' })),
+  AP_GameLobby: ['mode', 'present', 'waiting', 'requested', 'reason'].map(name => ({ name, type: 'integer' })),
   ...roomSignals,
   ...Object.fromEntries(Object.entries(duelSignals).map(([name, fields]) =>
     [name, fields.map(([parameter, type]) => ({ name: parameter, type }))])),
@@ -38,12 +38,12 @@ function layout(duelRules) {
   return {
     name: gameInterface, script: gameScript, showCursor: true, blockCursor: true, blockKeys: true,
     controls: [
-      group('Lobby', [0, 0], [1202, 684], [
-        image('Backdrop', [0, 0], [1202, 684], pigment.field),
+      { ...image('GameBackdrop', [0, 0], [1, 1], pigment.field), anchor: { min: [0, 0], max: [1, 1] } },
+      group('Lobby', [0, 0], [1280, 720], [
         image('Border', [0, 0], [652, 506], pigment.edge),
         image('Paper', [0, 0], [642, 496], pigment.cream),
-        label('Title', [0, 186], [560, 61], '小动物自走棋', 44),
-        label('Status', [0, 117], [560, 30], '正在连接千星关卡', 23),
+        label('Title', [0, 186], [560, 76], '小动物自走棋', 44),
+        label('Status', [0, 117], [560, 43], '正在连接千星关卡', 23),
         group('Choices', [0, -15], [396, 202], [
           button('Room', [0, 67], [386, 56], '八人吃鸡', true),
           button('Duel', [0, 0], [386, 56], '好友 1v1'),
@@ -51,6 +51,7 @@ function layout(duelRules) {
         ]),
         { ...button('Continue', [0, 0], [386, 56], '', true), visible: false, active: false },
         label('Help', [0, -176], [586, 66], '好友 1v1 请先在千星好友房间邀请好友。', 20, pigment.muted),
+        label('Feedback', [0, -131], [586, 36], '', 19, pigment.gold),
       ]),
       view('Practice', practice),
       view('Duel', [...duelLayout(duelRules).controls, back(500, 331)]),
