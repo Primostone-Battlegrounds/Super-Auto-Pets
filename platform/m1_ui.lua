@@ -55,6 +55,17 @@ local function control(path)
     return controls[path]
 end
 
+local function clear_drag()
+    if not drag then return end
+    local picture, parent = drag.picture, drag.parent
+    if picture.alive and parent.alive then
+        picture.parent = parent
+        picture:SetSiblingIndex(drag.sibling)
+        picture:SetAnchoredPosition(drag.x, drag.y)
+    end
+    drag = nil
+end
+
 local function show(path, visible)
     if visibility[path] == visible then return end
     visibility[path] = visible
@@ -462,7 +473,7 @@ local function log_state()
 end
 
 local function command(action, ...)
-    drag = nil
+    clear_drag()
     local ok, error_code = session:shop_action(action, ...)
     if ok then
         message = nil
@@ -504,12 +515,29 @@ local function choose_team(index)
     apply_to_team(action, selection, destination)
 end
 
-local function begin_drag(event, kind, index)
+local function move_drag_picture(event)
+    local x, y = event:GetUIPos()
+    local width, height = game.GetUICanvasSize()
+    -- Lift the existing portrait above the input point so the drop target stays visible.
+    local half_width, half_height = drag.picture:GetSizeDelta()
+    half_width, half_height = half_width / 2, half_height / 2
+    local left = math.max(half_width, math.min(width - half_width, x))
+    local bottom = math.max(half_height, math.min(height - half_height, y + 40))
+    drag.picture:SetAnchoredPosition(left - width / 2, bottom - height / 2)
+end
+
+local function begin_drag(event, path, kind, index)
     if drag or state.phase ~= "preparation" then return end
     local item
     if kind == "team" then item = state.shop.team[index] else item = offer(kind, index) end
     if item then
-        drag = {touch = event.touchId, kind = kind, index = index}
+        local picture = control(path .. "/Portrait")
+        local x, y = picture:GetAnchoredPosition()
+        drag = {touch = event.touchId, kind = kind, index = index, picture = picture,
+            parent = control(path), sibling = picture:GetSiblingIndex(), x = x, y = y}
+        picture.parent = root
+        picture:SetAsLastSibling()
+        move_drag_picture(event)
         draw(false)
     end
 end
@@ -533,6 +561,7 @@ end
 
 local function update_drag(event)
     if not drag or drag.touch ~= event.touchId then return end
+    move_drag_picture(event)
     local target = drop_slot(event)
     if drag.target == target then return end
     drag.target = target
@@ -542,7 +571,8 @@ end
 local function end_drag(event)
     if not drag or drag.touch ~= event.touchId then return end
     local source = drag
-    press, drag = nil, nil
+    press = nil
+    clear_drag()
     if state.phase ~= "preparation" then return end
     local index = drop_slot(event)
     if index then
@@ -594,7 +624,7 @@ local function merge()
 end
 
 local function next_reward()
-    drag = nil
+    clear_drag()
     local count = #state.shop.rewards
     if count > 0 then reward_index = reward_index % count + 1 end
     selection = nil
@@ -652,7 +682,8 @@ local function next_seed()
 end
 
 local function reset_view()
-    press, drag, selection, message = nil, nil, nil, nil
+    clear_drag()
+    press, selection, message = nil, nil, nil
     reward_index, event_index, elapsed = 1, 1, 0
     replay_complete, reviewing = false, false
     set_playing(false)
@@ -692,7 +723,8 @@ local function advance(new_seed)
 end
 
 local function open_menu()
-    menu_open, drag = true, nil
+    clear_drag()
+    menu_open = true
     stop_sound()
     sync_updates()
     draw(false)
@@ -720,7 +752,7 @@ end
 local function show_restart(context)
     if context == "board" and state.phase ~= "preparation" then return end
     if context == "menu" and (not has_started or state.phase == "ended") then return end
-    drag = nil
+    clear_drag()
     confirming_restart = context
     draw(false)
 end
@@ -796,7 +828,7 @@ local function bind(path, callback, on_drag)
             if not allows_input(path) then return end
             press = {touch = event.touchId, path = path}
             if drag then
-                drag = nil
+                clear_drag()
                 draw(false)
             end
         end,
@@ -827,7 +859,7 @@ end
 local function bind_card(path, kind, index)
     bind(path, function()
         if kind == "team" then choose_team(index) else choose_offer(kind, index or reward_index) end
-    end, function(event) begin_drag(event, kind, index or reward_index) end)
+    end, function(event) begin_drag(event, path, kind, index or reward_index) end)
 end
 
 local function bind_button(path, callback)
@@ -840,6 +872,7 @@ end
 
 local function release_view()
     view_enabled = false
+    clear_drag()
     set_playing(false)
     stop_sound()
     for hit, bound in pairs(listeners) do
@@ -850,7 +883,7 @@ local function release_view()
     local old_portrait = lunging and controls[lunging .. "/Portrait"]
     if old_portrait and old_portrait.alive then old_portrait:SetAnchoredPosition(0, 27) end
     root, session, state = nil, nil, nil
-    press, drag, selection, message = nil, nil, nil, nil
+    press, selection, message = nil, nil, nil
     listeners, controls, portrait = {}, {}, nil
     visibility, displayed_text, displayed_colour = {}, {}, {}
     preparing_layout, lunging = nil, nil
@@ -925,7 +958,8 @@ end
 
 function OnDisable()
     view_enabled = false
-    press, drag = nil, nil
+    clear_drag()
+    press = nil
     sync_updates()
     stop_sound()
 end

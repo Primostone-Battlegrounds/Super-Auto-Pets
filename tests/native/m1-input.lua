@@ -21,6 +21,9 @@ function node_methods:SetAnchoredPosition(x, y) self.x, self.y = x, y end
 function node_methods:SetSizeDelta(width, height) self.width, self.height = width, height end
 function node_methods:GetAnchoredPosition() return self.x, self.y end
 function node_methods:GetSizeDelta() return self.width, self.height end
+function node_methods:GetSiblingIndex() return self.sibling or 0 end
+function node_methods:SetSiblingIndex(index) self.sibling = index end
+function node_methods:SetAsLastSibling() self.sibling = 99 end
 function node_methods:SetImage(source, image)
     assert(source == "StaticReference" and (image == 100001 or image == 106025))
     self.image = image

@@ -157,6 +157,58 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.equal(afterReroll[0], beforeReroll[0]);
     assert.ok(afterReroll.slice(1).some((name, index) => name !== beforeReroll[index + 1]),
       'At least one unfrozen offer must change for the fixed restart seed');
+
+    function pointer(type, { centerX, centerY }) {
+      api.injectPlayPointer(session, type, centerX, centerY);
+      api.stepPlay(session, 1 / 60);
+    }
+    const pet = 'Practice/Shop/Pet1';
+    const team = 'Practice/Team1';
+    const food = 'Practice/Shop/Food1';
+    const box = trail => api.runtimeLayout(session).get(control(trail).Id);
+    const slot = box(`${team}/Hit`);
+    const outside = box('Practice/TeamCaption');
+    const picture = control(`${pet}/Portrait`);
+    const petHome = picture.parent;
+    const petBefore = visibleText(`${pet}/Name`).text;
+    pointer('down', box(`${pet}/Hit`));
+    pointer('move', slot);
+    await capture('practice-drag-pet-target');
+    requireText(`${team}/DropLabel`, /^购买$/u);
+    assert.notEqual(picture.parent, petHome, 'Dragged portrait must lift out of the source card');
+    const lifted = api.runtimeLayout(session).get(picture.Id);
+    assert.equal(lifted.centerX, slot.centerX);
+    assert.ok(lifted.centerY > slot.centerY, 'Portrait stays above the drop target');
+    pointer('move', outside);
+    pointer('up', outside);
+    await capture('practice-drag-cancel');
+    requireText('Practice/Money/Value', /^9$/u);
+    requireText(`${team}/Name`, /^空位/u);
+    assert.equal(visibleText(`${pet}/Name`).text, petBefore);
+    assert.equal(picture.parent, petHome);
+    assert.ok(!visibleText(`${team}/DropLabel`));
+
+    pointer('down', box(`${pet}/Hit`));
+    pointer('move', slot);
+    pointer('up', slot);
+    await capture('practice-drag-purchase');
+    requireText('Practice/Money/Value', /^6$/u);
+    requireText(`${pet}/Name`, /^空商品$/u);
+    assert.equal(visibleText(`${team}/Name`).text, petBefore);
+    assert.equal(picture.parent, petHome);
+    assert.ok(!visibleText(`${team}/DropLabel`));
+
+    const statsBefore = visibleText(`${team}/Detail`).text;
+    pointer('down', box(`${food}/Hit`));
+    pointer('move', slot);
+    await capture('practice-drag-food-target');
+    requireText(`${team}/DropLabel`, /^喂食$/u);
+    pointer('up', slot);
+    await capture('practice-drag-feed');
+    requireText('Practice/Money/Value', /^3$/u);
+    requireText(`${food}/Name`, /^空商品$/u);
+    assert.notEqual(visibleText(`${team}/Detail`).text, statsBefore);
+    assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {
     const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
