@@ -115,6 +115,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Practice/Shop/Pet1/Detail', /^\d+攻$/u);
     requireText('Practice/Shop/Pet1/LifeValue', /^\d+命$/u);
     assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
+    assert.ok(shopFrame.paint.some(item => item.id === control('Practice/Team1/Front').Id));
     for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
       requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
     }
@@ -201,12 +202,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireLiftedClearance('Practice/Portrait');
     pointer('move', outside);
     pointer('up', outside);
-    await capture('practice-drag-cancel');
+    const cancelled = await capture('practice-drag-cancel');
     requireText('Practice/Money/Value', /^9$/u);
     assert.ok(!visibleText(`${team}/Name`));
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     assert.equal(picture.parent, petHome);
     assert.ok(!visibleText(`${team}/DropLabel`));
+    assert.ok(!cancelled.paint.some(item => item.name === 'DropTarget'), 'Cancelling must clear all drop marks');
 
     pointer('down', box(`${pet}/Hit`));
     pointer('move', slot);
