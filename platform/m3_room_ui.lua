@@ -100,10 +100,18 @@ local function paint_shop()
         local is_pet = slot <= 3
         local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
         local item = (is_pet and pets or foods)[math.abs(code)]
+        if portrait then
+            local definition = (is_pet and native_catalog.pets or native_catalog.foods)[math.abs(code)]
+            portrait.shop(5 + slot, definition and definition.id)
+        end
         local detail = is_pet and "%s\n%d 攻 · %d 命" or "%s\n+%d 攻 · +%d 命"
         text("Shop/Offer" .. slot .. "/Text", item and detail:format(item.name, item.attack, item.health) or "售罄")
         text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
         local unit = preview.team[slot]
+        if portrait then
+            local definition = unit and native_catalog.pets[unit.code]
+            portrait.shop(slot, definition and definition.id)
+        end
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
         local stats = unit and string.format("\n%d攻 %d命\nL%d · 经验%d", unit.attack, unit.health, unit.level, unit.xp) or ""
         text("Shop/Team" .. slot .. "/Text", name .. stats)
@@ -140,8 +148,8 @@ local function paint_battle()
             text("Replay/Own" .. slot, "")
             text("Replay/Enemy" .. slot, "")
             if portrait then
-                portrait("Own" .. slot, nil, false)
-                portrait("Enemy" .. slot, nil, true)
+                portrait.replay("Own" .. slot, nil, false)
+                portrait.replay("Enemy" .. slot, nil, true)
             end
         end
         return
@@ -183,7 +191,7 @@ local function paint_battle()
                 end
             end
             text("Replay/" .. name .. slot, display)
-            if portrait then portrait(name .. slot, id, name == "Enemy", attacking) end
+            if portrait then portrait.replay(name .. slot, id, name == "Enemy", attacking) end
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
@@ -212,6 +220,7 @@ local function redraw()
     draw_status()
     local shop_open = match.phase == 2 and preview ~= nil and alive()
     local replay_open = match.phase >= 3 and match.seat > 0
+    if portrait then portrait.view(shop_open and "shop" or "replay") end
     visible("Shop", shop_open)
     visible("Replay", replay_open)
     local can_prepare = shop_open and not match.ready

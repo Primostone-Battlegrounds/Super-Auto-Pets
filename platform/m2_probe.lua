@@ -63,6 +63,7 @@ local function show_action(action, label, enabled)
 end
 
 local function show_actions()
+    if portrait then portrait.view(preparing and "shop" or "replay") end
     if offers ~= root then
         show(offers, preparing)
         show(market_gold, preparing)
@@ -150,6 +151,9 @@ local function render_market()
     local view = current_market()
     render_ability(view)
     if not view then
+        if portrait and preparing then
+            for slot = 1, rules.team_size + rules.pet_slots + rules.food_slots do portrait.shop(slot, nil) end
+        end
         market_gold.text = "同步商店中"
         team_label.text = "阵容 —"
         reward_label.text = "升级奖励"
@@ -170,7 +174,8 @@ local function render_market()
     market_gold.text = string.format("金币 %d  ·  第 %d 阶", view.gold, view.tier)
     local picked = selected_slot(view)
     if not picked then selected_uid = nil end
-    local footer = string.format("购买 %d 金", rules.pet_cost)
+    local price = string.format("购买 %d 金", rules.pet_cost)
+    local footer = price
     if view.version ~= latest_version then
         footer = "等待同步"
     elseif not preparing then
@@ -180,31 +185,58 @@ local function render_market()
     elseif #view.team == rules.team_size and not picked then
         footer = "阵容已满"
     end
+    if portrait and footer ~= price then
+        market_gold.text = market_gold.text .. "  ·  " .. footer
+    end
     for slot, label in ipairs(pet_labels) do
         local code = view.pets[slot]
         local pet = pets[math.abs(code)]
-        label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
+        if portrait then
+            local animal = native_catalog.pets[math.abs(code)]
+            portrait.shop(rules.team_size + slot, animal and animal.id)
+            label.text = pet and string.format("%s\n%d攻%d命 · %d金", pet.name, pet.attack, pet.health, rules.pet_cost) or "售罄"
+        else
+            label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
+        end
         pet_freeze_labels[slot].text = code < 0 and "解冻动物" or "冻结动物"
     end
     for slot, label in ipairs(food_labels) do
         local code = view.foods[slot]
         local food = foods[math.abs(code)]
-        label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
-            food.name, food.attack, food.health, rules.food_cost) or "售罄"
+        if portrait then
+            local item = native_catalog.foods[math.abs(code)]
+            portrait.shop(rules.team_size + rules.pet_slots + slot, item and item.id)
+            label.text = food and string.format("%s\n+%d攻 +%d命 · %d金", food.name, food.attack, food.health, rules.food_cost) or "售罄"
+        else
+            label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
+                food.name, food.attack, food.health, rules.food_cost) or "售罄"
+        end
         food_freeze_labels[slot].text = code < 0 and "解冻食物" or "冻结食物"
     end
     for slot, label in ipairs(team_labels) do
         local unit = view.team[slot]
+        if portrait then
+            local animal = unit and native_catalog.pets[unit.code]
+            portrait.shop(slot, animal and animal.id)
+        end
         if unit then
             local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
-            local prefix = slot == picked and "已选 · " or ""
-            label.text = string.format("%s%s\n%d/%d · Lv%d 经验%d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
+            if portrait then
+                label.text = string.format("%s\n%d/%d L%d 经验%d", name, unit.attack, unit.health, unit.level, unit.xp)
+            else
+                local prefix = slot == picked and "已选 · " or ""
+                label.text = string.format("%s%s\n%d/%d · Lv%d 经验%d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
+            end
         else
             label.text = string.format("阵位 %d  ·  空", slot)
         end
     end
     team_label.text = string.format("阵容 %d / %d · 右侧为前排", #view.team, rules.team_size)
+    if portrait and picked then
+        local animal = pets[view.team[picked].code]
+        team_label.text = team_label.text .. " · 已选 " .. (animal and animal.name or "动物")
+    end
     if reward_index > #view.rewards then reward_index = 1 end
     local reward = pets[view.rewards[reward_index]]
     reward_label.text = reward and string.format("奖励 %d/%d · %s", reward_index, #view.rewards, reward.name) or "暂无升级奖励"
@@ -332,7 +364,7 @@ local function show_replay()
             board_root:GetChild(path).text = display
             if portrait then
                 local attacking = unit and event.type == "attack" and event.uid == unit.uid and event.side == key
-                portrait(path, unit and unit.id, side == 2, attacking)
+                portrait.replay(path, unit and unit.id, side == 2, attacking)
             end
         end
     end

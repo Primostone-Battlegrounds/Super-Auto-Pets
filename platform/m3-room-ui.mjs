@@ -13,22 +13,33 @@ const browse = [
 ];
 
 function roomLayout(unified) {
-  function button(name, x, y, width, height, text, primary = false, fontSize = 17, fill = pigment.chip) {
+  function button(name, x, y, width, height, text, primary = false, fontSize = 17, fill = pigment.chip, art) {
     const size = [width, height];
     const surface = unified ? image('Surface', [0, 0], size, primary ? '#ffffff' : fill, { image: primary ? 107015 : 107102 })
       : image('Surface', [0, 0], size, primary ? '#206258' : pigment.chip);
-    return group(name, [x, y], size, [
+    const captionSize = [width - 10, height];
+    const captionPosition = [0, 0];
+    const visualSize = [...size];
+    if (unified && art) {
+      const team = art === 'team';
+      captionSize[1] = team ? 64 : 46;
+      captionPosition[1] = team ? -25 : -20;
+      visualSize[1] = team ? 114 : 86;
+      fontSize = team ? 15 : 16;
+    }
+    return group(name, [x, y], visualSize, [
       surface,
-      label('Text', [0, 0], [width - 10, height], text, fontSize, primary ? (unified ? '#372917' : pigment.cream) : pigment.ink),
+      label('Text', captionPosition, captionSize, text, fontSize, primary ? (unified ? '#372917' : pigment.cream) : pigment.ink),
       { name: 'Hit', kind: 'cursorArea', size },
     ]);
   }
 
-  function inspectable(name, inspect, x, y, width, height, fill = pigment.chip) {
+  function inspectable(name, inspect, x, y, width, height, fill = pigment.chip, art) {
     const inspectWidth = 48;
-    const main = button(name, x, y, width, height, '', false, 17, fill);
-    main.children.find(c => c.name === 'Text').position = [-inspectWidth / 2, 0];
-    main.children.find(c => c.name === 'Text').size = [width - inspectWidth - 10, height];
+    const main = button(name, x, y, width, height, '', false, 17, fill, art);
+    const caption = main.children.find(c => c.name === 'Text');
+    caption.position[0] = -inspectWidth / 2;
+    caption.size[0] = width - inspectWidth - 10;
     main.children.find(c => c.name === 'Hit').position = [-inspectWidth / 2, 0];
     main.children.find(c => c.name === 'Hit').size = [width - inspectWidth, height];
     return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height,
@@ -50,10 +61,10 @@ function roomLayout(unified) {
         group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
           label('Money', [0, 160], [810, 36], '', unified ? 23 : 22, pigment.ink, 'left'),
           ...slots.flatMap(slot => [
-            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80, '#fff4d9')
-              : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '', false, 17, '#f8dbb3')]),
+            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80, '#fff4d9', 'offer')
+              : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '', false, 17, '#f8dbb3', 'offer')]),
             button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
-            ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), 94, 154, 76, pigment.rail),
+            ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), 94, 154, 76, pigment.rail, 'team'),
           ]),
           ...browse.flatMap(([name, text], index) => {
             if (unified && name === 'Reroll') return [button(name, -310, shopActionsY, 206, 82, text, true, 24)];

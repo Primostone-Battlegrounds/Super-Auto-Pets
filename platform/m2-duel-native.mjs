@@ -35,9 +35,15 @@ export const duelProbeButtons = [
 function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
   return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle', autoSize: true, minFontSize: 16 } };
 }
-function card(action, label, position, size, content, { fill, ink, sprite }, fontSize = 18) {
+function card(action, label, position, size, content, { fill, ink, sprite, portrait }, fontSize = 18) {
   const caption = text(label, position, size, content, fontSize, ink);
   if (sprite) caption.text.outline = false;
+  if (portrait) {
+    caption.position = [position[0], position[1] - 20];
+    caption.size = [size[0], 42];
+    caption.text.fontSize = 16;
+    caption.text.minFontSize = 14;
+  }
   return [
     image(`${action}Face`, position, size, fill, sprite && { image: sprite }),
     caption,
@@ -46,8 +52,8 @@ function card(action, label, position, size, content, { fill, ink, sprite }, fon
 }
 function inspectable(action, label, position, size, style, inspect, inspectStyle, fontSize = 18) {
   const controls = card(action, label, position, size, '', style, fontSize);
-  controls[1].position = [position[0] - 22, position[1]];
-  controls[1].size = [size[0] - 44, size[1]];
+  controls[1].position = [position[0] - 22, controls[1].position[1]];
+  controls[1].size = [size[0] - 44, controls[1].size[1]];
   controls[2].position = [position[0] - 22, position[1]];
   controls[2].size = [size[0] - 44, size[1]];
   return [...controls, ...card(inspect, `${inspect}Label`, [position[0] + size[0] / 2 - 22, position[1]],
@@ -55,14 +61,14 @@ function inspectable(action, label, position, size, style, inspect, inspectStyle
 }
 
 const plain = fill => ({ fill });
-const parchment = fill => ({ fill, ink: '#243c3b', sprite: 107102 });
+const parchment = (fill, portrait = false) => ({ fill, ink: '#243c3b', sprite: 107102, portrait });
 const gold = { fill: '#ffffff', ink: '#372917', sprite: 107015 };
 
 export function duelLayout(rule, includeProbeButtons = false) {
   const script = 'm2_probe';
-  const teamStyle = includeProbeButtons ? plain('#335b44') : parchment('#dcecd7');
-  const petStyle = includeProbeButtons ? plain('#335b44') : parchment('#fff4d9');
-  const foodStyle = includeProbeButtons ? plain('#605432') : parchment('#f8dbb3');
+  const teamStyle = includeProbeButtons ? plain('#335b44') : parchment('#dcecd7', true);
+  const petStyle = includeProbeButtons ? plain('#335b44') : parchment('#fff4d9', true);
+  const foodStyle = includeProbeButtons ? plain('#605432') : parchment('#f8dbb3', true);
   const secondaryStyle = includeProbeButtons ? plain('#286452') : parchment('#e8f2e4');
   const inspectStyle = includeProbeButtons ? plain('#416c59') : parchment('#b8d9c8');
   const statusInk = includeProbeButtons ? '#fff3d7' : '#fff7de';
@@ -97,11 +103,12 @@ export function duelLayout(rule, includeProbeButtons = false) {
     controls: [
       image('Background', [0, 0], [1000, includeProbeButtons ? 710 : 640], includeProbeButtons ? '#193931' : '#214943'),
       text('Status', [0, 257], [900, 66], '等待服务端响应', 27, statusInk),
-      text('MarketGold', [0, 204], [900, 42], '', includeProbeButtons ? 25 : 27, accentInk),
+      text('MarketGold', [0, includeProbeButtons ? 204 : 210], [900, includeProbeButtons ? 42 : 38], '',
+        includeProbeButtons ? 25 : 27, accentInk),
       ...(includeProbeButtons ? stock : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
       ]),
-      text('Team', [0, 165], [900, 32], '', 21, statusInk),
+      text('Team', [0, includeProbeButtons ? 165 : 179], [900, includeProbeButtons ? 32 : 28], '', 21, statusInk),
       ...teamCards.flatMap(cards => cards.slice(0, 3)),
       { name: 'TeamInspection', kind: 'container', position: [0, 0], size: [1200, 690], children: teamCards.flatMap(cards => cards.slice(3)) },
       ...shopButtons,
@@ -122,7 +129,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
         ]).flat(),
       ] },
       text('ReplayStatus', [-75, -170], [774, 50], '', 18, statusInk),
-      ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', teamStyle),
+      ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', secondaryStyle),
       ...(includeProbeButtons ? duelProbeButtons : []).map(({ label, position }, index) => text(`NativeLegend${index + 1}`,
         [position[0], position[1] - 50], [140, 30], label, 18)),
     ],
