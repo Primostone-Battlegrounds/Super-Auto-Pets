@@ -32,7 +32,7 @@ export const duelProbeButtons = [
 ].map((button, index) => ({ ...button, position: [(index - 3) * 145, -228],
   placeholder: String(1073741901 + index), key: index + 1 }));
 function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
-  return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle' } };
+  return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle', autoSize: true, minFontSize: 16 } };
 }
 function card(action, label, position, size, content, colour, fontSize = 18) {
   return [
@@ -62,11 +62,11 @@ export function duelLayout(rule, includeProbeButtons = false) {
     controls: [
       { name: 'Background', kind: 'image', position: [0, 58], size: [1000, 478], image: 100001, colour: '#193931' },
       text('Status', [0, 257], [900, 66], '等待服务端响应', 27),
-      text('MarketGold', [0, 204], [900, 35], '', 25, '#ffd887'),
+      text('MarketGold', [0, 204], [900, 42], '', 25, '#ffd887'),
       ...(includeProbeButtons ? stock : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
       ]),
-      text('Team', [0, 170], [900, 28], '', 21),
+      text('Team', [0, 165], [900, 32], '', 21),
       ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => card(`Team${index + 1}`, `TeamLabel${index + 1}`,
         [(2 - index) * 190, 120], [174, 56], '', '#335b44', 20)).flat(),
       ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]

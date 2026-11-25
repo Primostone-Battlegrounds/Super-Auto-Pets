@@ -7,7 +7,7 @@ import { standingsLayout } from './multiplayer-standings.mjs';
 function button(name, x, y, width, height, text, primary = false) {
   return group(name, [x, y], [width, height], [
     image('Surface', [0, 0], [width, height], primary ? pigment.primary : pigment.chip),
-    label('Text', [0, 0], [width - 10, height - 6], text, 17, primary ? pigment.cream : pigment.ink),
+    label('Text', [0, 0], [width - 10, height], text, 17, primary ? pigment.cream : pigment.ink),
     { name: 'Hit', kind: 'cursorArea', size: [width, height] },
   ]);
 }
@@ -29,8 +29,8 @@ export const m3RoomLayout = {
     group('Match', [-139, 0], [866, 642], [
       image('Border', [0, 0], [866, 642], pigment.edge),
       image('Paper', [0, 0], [860, 636], pigment.canvas),
-      label('Heading', [-207, 276], [412, 45], '八席淘汰赛', 33, pigment.ink, 'left'),
-      label('Status', [0, 225], [820, 38], '连接房间中', 23, pigment.ink, 'left'),
+      label('Heading', [-207, 276], [412, 54], '八席淘汰赛', 33, pigment.ink, 'left'),
+      label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
       group('Shop', [0, 10], [832, 370], [
         label('Money', [0, 160], [810, 36], '', 22, pigment.ink, 'left'),
         ...slots.flatMap(slot => [
@@ -41,7 +41,7 @@ export const m3RoomLayout = {
         ...browse.map(([name, text], index) => button(name, slotX(index + 1), -135, 154, 52, text)),
       ], false),
       group('Replay', [0, 10], [832, 370], [
-        label('RoundText', [0, 144], [800, 58], '', 23, pigment.ink, 'left'),
+        label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
         image('Ally', [-207, 24], [403, 143], pigment.rail),
         image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
         ...slots.flatMap(slot => [

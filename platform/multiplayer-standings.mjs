@@ -13,41 +13,41 @@ export function standingsLayout(mode, { position = [0, 0], probe = false, strip 
   const heading = probe ? probeTitle : title;
   if (strip) {
     if (mode !== 'duel') throw new Error('Only the duel uses a standings strip');
-    return group('Standings', position, [1000, 54], [
-      image('Border', [0, 0], [1000, 54], pigment.edge),
-      image('Paper', [0, 0], [994, 48], pigment.canvas),
-      image('Header', [-400, 0], [174, 42], pigment.field),
+    return group('Standings', position, [1000, 64], [
+      image('Border', [0, 0], [1000, 64], pigment.edge),
+      image('Paper', [0, 0], [994, 58], pigment.canvas),
+      image('Header', [-400, 0], [174, 58], pigment.field),
       label('Heading', [-400, 0], [165, 35], heading, 20, pigment.ink),
-      label('Phase', [-187, 11], [225, 20], '等待关卡状态', 16, pigment.ink),
-      label('Opponent', [-187, -11], [225, 20], '', 15, pigment.primary),
-      label('Count', [7, 0], [140, 24], '', 15, pigment.muted),
+      label('Phase', [-187, 14], [225, 28], '等待关卡状态', 16, pigment.ink),
+      label('Opponent', [-187, -14], [225, 26], '', 15, pigment.primary),
+      label('Count', [7, 0], [140, 26], '', 15, pigment.muted),
       ...[1, 2].flatMap((seat) => {
         const x = 178 + (seat - 1) * 210;
         return [
-          image(`SeatSurface${seat}`, [x, 0], [196, 42], pigment.chip),
-          label(`Seat${seat}`, [x, 10], [188, 19], '', 16, pigment.ink),
-          label(`Seat${seat}Detail`, [x, -10], [188, 17], '', 15, pigment.muted),
+          image(`SeatSurface${seat}`, [x, 0], [196, 58], pigment.chip),
+          label(`Seat${seat}`, [x, 14], [188, 28], '', 16, pigment.ink),
+          label(`Seat${seat}Detail`, [x, -14], [188, 26], '', 15, pigment.muted),
         ];
       }),
     ]);
   }
-  const height = 158 + seats * 48;
+  const height = 158 + seats * 56;
   const top = height / 2;
   return group('Standings', position, [248, height], [
     image('Border', [0, 0], [248, height], pigment.edge),
     image('Paper', [0, 0], [242, height - 6], pigment.canvas),
     image('Header', [0, top - 29], [224, 42], pigment.field),
-    label('Heading', [0, top - 29], [214, 35], heading, 22, pigment.ink),
-    label('Phase', [0, top - 72], [222, 22], '等待关卡状态', 16, pigment.ink),
-    label('Count', [0, top - 100], [222, 22], '', 15, pigment.muted),
-    label('Opponent', [0, top - 127], [222, 22], '', 16, pigment.primary),
+    label('Heading', [0, top - 29], [214, 36], heading, 22, pigment.ink),
+    label('Phase', [0, top - 72], [222, 28], '等待关卡状态', 16, pigment.ink),
+    label('Count', [0, top - 100], [222, 28], '', 15, pigment.muted),
+    label('Opponent', [0, top - 127], [222, 28], '', 16, pigment.primary),
     ...Array.from({ length: seats }, (_, index) => {
       const seat = index + 1;
-      const y = top - 169 - index * 48;
+      const y = top - 169 - index * 56;
       return [
-        image(`SeatSurface${seat}`, [0, y - 3], [224, 44], pigment.chip),
-        label(`Seat${seat}`, [0, y + 7], [202, 19], '', 16, pigment.ink, 'left'),
-        label(`Seat${seat}Detail`, [0, y - 12], [202, 17], '', 15, pigment.muted, 'left'),
+        image(`SeatSurface${seat}`, [0, y - 3], [224, 56], pigment.chip),
+        label(`Seat${seat}`, [0, y + 10], [202, 28], '', 16, pigment.ink, 'left'),
+        label(`Seat${seat}Detail`, [0, y - 17], [202, 26], '', 15, pigment.muted, 'left'),
       ];
     }).flat(),
   ]);
