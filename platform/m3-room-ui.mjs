@@ -19,11 +19,15 @@ function roomLayout(unified) {
     const captionPosition = [0, 0];
     const visualSize = [...size];
     const inspect = unified && name.startsWith('Inspect');
+    const inspectY = name === 'InspectReward' ? 0 : -13;
     let surface = unified
-      ? (inspect ? terrain('Surface', [0, -13], [width, 34], clearing.teal)
+      ? (inspect ? terrain('Surface', [0, inspectY], [width, 34], clearing.teal)
         : image('Surface', [0, 0], size, primary ? '#ffffff' : '#c9eadf', { image: primary ? 107015 : 107034 }))
       : image('Surface', [0, 0], size, primary ? '#206258' : pigment.chip);
-    if (inspect) captionPosition[1] = -13;
+    if (inspect) {
+      captionPosition[1] = inspectY;
+      captionSize[1] = 34;
+    }
     if (unified && art) {
       const team = art === 'team';
       surface = terrain('Surface', [0, 3], [width - 20, 32], team ? clearing.recess : fill);
@@ -74,8 +78,8 @@ function roomLayout(unified) {
         group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
           ...(unified ? [
             image('Sky', [0, 31], [828, 326], clearing.sky),
-            terrain('GroveLeft', [-152, 112], [522, 141], clearing.grove),
-            terrain('GroveRight', [178, 112], [466, 126], clearing.groveLight),
+            image('GroveLeft', [-208, 113], [410, 168], '#e4eee0', { image: 105135 }),
+            image('GroveRight', [206, 109], [407, 156], '#fff3da', { image: 105136 }),
             image('Turf', [0, -53], [828, 158], clearing.ground),
             labelFront('TeamFront', [334, 171], '前排 ›'),
           ] : []),
@@ -101,10 +105,10 @@ function roomLayout(unified) {
           label('RoundText', [0, unified ? 164 : 144], [800, 66], '', unified ? 25 : 23, pigment.ink, 'left'),
           ...(unified ? [
             image('Meadow', [0, 44], [820, 216], clearing.sky),
-            terrain('Canopy', [178, 83], [452, 132], clearing.groveLight),
+            image('Canopy', [202, 77], [416, 147], '#fff3da', { image: 105136 }),
           ] : []),
           ...(unified ? [
-            terrain('Ally', [-33, 50], [740, 173], clearing.grove),
+            image('Ally', [-193, 71], [436, 152], '#e4eee0', { image: 105135 }),
             image('Enemy', [0, -4], [820, 122], clearing.grass),
             labelFront('OwnFront', [-65, 123], '己方前排 ›'),
             labelFront('EnemyFront', [65, 123], '‹ 对方前排'),

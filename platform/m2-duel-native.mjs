@@ -135,8 +135,8 @@ export function duelLayout(rule, includeProbeButtons = false) {
       ...(includeProbeButtons ? [marketGold, ...stock] : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: [
           image('ShopSky', [0, 130], [1064, 228], '#c4dcc0'),
-          terrain('GroveLeft', [-183, 131], [666, 150], clearing.grove),
-          terrain('GroveRight', [253, 129], [544, 132], clearing.groveLight),
+          image('GroveLeft', [-288, 135], [486, 174], '#e4eee0', { image: 105135 }),
+          image('GroveRight', [298, 128], [458, 170], '#fff3da', { image: 105136 }),
           image('ShopGround', [0, -29], [1064, 182], clearing.ground),
           labelFront('TeamFront', [252, 189], '前排 ›'),
           ...stock,
@@ -167,13 +167,13 @@ export function duelLayout(rule, includeProbeButtons = false) {
         size: includeProbeButtons ? [900, 210] : [1064, 300], visible: false, children: [
         ...(!includeProbeButtons ? [
           image('Meadow', [0, 0], [1064, 300], clearing.sky),
-          terrain('Canopy', [200, 78], [646, 134], clearing.groveLight),
+          image('Canopy', [284, 58], [480, 170], '#fff3da', { image: 105136 }),
         ] : []),
         ...(includeProbeButtons ? [
           image('Ally', [-225, 0], [440, 200], '#335b44'),
           image('Enemy', [225, 0], [440, 200], '#605432'),
         ] : [
-          terrain('Ally', [-68, 25], [886, 196], clearing.grove),
+          image('Ally', [-265, 57], [504, 173], '#e4eee0', { image: 105135 }),
           image('Enemy', [0, -51], [1064, 198], clearing.grass),
           labelFront('OwnFront', [-68, 88], '席1前排 ›'),
           labelFront('EnemyFront', [68, 88], '‹ 席2前排'),

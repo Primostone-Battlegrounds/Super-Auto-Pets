@@ -56,10 +56,14 @@ local function bind_online_badges(pool)
         if state == phase then return end
         pool.parent = parent
         pool:SetAsLastSibling()
+        local gap, width = 28, 52
+        if phase == "replay" then gap, width = 20, 38 end
         for slot, field in ipairs(fields) do
             local x, y, price_x, price_y = anchors(slot)
-            field[1]:SetAnchoredPosition(x - 28, y)
-            field[2]:SetAnchoredPosition(x + 28, y)
+            field[1]:SetSizeDelta(width, 32)
+            field[2]:SetSizeDelta(width, 32)
+            field[1]:SetAnchoredPosition(x - gap, y)
+            field[2]:SetAnchoredPosition(x + gap, y)
             if price_x and field[3] then field[3]:SetAnchoredPosition(price_x, price_y) end
             for _, control in ipairs(field) do set(control, nil) end
         end
