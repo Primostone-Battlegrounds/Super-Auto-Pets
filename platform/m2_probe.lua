@@ -67,8 +67,6 @@ local function show_actions()
     if offers ~= root then
         show(offers, preparing)
         show(market_gold, preparing)
-        show(child("ShopSky"), preparing)
-        show(child("ShopGround"), preparing)
     end
     for slot = 1, rules.team_size do show(child("Team" .. slot), preparing) end
     for _, binding in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},

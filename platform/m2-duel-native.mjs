@@ -116,6 +116,8 @@ export function duelLayout(rule, includeProbeButtons = false) {
     }
     return card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, secondaryStyle);
   });
+  const marketGold = text('MarketGold', includeProbeButtons ? [0, 204] : [-83, 224],
+    includeProbeButtons ? [900, 42] : [820, 38], '', includeProbeButtons ? 25 : 27, accentInk);
   return {
     name: 'AP_DuelProbe',
     script,
@@ -123,16 +125,15 @@ export function duelLayout(rule, includeProbeButtons = false) {
     blockCursor: false,
     controls: [
       image('Background', [0, 0], includeProbeButtons ? [1000, 710] : [1120, 674], includeProbeButtons ? '#193931' : '#214943'),
-      ...(!includeProbeButtons ? [
-        image('ShopSky', [0, 130], [1064, 228], '#c4dcc0', { visible: false }),
-        image('ShopGround', [0, -45], [1064, 144], '#edca89', { visible: false }),
-      ] : []),
       text('Status', includeProbeButtons ? [0, 257] : [-201, 285], includeProbeButtons ? [900, 66] : [660, 68],
         '等待服务端响应', 27, statusInk),
-      text('MarketGold', includeProbeButtons ? [0, 204] : [-83, 224], includeProbeButtons ? [900, 42] : [820, 38], '',
-        includeProbeButtons ? 25 : 27, accentInk),
-      ...(includeProbeButtons ? stock : [
-        { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
+      ...(includeProbeButtons ? [marketGold, ...stock] : [
+        { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: [
+          image('ShopSky', [0, 130], [1064, 228], '#c4dcc0'),
+          image('ShopGround', [0, -45], [1064, 144], '#edca89'),
+          ...stock,
+        ] },
+        marketGold,
       ]),
       text('Team', includeProbeButtons ? [0, 165] : [-83, 189], includeProbeButtons ? [900, 32] : [820, 28], '', 21,
         includeProbeButtons ? statusInk : pigment.ink),
