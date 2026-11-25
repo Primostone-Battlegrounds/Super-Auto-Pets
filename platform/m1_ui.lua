@@ -24,7 +24,7 @@ local errors = {
 }
 
 local session, state, selection, message
-local press, drag
+local press, drag, pending_drop
 local menu_open, has_started = true, false
 local difficulty
 local confirming_restart
@@ -189,14 +189,14 @@ local function action_for_team(source, index, dropped)
     return "buy", dropped and math.min(index, #state.shop.team + 1) or index
 end
 
-local function drag_feedback()
-    if not drag then return end
-    if not drag.target then
-        if drag.kind == "food" then return "拖向一名队员喂食" end
-        if drag.kind == "team" then return "拖到同种队员会合并，点击两个站位可换位" end
-        return "松开放入目标站位，空位表示队尾"
+local function drag_feedback(source)
+    if not source then return end
+    if not source.target then
+        if source.kind == "food" then return "拖向一名队员喂食" end
+        if source.kind == "team" then return "拖到同种队员会合并，点击两个站位可换位" end
+        return "拖向目标站位，空位表示队尾"
     end
-    local action, index = action_for_team(drag, drag.target, true)
+    local action, index = action_for_team(source, source.target, true)
     if not action then return "此处不能放入，松开将取消" end
     local unit = state.shop.team[index]
     if (action == "merge" or action == "combine") and unit.level == rules.max_level then
@@ -206,9 +206,9 @@ local function drag_feedback()
     local cost = (action == "buy" or action == "combine") and rules.pet_cost or (action == "feed" and rules.food_cost)
     if cost and state.shop.gold < cost then return string.format("金币不足，需要 %d 金", cost) end
     local name = drop_labels[action]
-    if action == "merge" then return "松开将合并，拖动的队员会被消耗", name end
-    if cost then return string.format("松开将%s，花费 %d 金", name, cost), name end
-    return "松开将移动该队员", name
+    if action == "merge" then return "确认合并后会消耗拖动的队员", name, action, index end
+    if cost then return string.format("%s需 %d 金", name, cost), name, action, index end
+    return "确认后移动该队员", name, action, index
 end
 
 local function offer_card(path, kind, index)
@@ -384,7 +384,8 @@ local function draw(refresh)
         local paint = event.amount == 0 and effects.shield or effects.damage
         effect = { label = "", face = paint.face, ink = paint.ink }
     end
-    local drag_hint, drop_label = drag_feedback()
+    local drop_source = drag or pending_drop
+    local drag_hint, drop_label = drag_feedback(drop_source)
     arrange(preparing)
     text("Round/Value", string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
     text("Money/Value", tostring(state.shop.gold))
@@ -405,7 +406,7 @@ local function draw(refresh)
         end
         team_card("Team" .. index, player[index], index, matches(drag or selection, "team", index),
             hit and event.side == "player" and effect)
-        local drop = drop_label and drag.target == index
+        local drop = drop_label and drop_source.target == index
         show("Team" .. index .. "/DropTarget", drop == true)
         if drop then
             show("Team" .. index .. "/XP", false)
@@ -438,7 +439,7 @@ local function draw(refresh)
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
         text("Shop/Caption", string.format("商店 · %d 阶", state.shop.tier))
         text("Shop/Buy/Title", string.format("购买 · %d 金", rules.pet_cost))
-        text("Shop/Reroll/Title", string.format("刷新 · %d 金", rules.reroll_cost))
+        text("Shop/Reroll/Title", pending_drop and "取消拖放" or string.format("刷新 · %d 金", rules.reroll_cost))
         local picked = drag or selection
         local selling = picked and picked.kind == "team" and state.shop.team[picked.index]
         local refund = selling and string.format("+%d 金", selling.level * rules.sell_gold_per_level)
@@ -473,6 +474,9 @@ local function draw(refresh)
     end
     draw_tooltip(preparing)
     text("Primary/Title", title)
+    if pending_drop then
+        drag_hint = string.format("%s。点击标记站位确认，或取消拖放。", drag_hint)
+    end
     text("Hint", drag_hint or message or hint)
 end
 
@@ -588,19 +592,21 @@ end
 
 local function end_drag(event)
     if not drag or drag.touch ~= event.touchId then return end
-    local source = drag
+    local target = drop_slot(event)
+    local source = {kind = drag.kind, index = drag.index, target = target}
     press = nil
     clear_drag()
     if state.phase ~= "preparation" then return end
-    local index = drop_slot(event)
-    if index then
-        local action, destination = action_for_team(source, index, true)
-        if action then
-            apply_to_team(action, source, destination)
-            return
-        end
+    local feedback, _, action, destination = drag_feedback(source)
+    if action then
+        -- Native release and system interruption can both arrive as EndDrag.
+        -- Only a new click may commit the pending placement.
+        source.action, source.destination = action, destination
+        pending_drop, selection = source, nil
+        message = nil
+    else
+        message = target and feedback or "已取消拖放"
     end
-    message = "已取消拖放"
     draw(false)
 end
 
@@ -701,7 +707,7 @@ end
 
 local function reset_view()
     clear_drag()
-    press, selection, message = nil, nil, nil
+    press, selection, message, pending_drop = nil, nil, nil, nil
     reward_index, event_index, elapsed = 1, 1, 0
     replay_complete, reviewing = false, false
     set_playing(false)
@@ -854,13 +860,26 @@ local function bind(path, callback, on_drag)
             if not pressed_here(path, event) then return end
             local moved = press.moved
             press = nil
-            if not moved and allows_input(path) then callback() end
+            if moved or not allows_input(path) then return end
+            local drop = pending_drop
+            if not drop then callback(); return end
+            pending_drop = nil
+            if path == "Team" .. drop.target then
+                apply_to_team(drop.action, drop, drop.destination)
+            else
+                message = "已取消拖放"
+                draw(false)
+            end
         end,
     }
     if on_drag then
         bound[Enum.CursorEventType.CursorBeginDrag] = function(event)
             if not allows_input(path) or not pressed_here(path, event) then return end
             press.moved = true
+            if pending_drop then
+                pending_drop = nil
+                draw(false)
+            end
             on_drag(event)
         end
         bound[Enum.CursorEventType.CursorDrag] = function(event)
@@ -901,7 +920,7 @@ local function release_view()
     local old_portrait = lunging and controls[lunging .. "/Portrait"]
     if old_portrait and old_portrait.alive then old_portrait:SetAnchoredPosition(0, 27) end
     root, session, state = nil, nil, nil
-    press, selection, message = nil, nil, nil
+    press, selection, message, pending_drop = nil, nil, nil, nil
     listeners, controls, portrait = {}, {}, nil
     visibility, displayed_text, displayed_colour = {}, {}, {}
     preparing_layout, lunging = nil, nil
@@ -977,7 +996,7 @@ end
 function OnDisable()
     view_enabled = false
     clear_drag()
-    press = nil
+    press, pending_drop = nil, nil
     sync_updates()
     stop_sound()
 end

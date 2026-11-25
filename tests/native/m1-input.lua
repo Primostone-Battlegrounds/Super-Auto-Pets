@@ -227,6 +227,7 @@ local function drag_to(source, target, touch, offset_x, offset_y)
     callbacks.CursorDrag(drop)
     callbacks.CursorEndDrag(drop)
     callbacks.CursorClick(drop)
+    if nodes[target .. "/DropTarget"].active then click(target, touch) end
 end
 
 local function destroy_script()
@@ -656,6 +657,8 @@ merge_drag.CursorDrag(cursor_event(11, 0, 0))
 assert(not nodes["Team1/DropTarget"].active and label("Team2/Name") == "棉尾兔")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 merge_drag.CursorEndDrag(cursor_event(11, hit_centre("Team1")))
+assert(label("Team2/Name") == "棉尾兔" and nodes["Team1/DropTarget"].active)
+click("Team1", 11)
 assert(label("Team2/Name") == "空位 2" and not nodes["Team2/Selected"].active)
 assert(label("Team1/XP") == "L1  经验 1/2" and not nodes["Team1/DropTarget"].active)
 finish(nil)

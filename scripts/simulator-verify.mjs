@@ -197,7 +197,27 @@ for(const {canvasId,playerCount,mode} of configurations) {
 
     pointer('down', box(`${pet}/Hit`));
     pointer('move', slot);
+    pointer('cancel', slot);
+    await capture('practice-drag-interrupted');
+    requireText('Practice/Money/Value', /^9$/u);
+    requireText(`${team}/Name`, /^空位/u);
+    assert.equal(visibleText(`${pet}/Name`).text, petBefore);
+    assert.equal(picture.parent, petHome);
+    press('Shop/Reroll');
+    await capture('practice-drag-interrupt-dismissed');
+    requireText('Practice/Money/Value', /^9$/u);
+    assert.ok(!visibleText(`${team}/DropLabel`));
+
+    pointer('down', box(`${pet}/Hit`));
+    pointer('move', slot);
     pointer('up', slot);
+    pointer('up', slot);
+    await capture('practice-drag-purchase-preview');
+    requireText('Practice/Money/Value', /^9$/u);
+    requireText(`${team}/Name`, /^空位/u);
+    requireText('Practice/Hint', /购买需 3 金.*点击标记站位确认/u);
+    assert.equal(visibleText(`${pet}/Name`).text, petBefore);
+    press('Team1');
     await capture('practice-drag-purchase');
     requireText('Practice/Money/Value', /^6$/u);
     requireText(`${pet}/Name`, /^空商品$/u);
@@ -215,6 +235,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(!visibleText(`${team}/XP`), 'Drop feedback replaces the experience label');
     assert.ok(!visibleText('Practice/OpponentCaption'), 'The lifted portrait must not cover the board caption');
     pointer('up', nearBottom);
+    await capture('practice-drag-feed-preview');
+    requireText('Practice/Money/Value', /^6$/u);
+    assert.equal(visibleText(`${team}/Detail`).text, statsBefore);
+    requireText('Practice/Hint', /喂食需 3 金.*点击标记站位确认/u);
+    press('Team1');
     await capture('practice-drag-feed');
     requireText('Practice/Money/Value', /^3$/u);
     requireText(`${food}/Name`, /^空商品$/u);
