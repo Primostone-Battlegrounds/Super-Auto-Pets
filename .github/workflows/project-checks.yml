@@ -3,7 +3,7 @@ name: Project verification
 on:
   pull_request:
     branches: [develop]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -23,18 +24,21 @@ jobs:
       - name: Install Lua and Backlog
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.4 lua5.3
+          sudo apt-get install -y lua5.4 lua5.3 fonts-noto-cjk
           npm install --prefix "$RUNNER_TEMP/backlog-tools" --no-audit --no-fund backlog.md@1.53.0
           echo "$RUNNER_TEMP/backlog-tools/node_modules/.bin" >> "$GITHUB_PATH"
-      - name: Check project
+      - name: Check design and Backlog bindings
+        id: design
         env:
-          LUA: lua5.4
-        run: sh scripts/check.sh
-      - name: Check domain compatibility on Lua 5.3
+          SAP_PR_BODY: ${{ github.event.pull_request.body }}
+          SAP_BASE_REVISION: ${{ github.event.pull_request.base.sha }}
         run: |
-          for suite in tests/*.lua; do
-            lua5.3 -E "$suite"
-          done
+          design=$(node scripts/check-design.mjs pr "$SAP_BASE_REVISION")
+          version=$(node -p 'JSON.parse(process.argv[1]).designVersion' "$design")
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Run rules on Lua 5.3 and Lua 5.4
+        shell: bash
+        run: sh scripts/check-rules.sh | tee "$RUNNER_TEMP/sap-rules.log"
       - name: Prepare pinned Miliastra MCP
         if: hashFiles('tests/native/verify-g0.mjs', 'tests/native/verify-m1.mjs', 'tests/native/verify-m2-probe.mjs', 'tests/native/verify-m3-probe.mjs', 'tests/native/verify-m3-collision.mjs', 'tests/native/verify-versus-shop.mjs', 'tests/native/verify-m3-opening.mjs', 'tests/native/verify-m3-room.mjs') != ''
         run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
@@ -236,11 +240,36 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Verify the unified six-tier game
+        id: unified
         if: hashFiles('tests/native/verify-game.mjs') != ''
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
+          SAP_DESIGN_VERSION: ${{ steps.design.outputs.version }}
         run: |
           package="$RUNNER_TEMP/verified-game"
           node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" \
             "$RUNNER_TEMP/native-validation" lua5.3 "$package"
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
+          node scripts/acceptance-gate.mjs "$package"
+      - name: Prepare pinned Beyond Simulator
+        run: sh scripts/simulator-setup.sh "$RUNNER_TEMP/beyond-simulator" "$RUNNER_TEMP/simulator-setup"
+      - name: Run real client Lua and render on five canvases
+        env:
+          SIMULATOR_REQUIRE_TEXT: '1'
+        run: |
+          node scripts/simulator-verify.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
+            "$RUNNER_TEMP/verified-game/super-auto-pets.gil" "$RUNNER_TEMP/simulator-evidence"
+      - name: Bind layer evidence to the candidate
+        if: ${{ always() && steps.unified.outcome == 'success' }}
+        id: evidence
+        run: |
+          node scripts/record-acceptance.mjs "$RUNNER_TEMP/verified-game" "$RUNNER_TEMP/sap-rules.log" "$RUNNER_TEMP/simulator-evidence"
+          (cd "$RUNNER_TEMP/verified-game" && sha256sum --strict -c SHA256SUMS)
+      - name: Upload unified candidate
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unified-candidate-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/verified-game
+          if-no-files-found: error
+          retention-days: 30

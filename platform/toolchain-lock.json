@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "mcp": {
+    "repository": "https://github.com/FurinyaWorks/genshin-miliastra-mcp",
+    "commit": "59c576e41632a6bf6781bbca83a676d0da0374ec",
+    "officialClient": false
+  },
+  "simulator": {
+    "repository": "https://github.com/1475505/miliastra-beyond-simulator",
+    "commit": "9ef690044c68ed2d1553c158f14122a89200a458",
+    "version": "2.4.0",
+    "packageManager": "pnpm@10.15.0",
+    "fullOfficialNodeGraphVM": false
+  }
+}

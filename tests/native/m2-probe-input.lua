@@ -1,8 +1,8 @@
 local controls = {}
-local names = {"Status", "MarketGold", "Team", "LeaveLabel", "MergeLabel", "RewardLabel", "ReplayLabel", "ReplayStatus",
+local names = {"ReplayBoard", "TeamInspection", "AbilityTitle", "AbilityBody", "Status", "MarketGold", "Team", "LeaveLabel", "MergeLabel", "RewardLabel", "ReplayLabel", "ReplayStatus",
     "Refresh", "Ready", "Advance", "Leave", "Reroll", "Sell", "Merge", "Reward", "RewardNext", "Replay"}
 for _, pair in ipairs({{"OfferLabel", 3}, {"Buy", 3}, {"FreezePet", 3}, {"FreezePetLabel", 3},
-    {"FoodLabel", 2}, {"Food", 2}, {"FreezeFood", 2}, {"FreezeFoodLabel", 2}, {"Team", 5}, {"TeamLabel", 5}}) do
+    {"FoodLabel", 2}, {"Food", 2}, {"FreezeFood", 2}, {"FreezeFoodLabel", 2}, {"Team", 5}, {"TeamLabel", 5}, {"ReplayOwn", 5}, {"ReplayEnemy", 5}}) do
     for slot = 1, pair[2] do names[#names + 1] = pair[1] .. slot end
 end
 for _, pair in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},
@@ -10,6 +10,16 @@ for _, pair in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge
     {"Leave", "LeaveLabel"}, {"Replay", "ReplayLabel"}}) do
     names[#names + 1] = pair[1] .. "Face"
     names[#names + 1] = pair[2]
+end
+for slot = 1, 5 do names[#names + 1] = "Team" .. slot .. "Face" end
+for _, kind in ipairs({{"InspectTeam", 5}, {"InspectPet", 3}, {"InspectReward", 1}}) do
+    for slot = 1, kind[2] do
+        local name = kind[1] == "InspectReward" and kind[1] or kind[1] .. slot
+        for _, suffix in ipairs({"", "Face", "Label"}) do names[#names + 1] = name .. suffix end
+    end
+end
+for _, pair in ipairs({{"Buy", 3}, {"FreezePet", 3}, {"Food", 2}, {"FreezeFood", 2}}) do
+    for slot = 1, pair[2] do names[#names + 1] = pair[1] .. slot .. "Face" end
 end
 for _, name in ipairs(names) do
     controls[name] = {
@@ -27,6 +37,9 @@ for _, name in ipairs(names) do
     }
 end
 
+controls.ReplayBoard.GetChild = function(_, name) return assert(controls["Replay" .. name], name) end
+controls.TeamInspection.GetChild = function(_, name) return assert(controls[name], name) end
+
 Enum = {CursorEventType = {CursorClick = 1}}
 local sent, handlers = {}, {}
 game = {
@@ -43,7 +56,8 @@ game = {
     end,
 }
 script = {
-    object = {GetChild = function(_, name) return assert(controls[name], name) end},
+    object = {GetChild = function(_, name) return assert(controls[name], name) end,
+        FindChild = function(_, name) return assert(controls[name], name) end},
     RegisterServerSignalHandler = function(_, name, callback)
         assert((name == "AP_DuelSnapshot" or name == "AP_DuelMarket" or name == "AP_DuelReplay") and handlers[name] == nil)
         handlers[name] = callback
@@ -202,7 +216,7 @@ press("Replay")
 OnUpdate(0.5)
 assert_text("ReplayStatus", "1/2")
 press("Replay")
-OnUpdate(0.18)
+OnUpdate(0.4)
 assert_text("ReplayStatus", "2/2")
 assert_text("ReplayLabel", "重播")
 handlers.AP_DuelReplay("AP_DuelReplay", {1, 17, 1, {1, 11, 1, 4, 1}, {}})
@@ -238,7 +252,8 @@ if arg[2] == "release" then
     assert_text("FoodLabel1", "星果盘")
     status(2, 3, {round = 11, phase = 1, settlements = 11, outcome = 1})
     handlers.AP_DuelReplay("AP_DuelReplay", {11, 17, 1, {16, 11, 7, 12, 1}, {}})
-    assert_text("ReplayStatus", "霜环麝牛12")
+    assert_text("ReplayOwn1", "霜环麝牛")
+    assert_text("ReplayOwn1", "12命")
     assert_text("ReplayStatus", "第 11 轮")
 end
 close()

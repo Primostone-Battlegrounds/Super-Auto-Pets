@@ -1,0 +1,278 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "ab73443adee5a2b5b37268779356c2fe67220886",
+  "mapSha256": "5bd4af6c68bad1181d1ade22ff9fe147353ac1b0ddc7f95ae7c341d80db5d657",
+  "mcpCommit": "59c576e41632a6bf6781bbca83a676d0da0374ec",
+  "simulatorCommit": "9ef690044c68ed2d1553c158f14122a89200a458",
+  "officialClient": "not-executed",
+  "status": "runtime-failed",
+  "scope": "Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified",
+  "textDefectCount": 989,
+  "textExamples": [
+    {
+      "canvasId": "pc-16-9",
+      "frame": "startup",
+      "path": "Lobby/Title",
+      "name": "Title",
+      "text": "小动物自走棋",
+      "height": 61,
+      "requiredHeight": 67.8
+    },
+    {
+      "canvasId": "pc-16-9",
+      "frame": "startup",
+      "path": "Lobby/Status",
+      "name": "Status",
+      "text": "正在连接千星关卡",
+      "height": 30,
+      "requiredHeight": 37.349999999999994
+    },
+    {
+      "canvasId": "pc-16-9",
+      "frame": "lobby-fixture",
+      "path": "Lobby/Title",
+      "name": "Title",
+      "text": "小动物自走棋",
+      "height": 61,
+      "requiredHeight": 67.8
+    },
+    {
+      "canvasId": "pc-16-9",
+      "frame": "lobby-fixture",
+      "path": "Lobby/Status",
+      "name": "Status",
+      "text": "已进入 1 人",
+      "height": 30,
+      "requiredHeight": 37.349999999999994
+    }
+  ],
+  "cases": [
+    {
+      "canvasId": "pc-16-9",
+      "playerCount": 1,
+      "pointerInputs": 13,
+      "runtimeExceptions": [
+        "auto_pets_game.lua:714: attempt to call a nil value (field 'pack')"
+      ],
+      "frameNames": [
+        "startup",
+        "lobby-fixture",
+        "duel-wait-fixture",
+        "room-wait-fixture",
+        "practice-menu",
+        "practice-shop",
+        "practice-battle",
+        "practice-replay",
+        "runtime-exception"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "5e7885a6f23b9c008e0839dad3e3590932e98256512cde106c19dd8a7e7fe424"
+        },
+        {
+          "name": "practice-battle",
+          "sha256": "356009bc9d5fa74f71f9364af6b1d640e386c8ae5cd42911c4b7f8d5f5c6a1ef"
+        },
+        {
+          "name": "practice-replay",
+          "sha256": "4806a75bf44b63d77e5ade5d7d45199ac74970b9724682ebd78c9fa83326fde6"
+        }
+      ]
+    },
+    {
+      "canvasId": "pc-21-9",
+      "playerCount": 1,
+      "pointerInputs": 13,
+      "runtimeExceptions": [
+        "auto_pets_game.lua:714: attempt to call a nil value (field 'pack')"
+      ],
+      "frameNames": [
+        "startup",
+        "lobby-fixture",
+        "duel-wait-fixture",
+        "room-wait-fixture",
+        "practice-menu",
+        "practice-shop",
+        "practice-battle",
+        "practice-replay",
+        "runtime-exception"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "da91671a5f21791d8a2f8ccbf5ff9acd74d01c523b37ee8ed3a0ee834a646e95"
+        },
+        {
+          "name": "practice-battle",
+          "sha256": "befce9b911acd4f7bd0eaec392b1a88fad3a786cd62fe69b51a80706f1fc68f9"
+        },
+        {
+          "name": "practice-replay",
+          "sha256": "95cab7c0a67e1a31554a822a4d15e1c5535ce255f73edc05b6bb194067f70f0b"
+        }
+      ]
+    },
+    {
+      "canvasId": "mobile-16-9",
+      "playerCount": 1,
+      "pointerInputs": 13,
+      "runtimeExceptions": [
+        "auto_pets_game.lua:714: attempt to call a nil value (field 'pack')"
+      ],
+      "frameNames": [
+        "startup",
+        "lobby-fixture",
+        "duel-wait-fixture",
+        "room-wait-fixture",
+        "practice-menu",
+        "practice-shop",
+        "practice-battle",
+        "practice-replay",
+        "runtime-exception"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "0fb277fa48338210cffa9df56724944e180514837f7f0606244a0409d99cfd70"
+        },
+        {
+          "name": "practice-battle",
+          "sha256": "a55f38f09941013963143cbe2258ddc58b5bb6a5b8131aae4517a1b2809d5580"
+        },
+        {
+          "name": "practice-replay",
+          "sha256": "e4ae863b6df212319e9acf28d31204f9aef9dc3770ce91db456a986d2a2b24fd"
+        }
+      ]
+    },
+    {
+      "canvasId": "mobile-19.5-9",
+      "playerCount": 1,
+      "pointerInputs": 13,
+      "runtimeExceptions": [
+        "auto_pets_game.lua:714: attempt to call a nil value (field 'pack')"
+      ],
+      "frameNames": [
+        "startup",
+        "lobby-fixture",
+        "duel-wait-fixture",
+        "room-wait-fixture",
+        "practice-menu",
+        "practice-shop",
+        "practice-battle",
+        "practice-replay",
+        "runtime-exception"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "e84560e838230cfc6fd88304ac4ca16a8fd03101db530df6c57f37978a72c1f8"
+        },
+        {
+          "name": "practice-battle",
+          "sha256": "8142a37c9ea4c7c8dd5039e2416765aaf59f276a8feec1e1cf0f070cb3eb1e71"
+        },
+        {
+          "name": "practice-replay",
+          "sha256": "36de14a5c7d9117e64e4c6e37a9e014ee9ad4ebe710b6e4d2df0685626f148b8"
+        }
+      ]
+    },
+    {
+      "canvasId": "mobile-4-3",
+      "playerCount": 1,
+      "pointerInputs": 13,
+      "runtimeExceptions": [
+        "auto_pets_game.lua:714: attempt to call a nil value (field 'pack')"
+      ],
+      "frameNames": [
+        "startup",
+        "lobby-fixture",
+        "duel-wait-fixture",
+        "room-wait-fixture",
+        "practice-menu",
+        "practice-shop",
+        "practice-battle",
+        "practice-replay",
+        "runtime-exception"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "4f6df0ae390456ef7be5901f76f21cd646d5d2bd80f9d3d767ec13daba6e0c63"
+        },
+        {
+          "name": "practice-battle",
+          "sha256": "a7d59d039f82f1033bc567507b26d64caddaee085c93e193966ff334f551cf31"
+        },
+        {
+          "name": "practice-replay",
+          "sha256": "7499d0e637542bee1988884a726c966734db432cabdb43aac6e0890501384dc4"
+        }
+      ]
+    },
+    {
+      "canvasId": "mobile-16-9",
+      "playerCount": 2,
+      "pointerInputs": 2,
+      "runtimeExceptions": [],
+      "frameNames": [
+        "startup",
+        "client-1-preparation-fixture",
+        "client-2-preparation-fixture",
+        "client-1-buy-request"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "0fb277fa48338210cffa9df56724944e180514837f7f0606244a0409d99cfd70"
+        },
+        {
+          "name": "client-1-buy-request",
+          "sha256": "0b3668d7360b160355fb3f5cd2db9c8b97d44e67d006357e08223224f0cbbd3d"
+        }
+      ]
+    },
+    {
+      "canvasId": "mobile-16-9",
+      "playerCount": 8,
+      "pointerInputs": 2,
+      "runtimeExceptions": [],
+      "frameNames": [
+        "startup",
+        "client-1-preparation-fixture",
+        "client-2-preparation-fixture",
+        "client-3-preparation-fixture",
+        "client-4-preparation-fixture",
+        "client-5-preparation-fixture",
+        "client-6-preparation-fixture",
+        "client-7-preparation-fixture",
+        "client-8-preparation-fixture",
+        "client-1-buy-request"
+      ],
+      "assetWarnings": [],
+      "screenshots": [
+        {
+          "name": "startup",
+          "sha256": "0fb277fa48338210cffa9df56724944e180514837f7f0606244a0409d99cfd70"
+        },
+        {
+          "name": "client-1-buy-request",
+          "sha256": "2160960b3dc082bb7beaa9434b83b28dc8d7ce2d44ee5fc487545ce96698ef2c"
+        }
+      ]
+    }
+  ],
+  "evidenceDirectory": "baseline-locked",
+  "limitations": [
+    "Native node graphs are not executed by the simulator. Server responses must be explicitly identified as test fixtures.",
+    "Software raster screenshots do not verify official-client fonts, GPU performance, text permissions, multiplayer or audio."
+  ]
+}

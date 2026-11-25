@@ -173,6 +173,30 @@ signals.AP_RoomReplay("AP_RoomReplay", {1, 1, 2, 1, 11, first, second})
 assert(label("Replay/Own1"):find("40攻 · 100命", 1, true))
 signals.AP_RoomBattle("AP_RoomBattle", {26, 1, 1, 2, 0, board(1, 3)})
 assert(label("Replay/Own1"):find("40攻 · 100命", 1, true))
+local seen = {}
+for step = 1, 100 do
+    local event = label("Replay/Event")
+    for _, cue in ipairs({"出击", "退场", "发动", "命"}) do
+        if event:find(cue, 1, true) then seen[cue] = true end
+    end
+    env.OnUpdate(0.6)
+end
+assert(seen["出击"] and seen["退场"] and seen["发动"] and seen["命"], "canonical causal events were skipped")
+assert(label("Replay/RoundText"):find("本轮获胜", 1, true), "canonical replay did not advance to result")
+click_at("Replay/Previous")
+local paused_frame = label("Replay/RoundText")
+env.OnUpdate(2)
+assert(label("Replay/RoundText") == paused_frame, "manual scrub did not pause playback")
+click_at("Replay/Auto")
+env.OnUpdate(0.6)
+assert(label("Replay/RoundText"):find("本轮获胜", 1, true), "resume did not reach terminal")
+click_at("Replay/Auto")
+assert(label("Replay/RoundText"):find("回放 1 /", 1, true), "terminal replay did not restart")
+click_at("Replay/Auto")
+local replay_paused = label("Replay/RoundText")
+env.OnUpdate(2)
+assert(label("Replay/RoundText") == replay_paused, "explicit pause did not stop replay")
+
 click_at("Replay/Follow")
 assert(label("Replay/RoundText"):find("本轮获胜", 1, true))
 view(16, 2, 2, 1, false, market(2))

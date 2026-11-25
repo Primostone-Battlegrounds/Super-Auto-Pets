@@ -55,11 +55,40 @@ local function equal(expected, observed)
     return true
 end
 
+local native_pack = math.maxinteger > 2147483647 and string.pack
+local word = 4294967296.0
+
 local function hash_bytes(hash, bytes)
+    if not native_pack then
+        for index = 1, #bytes do
+            local byte = math.floor(hash.low % 256)
+            local low = hash.low - byte + (byte ~ bytes:byte(index))
+            -- FNV-1a prime = 256 * 2^32 + 435. All limb products fit in a Lua double exactly.
+            local product = low * 435
+            hash.high = (hash.high * 435 + low * 256 + math.floor(product / word)) % word
+            hash.low = product % word
+        end
+        return hash
+    end
     for index = 1, #bytes do
         hash = (hash ~ bytes:byte(index)) * 0x100000001b3
     end
     return hash
+end
+
+local function pack_integer(tag, number, size)
+    if native_pack then return native_pack(size == 4 and "<c1I4" or "<c1i8", tag, number) end
+    local bytes = {tag}
+    for index = 1, size do
+        bytes[index + 1] = string.char(number % 256)
+        number = number // 256
+    end
+    return table.concat(bytes)
+end
+
+local function hex_word(value)
+    return string.format("%02x%02x%02x%02x", math.floor(value / 16777216), math.floor(value / 65536) % 256,
+        math.floor(value / 256) % 256, math.floor(value) % 256)
 end
 
 -- The digest covers ordered events and nested boards. Encode typed lengths and
@@ -67,17 +96,17 @@ end
 local function hash_value(hash, value)
     local kind = type(value)
     if kind == "string" then
-        return hash_bytes(hash_bytes(hash, string.pack("<c1I4", "s", #value)), value)
+        return hash_bytes(hash_bytes(hash, pack_integer("s", #value, 4)), value)
     elseif kind == "number" then
         assert(math.type(value) == "integer", "non-integer training event")
-        return hash_bytes(hash, string.pack("<c1i8", "i", value))
+        return hash_bytes(hash, pack_integer("i", value, 8))
     elseif kind == "boolean" then
         return hash_bytes(hash, value and "t" or "f")
     end
     assert(kind == "table", "unsupported training event value")
     local size = #value
     if size > 0 then
-        hash = hash_bytes(hash, string.pack("<c1I4", "a", size))
+        hash = hash_bytes(hash, pack_integer("a", size, 4))
         for key in pairs(value) do
             assert(math.type(key) == "integer" and key >= 1 and key <= size, "mixed training event table")
         end
@@ -92,7 +121,7 @@ local function hash_value(hash, value)
         keys[#keys + 1] = key
     end
     table.sort(keys)
-    hash = hash_bytes(hash, string.pack("<c1I4", "o", #keys))
+    hash = hash_bytes(hash, pack_integer("o", #keys, 4))
     for _, key in ipairs(keys) do
         hash = hash_value(hash_value(hash, key), value[key])
     end
@@ -100,6 +129,8 @@ local function hash_value(hash, value)
 end
 
 local function summarize_battle(result)
+    local initial_hash = native_pack and 0xcbf29ce484222325 or {high = 3421674724.0, low = 2216829733.0}
+    local digest = hash_value(initial_hash, result.events)
     return {
         seed = result.seed,
         status = result.status,
@@ -107,7 +138,7 @@ local function summarize_battle(result)
         rng_state = result.rng_state,
         reason = result.events[#result.events].reason,
         event_count = #result.events,
-        event_digest = string.format("%016x", hash_value(0xcbf29ce484222325, result.events)),
+        event_digest = native_pack and string.format("%016x", digest) or hex_word(digest.high) .. hex_word(digest.low),
     }
 end
 
@@ -386,7 +417,7 @@ function bot.new_pool(seed, requested_style, difficulty, catalog)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
     assert(requested_style == nil or weights[requested_style], "unknown bot style")
     assert(difficulty == nil or difficulty == "standard" or difficulty == "beginner", "unknown bot difficulty")
-    local selector = rng.new(seed ~ 0x424f54504f4f4c)
+    local selector = rng.salted(seed, 0x424f54, 0x504f4f4c) -- BOTPOOL
     local selected = selector:int(1, 2)
     local style_index = selector:int(1, #styles)
     local style = requested_style or styles[style_index]
@@ -396,7 +427,7 @@ function bot.new_pool(seed, requested_style, difficulty, catalog)
         requested_style = requested_style,
         difficulty = difficulty == "beginner" and difficulty or nil,
         selected = selected,
-        battle_random = rng.new(seed ~ 0x545241494e),
+        battle_random = rng.salted(seed, 0x54, 0x5241494e), -- TRAIN
         sessions = {},
         history = {},
     }

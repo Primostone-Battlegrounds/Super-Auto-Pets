@@ -1,0 +1,37 @@
+# 苔原小队 / Moss & Might — v2.0.0
+
+Design status is recorded in [the manifest](../../manifest.json). The remediation baseline is `ab73443adee5a2b5b37268779356c2fe67220886` (`develop`). Substantive independent review can approve this exact design as an implementation basis while disclosed official-device checks remain pending and product acceptance stays NO-GO.
+
+## Product and scope
+
+A legible five-companion auto-battler for Miliastra: one menu offers eight-seat elimination (P0), friend 1v1 (P0), and standalone AI practice (P1). Platform invitations and touch/native constraints are the only established reasons to introduce new interactions. Existing verified source interaction order, timing and information priority are the defaults. This document does **not** claim that unobserved source behavior is verified.
+
+Official stills support the resource strip, five upper team positions, a distinct lower recruitment area, adjacent details, opposing battle groups and visible attack/health. Newly recovered official Steam promotional frames add observed lower-row pointer/tooltip detail (trigger may be hover, click or held input; `STV-SHOP-DETAIL`, 00:04.000), lifted pet/formation affordances (`STV-SHOP-DRAG`, 00:05.000), team placement and gold 10→7 (`STV-SHOP-PURCHASE`, 00:05.500), food detail/targeting (00:08.500/00:09.500), and playback/ability/damage/faint sequence examples (00:26.000–00:29.000). Exact IDs and immutable artifacts are in [the official Steam observation](../../references/v2.0.0/steam-trailer-observation.md), supplementing `reference-first.md` and its ledger. These promotional frames do not identify the current client build, prove raw button inputs, establish every intermediate event, or prove precise pacing. No current official client playthrough was obtained.
+
+The target retains these observed information priorities, source-to-target/drag affordances and causal battle clarity. Read-only touch inspection and native invitation/practice behavior are disclosed Miliastra adaptations. Five **team** slots are required. The full shop distinguishes pets, foods and rewards according to approved rules; the HTML's five equal recruit cards are an illustrative simplification, not a mandate to remove production food/reward areas. Actual implementation and remaining gaps are explicitly mapped in [IMPLEMENTATION-MAP.md](IMPLEMENTATION-MAP.md). Source artwork remains research only.
+
+## Original identity
+
+Working product identity: 苔原小队 / Moss & Might, a field journal about forest companions. Warm paper, deep evergreen, sage scenery, copper economy accents, original geometric creatures, generous type hierarchy, and thin botanical borders distinguish it visually. No source logos, sprites, sounds, copied character silhouettes, or proprietary UI assets are used. Project assets were not reused because no candidate was proven both original and suitable within this design pass. See `ASSET-PROVENANCE.md`.
+
+Tokens: ink `#173d3d`, primary `#206258`, paper `#f6f3e8`, board `#dce8d4`, secondary text `#6b817b`, cost accent `#edb073`. State is communicated through words and numbers in addition to color. PC target 1440×960; mobile landscape 844×390; 48-pixel preferred touch targets, 44-pixel minimum for primary play controls. Compact slot buttons remain the full card rather than tiny numeric targets.
+
+## Screen contract
+
+- Menu: clearly distinguish eight seats, two friends, and practice. No account or network claim in the prototype.
+- Lobby: show occupied/empty seats, readiness, invitation status, fill policy, and start availability. 1v1 waits for two ready players. Eight-seat permits one human and fills empty seats with bots. Real invitation failure/pending/retry and host loss remain mandatory runtime evidence.
+- Shop: keep round, gold, wins/lives immediately visible; team precedes recruitment; five team positions and distinct pet/food/reward inventories under approved catalog/tier rules; selected details include name, tier/level, attack, health, ability trigger, target, value and cost. Keep buy/roll/freeze/sell consequences visible and actionable. Preparation front is on the right. Native logical slot 1 is front; the HTML uses increasing left-to-right DOM indices, so its highest occupied index is front. Preserve physical formation semantics rather than copying an artifact-specific index. In battle the player front remains nearest the center on the left lane; the enemy front is nearest the center on the right lane. Every economic mutation must derive from authoritative state in production.
+- Battle: locked teams oppose toward center; present authoritative sequence, causal trigger, attack/damage, death and effects before result. Playback speed/skip may change presentation only. A missing sequence must pause and request recovery; never fabricate a result. This is the intended contract, not a claim that every current replay adapter implements that recovery.
+- Results: show round outcome, cumulative progress, life changes, next-round grant, continuation or final placement, replay/restart and return. Practice production target remains 10 wins / 5 lives, not the prototype's three-round demonstration.
+
+## Authority boundary
+
+`prototype/index.html` is a deterministic local interaction study, not runtime integration, matchmaking, AI, a balance simulation, or proof of multiplayer. It uses five invented creatures, fixed ability copy, fixed shop refresh and a six-event scripted victory. Ability descriptions are presentation samples and are **not executed**. The fixture always wins and completes after three rounds. This is labeled on battle and result screens. Production must use the approved pool, economy and engine outcomes, and must implement full mode-specific elimination and final placement rules.
+
+## Migration and review gate
+
+Keep v1 references and archived design intact. Submit the complete proposed design, source mapping, disclosed adaptations, implementation map and artifacts for an independent review bound to the exact Git SHA/design fingerprint. Review must judge whether the design is coherent and complete enough to implement, whether observed source behavior is retained, whether platform deviations are justified, and whether unsupported details are honestly bounded. A rubber-stamp or a passing HTML test is insufficient.
+
+A substantive independent review may approve this exact design **as an implementation basis** while physical-device/client checks remain explicitly pending. Its report must state what it approves and list unresolved implementation/release gates. Source gaps can be accepted only as explicit bounded assumptions with follow-up acceptance; never relabel them verified. Any later Active transition is a separate authorized manifest operation under the repository policy and must retain the reviewed ancestry/fingerprint. This revision remains Proposed; no activation is performed here.
+
+Product/release remains **NO-GO** until applicable acceptance gates in `ACCEPTANCE.md` close, including required official PC/mobile and multiplayer evidence. Those physical runs are product acceptance requirements, not a blanket prerequisite to independently approving or selecting a disclosed proposed design for isolated implementation. Design approval does not certify current code, assets, parity, official-client playability or release readiness. No code-only score closes a visual gate.

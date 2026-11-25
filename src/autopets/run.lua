@@ -34,7 +34,7 @@ local function reset(self, seed)
     self.shop = shop.new(seed ~ 0x53484f50, self.catalog) -- SHOP
     local opponent_random = rng.new(seed ~ 0x424f54) -- BOT
     self.opponents = bot.new_pool(opponent_random:next(), nil, self.difficulty, self.catalog)
-    self.battle_random = rng.new(seed ~ 0x4649474854) -- FIGHT
+    self.battle_random = rng.salted(seed, 0x46, 0x49474854) -- FIGHT
     assert(bot.advance_to_round(self.opponents, 1, opponent_turn_budget))
     prepare(self)
 end

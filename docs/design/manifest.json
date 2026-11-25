@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "scope": "miliastra-game",
+  "implementation": "v2.0.0",
+  "revisions": {
+    "v1.0.0": {
+      "status": "Superseded",
+      "gameVersion": "0.4.0",
+      "original": {
+        "version": "sap-turtle-grounded-2026-03-16",
+        "verification": "partial"
+      },
+      "references": [],
+      "importedFrom": "ab73443adee5a2b5b37268779356c2fe67220886"
+    },
+    "v2.0.0": {
+      "status": "Active",
+      "gameVersion": "0.5.0",
+      "original": {
+        "version": null,
+        "verification": "unverified"
+      },
+      "references": [
+        "v2.0.0/reference-first.md",
+        "v2.0.0/sources.json",
+        "v2.0.0/official-shop.jpg",
+        "v2.0.0/official-battle.jpg",
+        "v2.0.0/portable-platform-reuse.md",
+        "v2.0.0/steam-trailer-observation.md",
+        "v2.0.0/steam-trailer/dash_h264.txt",
+        "v2.0.0/steam-trailer/frame-18-0s.jpg",
+        "v2.0.0/steam-trailer/frame-26-0s.jpg",
+        "v2.0.0/steam-trailer/frame-27-0s.jpg",
+        "v2.0.0/steam-trailer/frame-28-0s.jpg",
+        "v2.0.0/steam-trailer/frame-29-0s.jpg",
+        "v2.0.0/steam-trailer/frame-4-0s.jpg",
+        "v2.0.0/steam-trailer/frame-5-0s.jpg",
+        "v2.0.0/steam-trailer/frame-5-5s.jpg",
+        "v2.0.0/steam-trailer/frame-8-5s.jpg",
+        "v2.0.0/steam-trailer/frame-9-5s.jpg",
+        "v2.0.0/steam-trailer/hls_h264.txt",
+        "v2.0.0/steam-trailer/movie-metadata.json",
+        "v2.0.0/steam-trailer/trace.json"
+      ],
+      "approval": {
+        "reviewer": "prototype_review",
+        "author": "design",
+        "reviewedRevision": "758a189111a03cfd9c9dc4f0d4068ac36cdf953b",
+        "designFingerprint": "56692f9e449d520a969bfcca4de5ce6e2c1b07d0ed42f6af64833c282af0bc47",
+        "evidence": "docs/evidence/v2-design-basis-review.md",
+        "evidenceSha256": "cdf20a2fb5b474cb992056faa03c6544d7a0c72d03276f7f72583194e1654647"
+      }
+    }
+  }
+}

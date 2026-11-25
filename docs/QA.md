@@ -1,15 +1,16 @@
 # QA
 
-`sh scripts/check.sh` 运行 Backlog 校验和仓库内的 Lua 测试。需要 Lua 5.4 与 Backlog.md 1.53.0。CI 预期在每个指向 `develop` 的 PR 上报告 `Project checks`。
+`sh scripts/check-rules.sh` 运行版本治理、Backlog 校验和两版 Lua 测试。需要 Node 22、Lua 5.3/5.4 和 Backlog.md 1.53.0。每个指向 `develop` 的 PR 绑定设计，CI 报告 `Project checks`。 [设计清单](design/manifest.json) · [工具链](../platform/TOOLCHAIN.md)
 
 | 验收层 | 证据 |
 | --- | --- |
-| 源码测试 | 精确分支 SHA、命令、退出状态和确定性回放。 |
-| 模拟器 | 隔离会话或终端中实际执行的输入路径与结算结果。 |
+| 规则与源码 | 精确分支 SHA、两版 Lua 运行日志和确定性回放。 |
+| 原版设计及交互 | 固定原版、轨迹、项目取舍和独立对照评审。 |
+| Simulator | 固定 Beyond Simulator 实际执行回读 Lua、命中、绘制、关键文本、回放与独立画面评审。 |
 | 原生 GIL | 工具版本、隔离样本、构建结果和读回的 Lua/布局绑定。 |
-| 离线画面 | 用 GIL 回读后的控件树和模拟输入绘制实际状态，对照小尺寸动物轮廓、商店与阵容区分、战斗反馈和结算。 |
-| PC 实机 | 官方客户端记录输入、显示、日志与结果。 |
-| 移动实机 | 官方移动客户端独立记录触控、显示、日志与结果。 |
+| 官方客户端 | PC、手机、多人分别记录设备、客户端版本、输入、画面、日志和结果。 |
+
+旧离线绘图用于调试 GIL 控件树。每个候选包的 `ACCEPTANCE.json` 标注各层证据和待验项。成品验收使用 `node scripts/acceptance-gate.mjs <package> --require-go`。
 
 OpenHarness 固定到 `aebb0c2255a5df275491009285c1a23d03f90771`，使用 cooperative 模式。运行 `openharness --repo . entry` 和 `openharness --repo . doctor` 读取当下权限和缺口。分支保护和 Required Checks 以 GitHub 实际配置为准。
 

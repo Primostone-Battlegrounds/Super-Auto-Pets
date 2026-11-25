@@ -183,7 +183,10 @@ try {
     readUi.interface.controls.map(({ name, kind, position, size }) => ({ name, kind, position, size })),
     ui.controls.map(({ name, kind, position, size }) => ({ name, kind, position, size })),
   );
-  assert.ok(readUi.interface.controls.every(control => control.active !== false && control.visible !== false));
+  assert.ok(readUi.interface.controls.filter(control => control.name !== "ReplayBoard")
+    .every(control => control.active !== false && control.visible !== false));
+  assert.equal(readUi.interface.controls.find(control => control.name === "ReplayBoard").visible, false,
+    "Replay board must start hidden until a validated canonical receipt is available");
   const checked = await call('scene_check_client', { mapPath, scripts: [script] });
   assert.deepEqual(checked.problems, []);
   const checkReplay = duelReplayOracle(lua, process.env.LUA54 || 'lua5.4', project, profile);

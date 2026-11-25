@@ -7,11 +7,20 @@ import { standingsLayout } from './multiplayer-standings.mjs';
 function button(name, x, y, width, height, text, primary = false) {
   return group(name, [x, y], [width, height], [
     image('Surface', [0, 0], [width, height], primary ? pigment.primary : pigment.chip),
-    label('Text', [0, 0], [width - 10, height - 6], text, 17, primary ? pigment.cream : pigment.ink),
+    label('Text', [0, 0], [width - 10, height], text, 17, primary ? pigment.cream : pigment.ink),
     { name: 'Hit', kind: 'cursorArea', size: [width, height] },
   ]);
 }
 
+function inspectable(name, inspect, x, y, width, height) {
+  const inspectWidth = 48;
+  const main = button(name, x, y, width, height, '');
+  main.children.find(c => c.name === 'Text').position = [-inspectWidth / 2, 0];
+  main.children.find(c => c.name === 'Text').size = [width - inspectWidth - 10, height];
+  main.children.find(c => c.name === 'Hit').position = [-inspectWidth / 2, 0];
+  main.children.find(c => c.name === 'Hit').size = [width - inspectWidth, height];
+  return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height, '技能')];
+}
 const slots = [1, 2, 3, 4, 5];
 const slotX = slot => (slot - 3) * 162;
 const browse = [
@@ -29,32 +38,38 @@ export const m3RoomLayout = {
     group('Match', [-139, 0], [866, 642], [
       image('Border', [0, 0], [866, 642], pigment.edge),
       image('Paper', [0, 0], [860, 636], pigment.canvas),
-      label('Heading', [-207, 276], [412, 45], '八席淘汰赛', 33, pigment.ink, 'left'),
-      label('Status', [0, 225], [820, 38], '连接房间中', 23, pigment.ink, 'left'),
-      group('Shop', [0, 10], [832, 370], [
+      label('Heading', [-207, 276], [412, 54], '八席淘汰赛', 33, pigment.ink, 'left'),
+      label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
+      group('Shop', [0, 10], [832, 470], [
         label('Money', [0, 160], [810, 36], '', 22, pigment.ink, 'left'),
         ...slots.flatMap(slot => [
-          button(`Offer${slot}`, slotX(slot), -7, 154, 80, ''),
+          ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80)
+            : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '')]),
           button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
-          button(`Team${slot}`, -slotX(slot), 94, 154, 76, ''),
+          ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), 94, 154, 76),
         ]),
-        ...browse.map(([name, text], index) => button(name, slotX(index + 1), -135, 154, 52, text)),
+        ...browse.flatMap(([name, text], index) => name === 'Reward'
+          ? inspectable(name, 'InspectReward', slotX(index + 1), -135, 154, 52)
+          : [button(name, slotX(index + 1), -135, 154, 52, text)]),
+        label('AbilityTitle', [0, -182], [810, 28], '点动物旁的「技能」查看', 18, pigment.ink, 'left'),
+        label('AbilityBody', [0, -215], [810, 38], '', 17, pigment.ink, 'left'),
       ], false),
       group('Replay', [0, 10], [832, 370], [
-        label('RoundText', [0, 144], [800, 58], '', 23, pigment.ink, 'left'),
+        label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
         image('Ally', [-207, 24], [403, 143], pigment.rail),
         image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
         ...slots.flatMap(slot => [
           label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
           label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
         ]),
-        ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Follow', '追到最新']]
-          .map(([name, text], index) => button(name, (index - 1) * 202, -133, 188, 52, text)),
+        label('Event', [0, -72], [800, 50], '', 18, pigment.ink),
+        ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
+          .map(([name, text], index) => button(name, (index - 1.5) * 202, -133, 188, 52, text)),
       ], false),
-      button('Refresh', -327, -217, 164, 48, '同步 · E'),
-      button('Ready', -131, -217, 182, 48, '准备 · F', true),
-      button('Forfeit', 327, -217, 164, 48, '认输'),
-      label('Hint', [0, -275], [810, 40], '正在读取房间状态', 17, pigment.muted, 'left'),
+      button('Refresh', -327, -254, 164, 48, '同步 · E'),
+      button('Ready', -131, -254, 182, 48, '准备 · F', true),
+      button('Forfeit', 327, -254, 164, 48, '认输'),
+      label('Hint', [0, -302], [810, 32], '正在读取房间状态', 17, pigment.muted, 'left'),
     ]),
     standingsLayout('room', { position: [452, 0] }),
   ],

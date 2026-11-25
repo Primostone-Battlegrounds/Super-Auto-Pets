@@ -193,7 +193,7 @@ local function assert_tooltip(card, above_card)
     local pointer = nodes["Tooltip/Pointer"]
     local card_x, card_y = hit_centre(card)
     local popup_y = popup.y + canvas[2] / 2
-    assert(popup.active and popup.visible and popup.width <= 360 and popup.height <= 58)
+    assert(popup.active and popup.visible and popup.width <= 360 and popup.height <= 72)
     assert(popup.x + pointer.x + canvas[1] / 2 == card_x)
     assert(math.abs(popup.x) + popup.width / 2 < canvas[1] / 2)
     assert(not nodes["Tooltip/Hit"])

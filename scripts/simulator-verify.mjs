@@ -1,0 +1,229 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createRequire} from 'node:module';
+import {execFileSync} from 'node:child_process';
+import {nativeSimulatorSave,sha256} from './simulator-native.mjs';
+const [mcp,sim,gil,output]=process.argv.slice(2);
+assert.ok(output,'Usage: node scripts/simulator-verify.mjs <MCP root> <simulator root> <GIL> <new evidence dir>');
+assert.ok(!fs.existsSync(output),'New evidence directory required');fs.mkdirSync(output,{recursive:true});
+const revision=directory=>execFileSync('git',['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+const lock=JSON.parse(fs.readFileSync(new URL('../platform/toolchain-lock.json',import.meta.url)));
+assert.equal(revision(mcp),lock.mcp.commit,'MCP revision differs from toolchain lock');
+assert.equal(revision(sim),lock.simulator.commit,'Simulator revision differs from toolchain lock');
+for(const directory of [mcp,sim]){const changed=execFileSync('git',['-C',directory,'diff','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(Boolean);assert.ok(changed.every(file=>file==='npm-shrinkwrap.json'),'Tracked tool source changed: '+changed.join(','));}
+const {save,receipt}=await nativeSimulatorSave(mcp,gil,process.env.SIMULATOR_UI??'AutoPetsGame');
+fs.writeFileSync(path.join(output,'native.save.json'),JSON.stringify(save));
+const api=await import(pathToFileURL(path.join(sim,'studio/play/session.js')));
+const {renderPaintPng}=await import(pathToFileURL(path.join(sim,'studio/host-png.js')));
+const {ImageAssetStore}=await import(pathToFileURL(path.join(sim,'studio/host/image-assets.js')));
+const imageAssets=new ImageAssetStore({cacheDir:path.join(output,'image-cache')});
+const {LuaRuntime}=await import(pathToFileURL(path.join(sim,'client/lua-runtime/src/index.js')));
+// The upstream authoring compiler omits native instance parameter tables. Pass
+// actual GIL values at mount time, before unchanged Lua OnStart executes.
+const originalMount=LuaRuntime.prototype.mountScript;
+LuaRuntime.prototype.mountScript=function(options){const name=path.basename(options.path,'.lua');return originalMount.call(this,{...options,params:receipt.scriptParameters[name]??{}});};
+receipt.parameterAdapter='native-GIL-params-before-mount-v1';
+const parse=createRequire(path.join(mcp,'package.json'))('luaparse').parse;
+const roundsSource=fs.readFileSync(new URL('../tests/native/release-practice-rounds.lua',import.meta.url),'utf8');
+const literal=n=>{if(n.type==='TableConstructorExpression')return n.fields.map(f=>literal(f.value));if(n.type==='NumericLiteral')return n.value;if(n.type==='StringLiteral')return n.raw.slice(1,-1);throw Error('Nonliteral action fixture');};
+const practiceRounds=literal(parse(roundsSource,{luaVersion:'5.3'}).body[0].arguments[0]);
+receipt.practiceInputFixtureSha256=sha256(roundsSource);
+const results=[];
+const canvases=['pc-16-9','pc-21-9','mobile-16-9','mobile-19.5-9','mobile-4-3'];
+const configurations=canvases.map(canvasId=>({canvasId,playerCount:1}));
+if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
+  configurations.push(
+    { canvasId: 'pc-16-9', playerCount: 2, mode: 2 },
+    { canvasId: 'pc-16-9', playerCount: 2, mode: 8 },
+    { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
+    { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
+    { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
+  );
+}
+for(const {canvasId,playerCount,mode} of configurations) {
+  const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
+  const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,canvasId,playerCount,language:'zh-CN'});
+  const inputs=[];
+  const control = trail => {
+    let node = session.runtime.roots[0];
+    for (const name of trail.split('/')) node = node?.children.find(child => child.name === name);
+    assert.ok(node, 'Missing control ' + trail);
+    return node;
+  };
+  const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
+  const frames=[],runtimeExceptions=[];
+  const capture=async name=>{const paths=new Map();const visit=(node,trail)=>{paths.set(node.Id,trail);for(const child of node.children)visit(child,trail?trail+'/'+child.name:child.name);};visit(session.runtime.roots[0],'');const s=api.playSnapshot(session,{inspect:true,paint:true});fs.writeFileSync(path.join(output,prefix+'-'+name+'.json'),JSON.stringify(s));const prepared=await imageAssets.prepare(s.paint);const png=renderPaintPng(s.paint,s.canvasWidth,s.canvasHeight,prepared).data;fs.writeFileSync(path.join(output,prefix+'-'+name+'.png'),png);frames.push({name,assetWarnings:prepared.warnings,sha256:sha256(png),mountError:s.mountError,logs:s.logs.filter(l=>/error/.test(l.level)),visibleTexts:s.paint.filter(p=>p.kind==='textbox').map(p=>({path:paths.get(p.id),name:p.name,text:p.text,textLayout:p.textLayout,left:p.left,bottom:p.bottom,width:p.width,height:p.height}))});return s;};
+  const requireText = (trail, expected) => {
+    const item = frames.at(-1).visibleTexts.find(entry => entry.path === trail);
+    assert.ok(item?.textLayout?.fits && item.textLayout.visibleLineCount > 0, `Missing or clipped text: ${trail}`);
+    assert.match(item.text, expected, trail);
+  };
+  try {
+  await capture('startup');
+  // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
+  if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
+    requireText('Lobby/Title', /小动物自走棋/u);
+    click('Lobby/Choices/Room/Hit');
+    await capture('first-request-before-sync');
+    requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
+    for (let frame = 0; frame < 61; frame++) api.stepPlay(session, 0.1);
+    await capture('lobby-request-timeout');
+    requireText('Lobby/Feedback', /可以重试/u);
+    api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);await capture('lobby-fixture');
+    requireText('Lobby/Status', /已进入 1 人/u);
+    click('Lobby/Choices/Duel/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,2,1]);await capture('duel-wait-fixture');
+    requireText('Lobby/Feedback', /等待好友/u);
+    click('Lobby/Choices/Room/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,1,8,3]);await capture('room-wait-fixture');
+    requireText('Lobby/Feedback', /仍在加载/u);
+    api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
+    click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
+    click('Practice/Menu/Continue/Hit');await capture('practice-shop');
+    requireText('Practice/Money/Value', /^10$/u);
+    requireText('Practice/Lives/Value', /^5 \/ 5$/u);
+    const press=name=>click('Practice/'+name+'/Hit');
+    for(const [roundIndex,round] of practiceRounds.entries()) {
+      for(const [action,from,to] of round.slice(1)) {
+        if(action==='buy'||action==='combine'){press('Shop/Pet'+from);press(to?'Team'+to:'Shop/Buy');}
+        else if(action==='feed'){press('Shop/Food'+from);press('Team'+to);}
+        else if(action==='move'||action==='sell'){press('Team'+from);press(to?'Team'+to:'Shop/Sell');}
+        else if(action==='reward'){press('Shop/Reward');press('Shop/Buy');}
+        else if(action==='reroll')press('Shop/Reroll');else throw Error('Unknown input fixture '+action);
+      }
+      if(roundIndex===10)await capture('practice-tier-six');
+      press('Primary');
+      if (roundIndex === 0) {
+        await capture('practice-battle');
+        let strike = false;
+        for (let frame = 0; frame < 75 && !strike; frame++) {
+          api.stepPlay(session, 0.1);
+          strike = api.playSnapshot(session, { paint: true }).paint.some(control => control.name === 'Wake');
+        }
+        assert.ok(strike, 'Authoritative attack did not present its strike animation');
+        await capture('practice-strike');
+        requireText('Practice/Battle/Event', /攻击/u);
+        for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
+        await capture('practice-replay');
+      }
+      press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
+    }
+    const final=await capture('practice-complete');
+    assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
+    requireText('Practice/Wins/Value', /^10 \/ 10$/u);
+    press('Primary');await capture('practice-restart');
+    requireText('Practice/Round/Value', /第 1 轮/u);
+  }
+  if(mode) {
+    // Client-only fixture from the native wire schema. No graph output claimed.
+    const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
+    api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
+    click('Lobby/Choices/'+(mode===2?'Duel':'Room')+'/Hit');
+    api.sendPlaySignal(session,'AP_GameLobby',[mode,playerCount,0,mode,0],'AllPlayers');
+    for(let player=1;player<=playerCount;player++) {
+      const target='Player'+player;const personalMarket=[...market];personalMarket[2]=11-player;
+      personalMarket[15] = 2;
+      if(mode===2){api.sendPlaySignal(session,'AP_DuelSnapshot',[2,player,1,0,false,false,0,1,1,0,0,30,0,5,5,0],target);api.sendPlaySignal(session,'AP_DuelMarket',[1,1,personalMarket],target);}
+      else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
+      api.setPlayView(session,player);await capture('client-'+player+'-preparation-fixture');
+      requireText(mode === 2 ? 'Duel/MarketGold' : 'Room/Match/Shop/Money', new RegExp('金币 ' + (11 - player) + '(?: |$)', 'u'));
+      if (mode === 8) requireText('Room/Standings/Count', new RegExp(`${playerCount} 真人 · ${8 - playerCount} 机器人`, 'u'));
+    }
+    api.setPlayView(session,1);
+    const duel = mode === 2;
+    const shop = duel ? 'Duel' : 'Room/Match/Shop';
+    const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
+    const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
+    const beforeInspect = requests();
+    click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
+    await capture('client-1-inspect-offer');
+    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/u);
+    requireText(`${shop}/AbilityBody`, /开场.*随机.*1 伤/u);
+    click(duel ? `${shop}/TeamInspection/InspectTeam1` : `${shop}/InspectTeam1/Hit`);
+    await capture('client-1-inspect-team');
+    requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/u);
+    requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
+    if (!duel) requireText(`${shop}/Team1/Text`, /3攻 2命\nL2 · 经验1/u);
+    assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
+    click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
+    await capture('client-1-buy-request');
+    assert.ok(api.playSnapshot(session).server.inbound.some(row=>row.name===requestName&&row.values[0]===11),'Client buy did not send native request');
+
+    // Round-one deterministic receipt for Player1 against seat 2. The simulator
+    // supplies wire values while the GIL client verifies and resolves them.
+    const replaySignal = duel ? 'AP_DuelReplay' : 'AP_RoomReplay';
+    const sendReplay = (outcome, target = 'Player1') => api.sendPlaySignal(session, replaySignal, duel
+      ? [1, 42, outcome, [1, 1, 5, 8, 1], [2, 2, 1, 4, 1]]
+      : [1, 1, 2, outcome, 42, [1, 1, 1, 5, 8, 1, 0], [1, 2, 2, 1, 4, 1, 0]], target);
+    if (duel) {
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 3, true, false, 0, 2, 2, 0, 0, 0, 0, 5, 5, 0], 'Player1');
+    } else {
+      api.sendPlaySignal(session, 'AP_RoomView', [2, 3, 1, 1, 2, playerCount, 0, true,
+        Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
+    }
+    await capture('client-1-replay-wait');
+    sendReplay(2);
+    const rejected = await capture('client-1-replay-bad-outcome');
+    assert.ok(rejected.logs.some(entry => entry.text.includes('replay_mismatch')), 'A contradictory result must be rejected');
+    sendReplay(1);
+
+    const eventTrail = duel ? 'Duel/ReplayStatus' : 'Room/Match/Replay/Event';
+    const eventId = control(eventTrail).Id;
+    const renderedEvent = () => api.playSnapshot(session, { paint: true }).paint.find(item => item.id === eventId)?.text;
+    const expectEvents = [
+      ['attack', /芦纹龟.*出击.*烟尾雨燕/u],
+      ['damage', /烟尾雨燕.*-5命.*余0命/u],
+      ['faint', /烟尾雨燕.*退场/u],
+      ['result', /战斗结束|本轮获胜/u],
+    ];
+    for (let frame = 0; frame < 200 && expectEvents.length; frame++) {
+      const [name, pattern] = expectEvents[0];
+      const eventText = renderedEvent();
+      if (eventText && pattern.test(eventText)) {
+        await capture(`client-1-replay-${name}`);
+        requireText(eventTrail, pattern);
+        if (name === 'attack') {
+          const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
+          click(playback);
+          for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
+          assert.equal(renderedEvent(), eventText, 'Paused playback changed the rendered event');
+          click(playback);
+        }
+        expectEvents.shift();
+      }
+      api.stepPlay(session, 0.05);
+    }
+    assert.deepEqual(expectEvents.map(([name]) => name), [], 'Replay must visibly progress through authority-derived phases');
+    if (!duel && playerCount > 1) {
+      api.sendPlaySignal(session, 'AP_RoomView', [2, 3, 1, 2, 2, playerCount, 0, true,
+        Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player2');
+      sendReplay(1, 'Player2');
+      api.setPlayView(session, 2);
+      click('Room/Match/Replay/Follow/Hit');
+      await capture('client-2-replay-loss');
+      requireText('Room/Match/Replay/RoundText', /本轮落败/u);
+      requireText(eventTrail, /对方获胜/u);
+      api.setPlayView(session, 1);
+    }
+    click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
+    await capture('client-1-return');
+    requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
+    click('Lobby/Continue/Hit');
+    await capture('client-1-reenter');
+  }
+  for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
+  } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
+  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+}
+const buildPath=path.join(path.dirname(gil),'BUILD.json');
+const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
+if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
+const textDefects = results.flatMap(result => result.frames.flatMap(frame => frame.visibleTexts
+  .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))
+  .map(text => ({ canvasId: result.canvasId, frame: frame.name, path: text.path, text: text.text,
+    height: text.height, requiredHeight: text.textLayout?.requiredHeight }))));
+const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status:results.some(r=>r.runtimeExceptions.length||r.frames.some(f=>f.mountError||f.logs.length))?'runtime-failed':textDefects.length?'observed-text-defects':'executed',mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
+fs.writeFileSync(path.join(output,'receipt.json'),JSON.stringify(report,null,2));
+console.log(JSON.stringify({status:report.status,output,controls:receipt.controls,results:results.map(r=>({canvasId:r.canvasId,playerCount:r.playerCount,runtimeExceptions:r.runtimeExceptions,frames:r.frames.map(f=>({name:f.name,mountError:f.mountError,errors:f.logs}))}))},null,2));
+
+if(report.status==='runtime-failed'||(process.env.SIMULATOR_REQUIRE_TEXT==='1'&&textDefects.length))process.exitCode=1;

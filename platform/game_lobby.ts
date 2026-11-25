@@ -4,6 +4,7 @@ import { defineSignal, g } from 'genshin-ts/runtime/core';
 const chooseMode = defineSignal('AP_GameChooseMode', [['mode', 'int'], ['fill', 'bool']] as const);
 const lobbyView = defineSignal('client:AP_GameLobby', [
   ['player', 'entity'], ['mode', 'int'], ['present', 'int'], ['waiting', 'int'],
+  ['requested', 'int'], ['reason', 'int'],
 ] as const);
 
 g.server({
@@ -30,8 +31,18 @@ g.server({
   if (mode === 0n && (canStartDuel || canStartRoom)) {
     mode = requested;
     f.setCustomVariable(stage, 'AP_GameMode', mode, false);
-    for (const player of players) f.sendSignal(lobbyView, player, mode, present, expected - present);
+    for (const player of players) f.sendSignal(lobbyView, player, mode, present, expected - present, requested, 0n);
   } else {
-    f.sendSignal(lobbyView, actor, mode, present, expected - present);
+    // Refusal is explicit; a status query never changes the selected authority.
+    let reason = 0n;
+    if (requested !== 0n && requested !== mode) {
+      if (mode !== 0n) reason = 4n;
+      else if (requested === 2n) {
+        if (present > 2n || expected > 2n) reason = 2n;
+        else reason = 1n;
+      } else if (requested === 8n && present >= 1n && present <= 8n) reason = 3n;
+      else reason = 5n;
+    }
+    f.sendSignal(lobbyView, actor, mode, present, expected - present, requested, reason);
   }
 });

@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gameInterface, gameScript, nativeGame, playerVariables, practiceSeed, signals,
   stageVariables } from '../../platform/game-native.mjs';
 import { assertAssemblySourceLimits, gilListAudit } from './gil-list-limits.mjs';
+import { readDesign } from '../../scripts/design-contract.mjs';
+import { initialAcceptance } from '../../scripts/acceptance-gate.mjs';
 
 const [checkoutArg, scratch, lua53, output] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua53 && output,
@@ -19,6 +21,7 @@ const project = fileURLToPath(new URL('../../', import.meta.url));
 const git = (directory, args) => execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8' }).trim();
 const sourceRevision = git(project, ['rev-parse', 'HEAD']);
 assert.equal(git(project, ['status', '--porcelain', '--untracked-files=all']), '', 'Build from a clean checkout');
+const design = readDesign(project, { selected: process.env.SAP_DESIGN_VERSION, forBuild: true });
 const checkout = fs.realpathSync(checkoutArg);
 const toolRevision = git(checkout, ['rev-parse', 'HEAD']);
 assert.equal(toolRevision, '59c576e41632a6bf6781bbca83a676d0da0374ec');
@@ -117,6 +120,7 @@ assert.deepEqual(scripts.map(({ name }) => name), [gameScript]);
 assert.equal(scripts[0].source, game.source);
 const { interface: ui } = await call('scene_get_client_ui', { ui: gameInterface });
 assert.deepEqual(ui.scripts, [{ name: gameScript, values: { seed: practiceSeed } }]);
+for (const flag of ['showCursor', 'blockCursor', 'blockKeys']) assert.equal(ui[flag], game.layout[flag], flag);
 const diagnostics = await call('scene_check_client', { scripts: [gameScript] });
 assert.deepEqual(diagnostics.problems, []);
 
@@ -132,6 +136,16 @@ function readControls(expected, actual, parent, bounds) {
     assert.deepEqual(control.size, definition.size, key);
     assert.equal(control.active === false, definition.active === false, key);
     assert.equal(control.visible === false, definition.visible === false, key);
+    assert.deepEqual(control.anchor, definition.anchor, key);
+    if (definition.text) {
+      for (const textKey of ['content', 'fontSize', 'align', 'valign', 'autoSize', 'minFontSize']) {
+        const fallback = { content: '', autoSize: false, minFontSize: 20 }[textKey];
+        if (definition.text[textKey] !== undefined) {
+          assert.equal(control.text[textKey] ?? fallback, definition.text[textKey], `${key} ${textKey}`);
+        }
+      }
+      if (definition.text.colour) assert.equal((control.text.colour ?? '#ffffff').toLowerCase(), definition.text.colour.toLowerCase(), key);
+    }
     for (const [axis, extent] of bounds.entries()) {
       assert.ok(Math.abs(control.position[axis]) + control.size[axis] / 2 <= extent / 2 + 0.0001, key);
     }
@@ -161,13 +175,16 @@ fs.mkdirSync(output, { recursive: true });
 fs.copyFileSync(mapPath, path.join(output, gil), fs.constants.COPYFILE_EXCL);
 fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(output, 'MCP-FIXTURE-LICENSE.txt'));
 fs.copyFileSync(new URL('../../platform/GAME.md', import.meta.url), path.join(output, 'README.md'));
-fs.writeFileSync(path.join(output, 'BUILD.json'), JSON.stringify({
-  version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
+const build = {
+  ...design, version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
   node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,
   officialClient: 'pending',
-}, null, 2) + '\n');
+};
+const buildJson = JSON.stringify(build, null, 2) + '\n';
+fs.writeFileSync(path.join(output, 'BUILD.json'), buildJson);
+fs.writeFileSync(path.join(output, 'ACCEPTANCE.json'), JSON.stringify(initialAcceptance(build, buildJson), null, 2) + '\n');
 fs.writeFileSync(path.join(workspace, 'frames.json'), JSON.stringify(frames));
-const files = [gil, 'README.md', 'BUILD.json', 'MCP-FIXTURE-LICENSE.txt'];
+const files = [gil, 'README.md', 'BUILD.json', 'ACCEPTANCE.json', 'MCP-FIXTURE-LICENSE.txt'];
 fs.writeFileSync(path.join(output, 'SHA256SUMS'),
   files.map(file => `${sha256(fs.readFileSync(path.join(output, file)))}  ${file}`).join('\n') + '\n');
 console.log(`Game: ${path.join(output, gil)} (${hash})`);

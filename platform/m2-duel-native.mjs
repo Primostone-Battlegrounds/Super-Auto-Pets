@@ -32,7 +32,7 @@ export const duelProbeButtons = [
 ].map((button, index) => ({ ...button, position: [(index - 3) * 145, -228],
   placeholder: String(1073741901 + index), key: index + 1 }));
 function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
-  return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle' } };
+  return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle', autoSize: true, minFontSize: 16 } };
 }
 function card(action, label, position, size, content, colour, fontSize = 18) {
   return [
@@ -40,6 +40,15 @@ function card(action, label, position, size, content, colour, fontSize = 18) {
     text(label, position, size, content, fontSize),
     { name: action, kind: 'cursorArea', position, size },
   ];
+}
+function inspectable(action, label, position, size, content, colour, inspect, fontSize = 18) {
+  const controls = card(action, label, position, size, content, colour, fontSize);
+  controls[1].position = [position[0] - 22, position[1]];
+  controls[1].size = [size[0] - 44, size[1]];
+  controls[2].position = [position[0] - 22, position[1]];
+  controls[2].size = [size[0] - 44, size[1]];
+  return [...controls, ...card(inspect, `${inspect}Label`, [position[0] + size[0] / 2 - 22, position[1]],
+    [44, size[1]], '技能', '#416c59', 16)];
 }
 export function duelLayout(rule, includeProbeButtons = false) {
   const script = 'm2_probe';
@@ -49,31 +58,46 @@ export function duelLayout(rule, includeProbeButtons = false) {
     const slot = index + 1 - (pet ? 0 : rule.PET_SLOTS);
     const name = pet ? 'Pet' : 'Food';
     return [
-      ...card(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 42], [174, 66], '',
-        pet ? '#335b44' : '#605432'),
+      ...(pet ? inspectable : card)(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 42], [174, 66], '',
+        pet ? '#335b44' : '#605432', ...(pet ? [`InspectPet${slot}`] : [])),
       ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, -13], [174, 44], '冻结', '#286452', 19),
     ];
   }).flat();
+  const teamCards = Array.from({ length: rule.TEAM_SIZE }, (_, index) => inspectable(`Team${index + 1}`, `TeamLabel${index + 1}`,
+    [(2 - index) * 190, 120], [174, 56], '', '#335b44', `InspectTeam${index + 1}`, 20));
   return {
     name: 'AP_DuelProbe',
     script,
     showCursor: true,
     blockCursor: false,
     controls: [
-      { name: 'Background', kind: 'image', position: [0, 58], size: [1000, 478], image: 100001, colour: '#193931' },
+      { name: 'Background', kind: 'image', position: [0, 0], size: [1000, includeProbeButtons ? 710 : 640], image: 100001, colour: '#193931' },
       text('Status', [0, 257], [900, 66], '等待服务端响应', 27),
-      text('MarketGold', [0, 204], [900, 35], '', 25, '#ffd887'),
+      text('MarketGold', [0, 204], [900, 42], '', 25, '#ffd887'),
       ...(includeProbeButtons ? stock : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
       ]),
-      text('Team', [0, 170], [900, 28], '', 21),
-      ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => card(`Team${index + 1}`, `TeamLabel${index + 1}`,
-        [(2 - index) * 190, 120], [174, 56], '', '#335b44', 20)).flat(),
+      text('Team', [0, 165], [900, 32], '', 21),
+      ...teamCards.flatMap(cards => cards.slice(0, 3)),
+      { name: 'TeamInspection', kind: 'container', position: [0, 0], size: [1200, 690], children: teamCards.flatMap(cards => cards.slice(3)) },
       ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452')),
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -118], [208, 52], content, '#286452')),
-      text('ReplayStatus', [-75, -170], [774, 44], '', 18),
+      ...card('InspectReward', 'InspectRewardLabel', includeProbeButtons ? [-414, -326] : [0, -218],
+        includeProbeButtons ? [136, 44] : [176, 44], '查看奖励技能', '#416c59', 17),
+      text('AbilityTitle', includeProbeButtons ? [75, -309] : [0, -258],
+        [includeProbeButtons ? 800 : 940, 30], '点动物旁的「技能」查看，购买操作保持不变', 19),
+      text('AbilityBody', includeProbeButtons ? [75, -339] : [0, -292], [includeProbeButtons ? 800 : 940, 40], '', 18),
+      { name: 'ReplayBoard', kind: 'container', position: [0, 90], size: [900, 210], visible: false, children: [
+        { name: 'Ally', kind: 'image', position: [-225, 0], size: [440, 200], image: 100001, colour: '#335b44' },
+        { name: 'Enemy', kind: 'image', position: [225, 0], size: [440, 200], image: 100001, colour: '#605432' },
+        ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => [
+          text(`Own${index + 1}`, [-45 - index * 87, 0], [82, 178], '', 16),
+          text(`Enemy${index + 1}`, [45 + index * 87, 0], [82, 178], '', 16),
+        ]).flat(),
+      ] },
+      text('ReplayStatus', [-75, -170], [774, 50], '', 18),
       ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', '#335b44'),
       ...(includeProbeButtons ? duelProbeButtons : []).map(({ label, position }, index) => text(`NativeLegend${index + 1}`,
         [position[0], position[1] - 50], [140, 30], label, 18)),

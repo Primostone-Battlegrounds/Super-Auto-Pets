@@ -1,5 +1,9 @@
 local root, offers = script.object, script.object
-local function child(name) return assert(root:GetChild(name), name) end
+local function child(name)
+    local parent = name:match("^InspectTeam") and root:FindChild("TeamInspection") or root
+    return assert(parent:GetChild(name), name)
+end
+local animal_ability = require("autopets.animal_ability")
 local status = child("Status")
 local market_gold = child("MarketGold")
 local team_label = child("Team")
@@ -10,6 +14,7 @@ local replay_label = child("ReplayLabel")
 local replay_status = child("ReplayStatus")
 local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
+local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
 local pets = {
     -- AP_DUEL_PETS
@@ -29,11 +34,13 @@ local preparing = false
 local can_advance = false
 local can_leave = false
 local confirm_leave = false
+local inspected
 local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
-local playback, status_line, seconds
+local playback, status_line, seconds, hint
+local draw_status
 local visible = {}
 local bindings = {}
 local pet_labels, food_labels, team_labels = {}, {}, {}
@@ -63,6 +70,17 @@ local function show_actions()
         {"Reward", "RewardLabel"}, {"RewardNext", "RewardNextLabel"}}) do
         show_action(binding[1], binding[2], preparing)
     end
+    for slot = 1, rules.pet_slots do
+        for _, suffix in ipairs({"", "Face", "Label"}) do
+            show(offers:GetChild("InspectPet" .. slot .. suffix), preparing)
+        end
+    end
+    for slot = 1, rules.team_size do
+        show_action("InspectTeam" .. slot, "InspectTeam" .. slot .. "Label", preparing)
+    end
+    show_action("InspectReward", "InspectRewardLabel", preparing)
+    show(child("AbilityTitle"), preparing)
+    show(child("AbilityBody"), preparing)
     show_action("Ready", "ReadyLabel", preparing)
     show_action("Advance", "AdvanceLabel", can_advance)
     show_action("Leave", "LeaveLabel", can_leave)
@@ -82,6 +100,7 @@ end
 
 local function send(action, from, to, flag)
     if pending or sequence == 0 then return end
+    hint = nil
     pending = {action = action, round = round, sequence = sequence, token = next_token,
         from = from or 0, to = to or 0, flag = flag or 0}
     next_token = next_token + 1
@@ -109,8 +128,25 @@ local function selected_slot(view)
     end
 end
 
+local function render_ability(view)
+    local picked = inspected or {kind = "pet", slot = 1}
+    local code, level
+    if picked.kind == "team" then
+        local unit = view and view.team[picked.slot]
+        code, level = unit and unit.code, unit and unit.level
+    else
+        local shelf = view and (picked.kind == "reward" and view.rewards or view.pets)
+        code, level = shelf and shelf[picked.slot], 1
+    end
+    local pet = code and native_catalog.pets[math.abs(code)]
+    local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
+    if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
+    child("AbilityTitle").text, child("AbilityBody").text = title, body
+end
+
 local function render_market()
     local view = current_market()
+    render_ability(view)
     if not view then
         market_gold.text = "同步商店中"
         team_label.text = "阵容 —"
@@ -201,6 +237,7 @@ local function freeze(slot, food)
 end
 
 local function select_unit(slot)
+    inspected = {kind = "team", slot = slot}
     local view = editable_market()
     if not view or not view.team[slot] then return end
     local picked = selected_slot(view)
@@ -220,7 +257,12 @@ end
 
 local function submit_ready()
     local view = editable_market()
-    if view and #view.team > 0 then send(1) end
+    if not view then return end
+    if #view.team > 0 then send(1)
+    else
+        hint = "请先购买至少一只动物，再准备"
+        draw_status()
+    end
 end
 
 local function request_advance()
@@ -241,31 +283,47 @@ local function bind(name, callback, parent)
     bindings[#bindings + 1] = {object = (parent or root):GetChild(name), callback = callback}
 end
 
-local event_text = {start = "入场", skill = "技能", attack = "攻击", damage = "受击", shield = "护盾",
-    faint = "退场", buff = "强化", summon = "召唤", result = "结算"}
-
 local function show_replay()
     show_action("Replay", "ReplayLabel", playback ~= nil)
+    local board_root = child("ReplayBoard")
+    show(board_root, playback ~= nil and not preparing)
+    for slot = 1, rules.team_size do
+        show_action("Team" .. slot, "TeamLabel" .. slot, preparing)
+    end
+    show(team_label, preparing)
+    if offers == root then
+        -- Standalone compatibility UI has no MarketOffers parent to hide.
+        for slot = 1, rules.pet_slots do
+            show_action("Buy" .. slot, "OfferLabel" .. slot, preparing)
+            show_action("FreezePet" .. slot, "FreezePetLabel" .. slot, preparing)
+        end
+        for slot = 1, rules.food_slots do
+            show_action("Food" .. slot, "FoodLabel" .. slot, preparing)
+            show_action("FreezeFood" .. slot, "FreezeFoodLabel" .. slot, preparing)
+        end
+    end
     if not playback then
         replay_status.text = "等待战斗回放"
         replay_label.text = "回放"
         return
     end
     local event = playback.events[playback.position]
-    local step = event_text[event.type] or event.type
-    local side = event.side == "player" and "席1" or event.side == "enemy" and "席2" or "双方"
-    if event.board then playback.board = event.board end
-    local names = {}
-    for _, key in ipairs({"player", "enemy"}) do
-        local units = {}
-        for _, unit in ipairs(playback.board[key]) do
-            local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-            units[#units + 1] = string.format("%s%d", definition.name, unit.health)
+    playback.board = replay_view.board(playback.events, playback.position)
+    for side, key in ipairs({"player", "enemy"}) do
+        for slot = 1, rules.team_size do
+            local unit = playback.board[key][slot]
+            local display = "空位"
+            if unit then
+                local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
+                local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
+                display = seat .. replay_view.mark(event, unit, key) .. definition.name
+                    .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
+            end
+            board_root:GetChild((side == 1 and "Own" or "Enemy") .. slot).text = display
         end
-        names[#names + 1] = #units > 0 and table.concat(units, " ") or "空"
     end
-    replay_status.text = string.format("第 %d 轮  %d/%d  %s · %s\n席1 %s  |  席2 %s", playback.round,
-        playback.position, #playback.events, side, step, names[1], names[2])
+    replay_status.text = string.format("第 %d 轮  %d/%d  %s", playback.round,
+        playback.position, #playback.events, replay_view.describe(event, native_catalog))
     replay_label.text = playback.playing and "暂停" or playback.position == #playback.events and "重播" or "继续"
 end
 
@@ -341,7 +399,11 @@ bind("RewardNext", function()
     end
 end)
 
+bind("InspectReward", function()
+    inspected = {kind = "reward", slot = reward_index}; render_market()
+end)
 for slot = 1, rules.pet_slots do
+    bind("InspectPet" .. slot, function() inspected = {kind = "pet", slot = slot}; render_market() end, offers)
     pet_labels[slot] = offers:GetChild("OfferLabel" .. slot)
     pet_freeze_labels[slot] = offers:GetChild("FreezePetLabel" .. slot)
     bind("Buy" .. slot, function() acquire(slot, false) end, offers)
@@ -354,6 +416,7 @@ for slot = 1, rules.food_slots do
     bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
+    bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end, root:FindChild("TeamInspection"))
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)
     bind("Team" .. slot, function() select_unit(slot) end)
 end
@@ -369,19 +432,22 @@ local function receive_market(_, parameters)
     render_market()
 end
 
-local function draw_status()
+draw_status = function()
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
-    local content = status_line .. suffix
+    local content = status_line .. suffix .. (hint and ("\n" .. hint) or "")
     if status.text ~= content then status.text = content end
 end
 
 local function receive_snapshot(_, parameters)
     local players, seat, new_round, phase, is_ready, continued, settlements, version,
         next_sequence, winner, reason, remaining, ack, lives, opponent_lives, outcome = table.unpack(parameters)
-    if pending and pending.token == ack then pending = nil end
+    local acknowledged = pending and pending.token == ack
+    local rejected = acknowledged and new_round == pending.round and next_sequence == pending.sequence
+    if acknowledged then pending = nil end
     if new_round < round or version <= latest_version then return end
     if pending and (new_round > pending.round or next_sequence > pending.sequence or phase == 2) then pending = nil end
-    if new_round > round then reward_index = 1 end
+    if new_round > round then reward_index = 1; inspected = nil end
+    hint = rejected and "操作未生效，已同步服务端状态" or nil
     latest_version = version
     round = new_round
     sequence = next_sequence
@@ -418,6 +484,7 @@ local function receive_snapshot(_, parameters)
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
     print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
     render_market()
+    show_replay()
 end
 
 function OnStart()
@@ -438,7 +505,7 @@ function OnUpdate(dt)
     end
     if not playback or not playback.playing then return end
     playback.elapsed = playback.elapsed + dt
-    if playback.elapsed < 0.18 then return end
+    if playback.elapsed < replay_view.duration(playback.events[playback.position]) then return end
     playback.elapsed = 0
     playback.position = playback.position + 1
     if playback.position == #playback.events then playback.playing = false end
@@ -454,7 +521,7 @@ function OnDestroy()
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
-    playback, status_line, seconds, visible = nil, nil, nil, {}
+    playback, status_line, seconds, hint, visible = nil, nil, nil, nil, {}
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

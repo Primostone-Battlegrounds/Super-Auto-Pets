@@ -2,9 +2,9 @@ const plane = 100001;
 const disc = 106025;
 export const portraitLayers = 16;
 export const pigment = {
-  edge: '#9fb2aa', canvas: '#f4f4e9', ink: '#202f35', muted: '#475f5d', cream: '#fff9e9',
-  field: '#dce9e4', rail: '#c8ddd4', opposingRail: '#ecded4', rule: '#b9cec5',
-  shelf: '#f3e8cf', shelfRule: '#d9c7a6', chip: '#edf2e8', primary: '#286452',
+  edge: '#9fb2aa', canvas: '#f6f3e8', ink: '#173d3d', muted: '#6b817b', cream: '#fff9e9',
+  field: '#dce8d4', rail: '#c8ddd4', opposingRail: '#ecded4', rule: '#b9cec5',
+  shelf: '#f3e8cf', shelfRule: '#d9c7a6', chip: '#edf2e8', primary: '#206258',
   player: '#8aaf9c', enemy: '#b79389', market: '#e9d3a0', gold: '#9b6021', ice: '#406f82',
 };
 
@@ -19,7 +19,7 @@ function ellipse(name, position, size, colour, options = {}) {
 export function label(name, position, size, content = '', fontSize = 20, colour = pigment.ink, align = 'centre') {
   return {
     name, kind: 'text', position, size,
-    text: { content, fontSize, colour, align, valign: 'middle', outline: false },
+    text: { content, fontSize, colour, align, valign: 'middle', outline: false, autoSize: true, minFontSize: Math.min(fontSize, 16) },
   };
 }
 
@@ -40,13 +40,13 @@ function card(name, position, width, type, interactive = true, visible = true) {
     ellipse('Rim', [0, 7], [94, 32], pigment.edge),
     ellipse('Face', [0, 10], [88, 24], pigment[type]),
     portrait(),
-    label('Name', [0, -24], [width - 4, 24], '', market ? 19 : 17),
-    image('StatsPaper', [0, -47], [width - 8, 23], market ? '#f6ecd0' : '#edf0d9'),
-    label('Detail', [0, -47], [width - 8, 23], '', 18),
-    label('Tag', [0, market ? -64 : 68], [width - 4, market ? 15 : 18], '', 14, market ? pigment.ice : pigment.gold),
+    label('Name', [0, -20], [width - 4, 28], '', market ? 19 : 17),
+    image('StatsPaper', [0, -49], [width - 8, 28], market ? '#f6ecd0' : '#edf0d9'),
+    label('Detail', [0, -49], [width - 8, 28], '', 18),
+    label('Tag', [0, 63], [width - 4, 25], '', 14, market ? pigment.ice : pigment.gold),
   ];
   if (market) {
-    children.push(image('Frozen', [0, 71], [86, 3], pigment.ice, { visible: false }));
+    children.push(image('Frozen', [0, 49], [86, 3], pigment.ice, { visible: false }));
   } else {
     children.push(
       image('HealthTrack', [0, -61], [88, 4], '#d5dfc4', { visible: false }),
@@ -55,10 +55,10 @@ function card(name, position, width, type, interactive = true, visible = true) {
   }
   if (type === 'player') {
     children.push(
-      image('XPPaper', [0, -64], [width - 8, 16], '#dbe9cf'),
-      label('XP', [0, -64], [width - 8, 16], '', 16),
+      image('XPPaper', [0, 63], [width - 8, 25], '#dbe9cf'),
+      label('XP', [0, 63], [width - 8, 25], '', 14),
       image('DropTarget', [0, -74], [86, 4], pigment.primary, { visible: false }),
-      label('DropLabel', [0, 68], [width - 4, 18], '', 14, pigment.primary),
+      label('DropLabel', [0, 63], [width - 4, 25], '', 14, pigment.primary),
     );
   }
   if (interactive) {
@@ -82,8 +82,8 @@ export function button(name, position, size, title, primary = false) {
 function stat(name, x, title) {
   return group(name, [x, 281], [152, 65], [
     image('Surface', [0, 0], [152, 65], pigment.chip),
-    label('Label', [0, 14], [148, 22], title, 15, pigment.muted),
-    label('Value', [0, -11], [148, 28], '', 21),
+    label('Label', [0, 16], [148, 28], title, 15, pigment.muted),
+    label('Value', [0, -13], [148, 28], '', 21),
   ]);
 }
 
@@ -119,8 +119,8 @@ export const nativeRun = {
       image('RivalRail', [311, -20], [548, 142], pigment.opposingRail, { visible: false }),
       ellipse('Clash', [0, 4], [23, 23], '#faf5e6', { visible: false }),
     ]),
-    label('TeamCaption', [-309, 208], [521, 25], '', 19, pigment.ink, 'left'),
-    label('OpponentCaption', [309, 208], [521, 25], '', 19, pigment.ink, 'right'),
+    label('TeamCaption', [-309, 208], [521, 32], '', 19, pigment.ink, 'left'),
+    label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
     ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
     group('Shop', [0, -124], [1164, 268], [
@@ -133,12 +133,13 @@ export const nativeRun = {
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
       ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -104], [172, 52], title)),
     ]),
-    group('Tooltip', [0, -17], [360, 58], [
-      image('Border', [0, 0], [360, 50], '#78a090'),
-      image('Paper', [0, 0], [354, 44], '#fff5df'),
-      ellipse('Pointer', [0, -26], [12, 6], pigment.primary),
-      label('Heading', [0, 11], [326, 20], '', 18, pigment.ink, 'left'),
-      label('Body', [0, -10], [326, 19], '', 15, pigment.ink, 'left'),
+    group('Tooltip', [0, -10], [360, 72], [
+      image('Border', [0, 0], [360, 72], '#78a090'),
+      image('Paper', [0, 0], [354, 68], '#fff5df'),
+      ellipse('Pointer', [0, -33], [12, 6], pigment.primary),
+      label('Heading', [0, 22], [326, 28], '', 18, pigment.ink, 'left'),
+      { ...label('Body', [0, -14], [326, 44], '', 16, pigment.ink, 'left'),
+        text: { ...label('', [0, 0], [1, 1], '', 16, pigment.ink, 'left').text, minFontSize: 14 } },
     ], false),
     group('BattleFX', [0, 118], [1184, 208], [
       group('Strike', [0, 0], [66, 38], [
@@ -159,7 +160,7 @@ export const nativeRun = {
       image('Surface', [0, 0], [1148, 139], '#eaf0d7'),
       image('Rule', [-540, 37], [4, 35], pigment.gold),
       label('Outcome', [0, 43], [1038, 30], '', 25, pigment.ink, 'left'),
-      label('Event', [0, 12], [1038, 25], '', 18, pigment.ink, 'left'),
+      label('Event', [0, 12], [1038, 30], '', 18, pigment.ink, 'left'),
       button('Replay', [-430, -37], [202, 48], '下一条战斗事件'),
       button('Auto', [-216, -37], [202, 48], '暂停回放'),
       button('Fast', [-2, -37], [202, 48], '速度：1 倍'),
