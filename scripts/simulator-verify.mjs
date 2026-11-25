@@ -415,6 +415,23 @@ for(const {canvasId,playerCount,mode} of configurations) {
     nextMarket(5, 9);
     requireSingleRequest(readyButton, 1);
     requireShopPortraits(await capture('client-1-next-round-actions-fixture'));
+    if (canvasId === 'mobile-19.5-9') {
+      if (duel) {
+        api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 2, 3, true, false, 1, 6, 6, 0, 0, 0, 0, 5, 4, 0], 'Player1');
+      } else {
+        api.sendPlaySignal(session, 'AP_RoomView', [6, 3, 2, 1, 6, playerCount, 0, true,
+          Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
+      }
+      api.sendPlaySignal(session, replaySignal, duel
+        ? [2, 42, 1, [1, 1, 999, 999, 3], [2, 2, 1, 4, 1]]
+        : [2, 1, 2, 1, 42, [1, 1, 1, 999, 999, 3, 0], [1, 2, 2, 1, 4, 1, 0]], 'Player1');
+      const stats = duel ? 'Duel/ReplayBoard/Own1' : 'Room/Match/Replay/Own1';
+      await capture('client-1-replay-long-stats');
+      const { textLayout } = visibleText(stats) ?? {};
+      assert.ok(textLayout?.fits && textLayout.visibleLineCount === 3, 'Long combat values must leave the shield visible');
+      assert.match(textLayout.lines[1], /^999攻 99[89]命$/u);
+      assert.match(textLayout.lines[2], /^盾 \d+$/u);
+    }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}

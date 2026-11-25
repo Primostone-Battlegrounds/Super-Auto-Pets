@@ -15,13 +15,18 @@ function M.combat_values(attack, health, is_boost)
     local prefix = is_boost and "+" or ""
     local attack_text, health_text = prefix .. attack, prefix .. health
     local digits = #attack_text + #health_text
-    local size = digits <= 3 and 22 or digits <= 4 and 20 or 18
-    return string.format("<b><color=#482D0B><size=%d>%s</size></color></b><size=12>攻 </size><b><color=#5F1E22><size=%d>%s</size></color></b><size=12>命</size>",
-        size, attack_text, size, health_text)
+    local split = digits > 7
+    local size = digits <= 3 and 22 or math.min(20, math.floor(82 / digits))
+    if split then size = math.min(15, math.floor(95 / math.max(#attack_text, #health_text))) end
+    local values = string.format("<b><color=#482D0B><size=%d>%s</size></color></b><size=12>攻</size>%s<b><color=#5F1E22><size=%d>%s</size></color></b><size=12>命</size>",
+        size, attack_text, split and "\n" or "<size=12> </size>", size, health_text)
+    return values, split
 end
 function M.stats(name, attack, health, shield)
+    local values, split = M.combat_values(attack, health)
     local guard = (shield or 0) > 0 and ("\n盾 " .. shield) or ""
-    return "<size=16>" .. name .. "</size>\n" .. M.combat_values(attack, health) .. guard
+    if split and guard ~= "" then guard = "<size=14>" .. guard .. "</size>" end
+    return "<size=16>" .. name .. "</size>\n" .. values .. guard
 end
 function M.describe(event, catalog, sides)
     sides = sides or {player = "席1", enemy = "席2"}
