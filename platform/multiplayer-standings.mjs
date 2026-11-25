@@ -34,6 +34,7 @@ local function bind_online_badges(pool)
     if not pool then return nil end
     local source = pool.parent
     local index = pool:GetSiblingIndex()
+    local impact = pool:GetChild("Price1")
     local state, fields = nil, {}
     local function set(control, value)
         local visible = value ~= nil
@@ -47,47 +48,65 @@ local function bind_online_badges(pool)
     end
     local function hide()
         if state then
+            set(impact, nil)
             pool:SetVisible(false)
             pool:SetActive(false)
             state = nil
         end
     end
+    local function place(field, stacked)
+        local gap, width = 28, 52
+        if state == "replay" then
+            gap, width = 20, 38
+            if stacked then gap, width = 0, 74 end
+        end
+        field[1]:SetSizeDelta(width, 32)
+        field[2]:SetSizeDelta(width, 32)
+        field[1]:SetAnchoredPosition(field.x - gap, field.y)
+        field[2]:SetAnchoredPosition(field.x + gap, field.y - (stacked and 32 or 0))
+        field.stacked = stacked
+    end
     local function select(phase, parent, anchors)
         if state == phase then return end
         pool.parent = parent
         pool:SetAsLastSibling()
-        local gap, width = 28, 52
-        if phase == "replay" then gap, width = 20, 38 end
+        state = phase
         for slot, field in ipairs(fields) do
-            local x, y, price_x, price_y = anchors(slot)
-            field[1]:SetSizeDelta(width, 32)
-            field[2]:SetSizeDelta(width, 32)
-            field[1]:SetAnchoredPosition(x - gap, y)
-            field[2]:SetAnchoredPosition(x + gap, y)
-            if price_x and field[3] then field[3]:SetAnchoredPosition(price_x, price_y) end
+            field.x, field.y, field.cue_x, field.cue_y = anchors(slot)
+            place(field, false)
+            if phase == "shop" and field[3] then field[3]:SetAnchoredPosition(field.cue_x, field.cue_y) end
             for _, control in ipairs(field) do set(control, nil) end
+        end
+        if phase == "shop" then
+            impact:SetSizeDelta(52, 32)
+            impact.bgColor, impact.fontColor = Color(250, 224, 162, 255), Color(105, 67, 33, 255)
         end
         pool:SetActive(true)
         pool:SetVisible(true)
-        state = phase
-    end
-    local function stat_text(prefix, value, sign)
-        if value == nil then return nil end
-        if state == "replay" and math.abs(value) >= 100 then
-            local digits = tostring(value)
-            local size = math.floor(42 / #digits)
-            return "<size=10>" .. prefix .. "</size><size=" .. size .. ">" .. digits .. "</size>"
-        end
-        return prefix .. sign .. value
     end
     local function paint(slot, attack, life, price, bonus)
         local field = fields[slot]
         local sign = bonus and "+" or ""
-        set(field[1], stat_text("攻", attack, sign))
-        set(field[2], stat_text("命", life, sign))
-        if field[3] then set(field[3], price ~= nil and (price .. " 金") or nil) end
+        if state == "replay" then
+            local stacked = math.abs(attack or 0) >= 100 or math.abs(life or 0) >= 100
+            if stacked ~= field.stacked then place(field, stacked) end
+        end
+        set(field[1], attack ~= nil and ("攻" .. sign .. attack) or nil)
+        set(field[2], life ~= nil and ("命" .. sign .. life) or nil)
+        if state == "shop" and field[3] then set(field[3], price ~= nil and (price .. " 金") or nil) end
     end
-    return {select = select, hide = hide, paint = paint, restore = function()
+    local function feedback(slot, event)
+        local field = slot and fields[slot]
+        if state ~= "replay" then return end
+        if not field or not event or event.type ~= "damage" then set(impact, nil); return end
+        local blocked = event.amount == 0
+        impact:SetSizeDelta(72, 32)
+        impact:SetAnchoredPosition(field.cue_x, field.cue_y)
+        impact.bgColor = blocked and Color(197, 222, 230, 255) or Color(251, 208, 150, 255)
+        impact.fontColor = blocked and Color(41, 72, 90, 255) or Color(116, 46, 35, 255)
+        set(impact, blocked and "格挡" or "-" .. event.amount)
+    end
+    return {select = select, hide = hide, paint = paint, feedback = feedback, restore = function()
         hide()
         if source and source.alive and pool.alive then
             pool.parent = source

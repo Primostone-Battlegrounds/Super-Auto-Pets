@@ -266,7 +266,7 @@ local function render_market()
             local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
             if badges then
-                label.text = string.format("%s · L%d", name, unit.level)
+                label.text = string.format("%s\nL%d", name, unit.level)
             elseif portrait then
                 label.text = string.format("%s\n%s\nL%d · 经验%d", name,
                     replay_view.combat_values(unit.attack, unit.health), unit.level, unit.xp)
@@ -375,7 +375,7 @@ local function show_replay()
         badges.select("replay", board_root, function(slot)
             local label = board_root:GetChild(slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5)))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 40
+            return x, y - 40, x, y + 101
         end)
     elseif badges and not preparing then badges.hide() end
     for slot = 1, rules.team_size do
@@ -400,6 +400,10 @@ local function show_replay()
     end
     local event = playback.events[playback.position]
     playback.board = replay_view.board(playback.events, playback.position)
+    if replay_badges then
+        local damaged = event.type == "damage" and (event.side == "player" and event.slot or rules.team_size + event.slot)
+        badges.feedback(damaged, event)
+    end
     for side, key in ipairs({"player", "enemy"}) do
         for slot = 1, rules.team_size do
             local unit = playback.board[key][slot]

@@ -20,9 +20,11 @@ function roomLayout(unified) {
     const visualSize = [...size];
     const inspect = unified && name.startsWith('Inspect');
     const inspectY = name === 'InspectReward' ? 0 : -13;
+    const lake = name.startsWith('Freeze') || ['Previous', 'Forward', 'Auto', 'Follow'].includes(name);
     let surface = unified
       ? (inspect ? terrain('Surface', [0, inspectY], [width, 34], clearing.teal)
-        : image('Surface', [0, 0], size, primary ? '#ffffff' : '#c9eadf', { image: primary ? 107015 : 107034 }))
+        : primary || lake ? image('Surface', [0, 0], size, primary ? '#fff5da' : '#719486', { image: primary ? 107015 : 107012 })
+          : terrain('Surface', [0, 0], size, '#486c53'))
       : image('Surface', [0, 0], size, primary ? '#206258' : pigment.chip);
     if (inspect) {
       captionPosition[1] = inspectY;
@@ -78,6 +80,7 @@ function roomLayout(unified) {
         group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
           ...(unified ? [
             image('Sky', [0, 31], [828, 326], clearing.sky),
+            image('ShopCloud', [234, 157], [114, 26], '#fffaf0', { image: 105102 }),
             image('GroveLeft', [-300, 100], [214, 91], '#f6fbec', { image: 105135 }),
             image('GroveRight', [322, 97], [171, 104], '#fff9e5', { image: 105136 }),
             image('Turf', [0, -53], [828, 158], clearing.ground),
@@ -103,15 +106,17 @@ function roomLayout(unified) {
         ], false),
         group('Replay', [0, 10], [832, unified ? 426 : 370], [
           ...(unified ? [
-            image('Meadow', [0, 28], [820, 216], clearing.grass),
+            image('Meadow', [0, 22], [820, 228], clearing.grass),
+            image('FarCloud', [292, 112], [183, 42], '#fffaf0', { image: 105102 }),
+            image('Pine', [-385, 96], [42, 78], '#8ca98d', { image: 105098 }),
             image('Canopy', [-296, 90], [218, 91], '#f6fbec', { image: 105135 }),
           ] : []),
           label('RoundText', [0, unified ? 173 : 144], [800, unified ? 58 : 66], '', 23, pigment.ink, 'left'),
           ...(unified ? [
             terrain('Enemy', [130, 27], [560, 114], clearing.enemyLane),
             terrain('Ally', [-130, 32], [560, 114], clearing.ownLane),
-            labelFront('OwnFront', [-65, 113], '己方前排 ›'),
-            labelFront('EnemyFront', [65, 113], '‹ 对方前排'),
+            labelFront('OwnFront', [-65, 120], '己方前排 ›'),
+            labelFront('EnemyFront', [65, 120], '‹ 对方前排'),
           ] : [
             image('Ally', [-207, 24], [403, 143], pigment.rail),
             image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
@@ -120,9 +125,9 @@ function roomLayout(unified) {
             label(`Own${slot}`, [-48 - (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
             label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
           ]),
-          label('Event', [0, unified ? -85 : -72], [800, unified ? 42 : 50], '', unified ? 22 : 18, unified ? '#65441d' : pigment.ink),
+          label('Event', [0, unified ? -107 : -72], [800, unified ? 32 : 50], '', unified ? 19 : 18, unified ? '#65441d' : pigment.ink),
           ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
-            .map(([name, text], index) => button(name, (index - 1.5) * 202, unified ? -155 : -133,
+            .map(([name, text], index) => button(name, (index - 1.5) * 202, unified ? -170 : -133,
               188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
         ], false),
         unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),

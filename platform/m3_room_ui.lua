@@ -143,7 +143,7 @@ local function paint_shop()
             badges.paint(slot, unit and unit.attack, unit and unit.health)
             object("Shop/Team" .. slot .. "/Surface").imageColor =
                 picked == slot and Color(228, 176, 94, 255) or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
-            name = unit and (name .. " · L" .. unit.level) or ""
+            name = unit and (name .. "\nL" .. unit.level) or ""
         elseif unit then
             local values = portrait and replay_view.combat_values(unit.attack, unit.health)
                 or string.format("%d攻 %d命", unit.attack, unit.health)
@@ -154,7 +154,8 @@ local function paint_shop()
     reward = math.min(reward, math.max(#preview.rewards, 1))
     local item = pets[preview.rewards[reward]]
     if badges then visible("Shop/InspectReward", item ~= nil) end
-    text("Shop/Reward/Text", item and string.format("%s %d/%d", item.name, reward, #preview.rewards) or "暂无升级奖励")
+    text("Shop/Reward/Text", item and string.format("%s %d/%d", item.name, reward, #preview.rewards)
+        or badges and "暂无奖励" or "暂无升级奖励")
     text("Shop/Merge/Text", merge and "取消合并" or "合并队员")
 end
 
@@ -199,11 +200,17 @@ local function paint_battle()
         badges.select("replay", object("Replay"), function(slot)
             local label = object("Replay/" .. (slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5))))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 39
+            return x, y - 39, x, y + 90
         end)
     end
     local allied_side = frame.left == match.seat and 0 or 1
     local opposing_seat = allied_side == 0 and frame.right or frame.left
+    if badges then
+        local event = frame.event
+        local damage = event and event.type == "damage"
+        local damaged = damage and ((event.side == "player" and 0 or 1) == allied_side and event.slot or 5 + event.slot)
+        badges.feedback(damaged, event)
+    end
     local board = frame.board
     for slot = 1, 5 do
         for side = 0, 1 do
