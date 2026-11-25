@@ -1,3 +1,4 @@
+local animal_ability = require("autopets.animal_ability")
 local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
 local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
 local battle = require("autopets.battle")
@@ -84,7 +85,7 @@ local function paint_ability()
     end
     local pet = code and native_catalog.pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
-    if pet then title, body = animal_ability.describe(native_catalog, pet, level) end
+    if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
     text("Shop/AbilityTitle", title)
     text("Shop/AbilityBody", body)
 end

@@ -63,6 +63,8 @@ export function duelLayout(rule, includeProbeButtons = false) {
       ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, -13], [174, 44], '冻结', '#286452', 19),
     ];
   }).flat();
+  const teamCards = Array.from({ length: rule.TEAM_SIZE }, (_, index) => inspectable(`Team${index + 1}`, `TeamLabel${index + 1}`,
+    [(2 - index) * 190, 120], [174, 56], '', '#335b44', `InspectTeam${index + 1}`, 20));
   return {
     name: 'AP_DuelProbe',
     script,
@@ -76,8 +78,8 @@ export function duelLayout(rule, includeProbeButtons = false) {
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
       ]),
       text('Team', [0, 165], [900, 32], '', 21),
-      ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => inspectable(`Team${index + 1}`, `TeamLabel${index + 1}`,
-        [(2 - index) * 190, 120], [174, 56], '', '#335b44', `InspectTeam${index + 1}`, 20)).flat(),
+      ...teamCards.flatMap(cards => cards.slice(0, 3)),
+      { name: 'TeamInspection', kind: 'container', size: [1200, 690], children: teamCards.flatMap(cards => cards.slice(3)) },
       ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452')),
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
@@ -104,8 +106,7 @@ export function duelClientSource(template, resource) {
     .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
     .replace('-- AP_DUEL_RULES', clientRules);
   assert.doesNotMatch(source, /-- AP_DUEL_/);
-  const ability = fs.readFileSync(new URL('./animal_ability.lua', import.meta.url), 'utf8');
-  return `local animal_ability = (function()\n${ability}\nend)()\n${source}`;
+  return source;
 }
 
 export function duelGraphs(resource, battleGraph, graphId, fightGraphId, startingLives, release) {

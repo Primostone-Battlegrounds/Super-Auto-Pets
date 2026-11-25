@@ -89,7 +89,6 @@ function catalogLua(items) {
 export function roomClientSource(template, { pet, food, battle = pet }) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
-    `local animal_ability = (function()\n${fs.readFileSync(new URL('./animal_ability.lua', import.meta.url), 'utf8')}\nend)()`,
     `local standings = (function()\n${shared}\nend)()`,
     `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,
     `local fighters = {${catalogLua(battle)}}`, template,

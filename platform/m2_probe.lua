@@ -1,5 +1,9 @@
 local root, offers = script.object, script.object
-local function child(name) return assert(root:GetChild(name), name) end
+local function child(name)
+    local parent = name:match("^InspectTeam") and root:GetChild("TeamInspection") or root
+    return assert(parent:GetChild(name), name)
+end
+local animal_ability = require("autopets.animal_ability")
 local status = child("Status")
 local market_gold = child("MarketGold")
 local team_label = child("Team")
@@ -135,7 +139,7 @@ local function render_ability(view)
     end
     local pet = code and native_catalog.pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
-    if pet then title, body = animal_ability.describe(native_catalog, pet, level) end
+    if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
     child("AbilityTitle").text, child("AbilityBody").text = title, body
 end
 
@@ -395,7 +399,7 @@ for slot = 1, rules.food_slots do
     bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
-    bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end)
+    bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end, root:GetChild("TeamInspection"))
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)
     bind("Team" .. slot, function() select_unit(slot) end)
 end

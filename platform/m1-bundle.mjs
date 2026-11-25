@@ -48,10 +48,10 @@ function bundleModules(parse, names, entry, release, prefix = []) {
 }
 
 export function bundleRun(parse, release = false, entry = './m1_ui.lua') {
-  const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'shop_wire'];
+  const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'shop_wire', 'animal_ability'];
   return bundleModules(parse, names, entry, release, [`local portrait_layers = ${portraitLayers}`]);
 }
 
 export function bundleBattleReplay(parse, entry, release = false) {
-  return bundleModules(parse, ['data', 'rng', 'battle_receipt', 'battle', 'shop_wire'], entry, release);
+  return bundleModules(parse, ['data', 'rng', 'battle_receipt', 'battle', 'shop_wire', 'animal_ability'], entry, release);
 }
