@@ -166,15 +166,11 @@ end
 
 local function team_card(path, unit, selected, effect)
     local mirrored = selected == nil
-    local background = not unit and 0xe0cea2 or mirrored and 0xd6b38a or 0xc0c88d
-    local rim = selected and 0xa86214 or not unit and 0x947e52 or mirrored and 0x815d40 or 0x667645
+    local preparing = state.phase == "preparation"
+    local background = unit and (mirrored and 0xf0c49e or 0xd6dcac) or (preparing and 0xe8d5ab or 0xdac297)
+    local rim = selected and 0xa86214 or not unit and 0xa28654 or mirrored and 0x976b43 or 0x819254
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
-    local preparing = state.phase == "preparation"
-    if not unit and not preparing then
-        show(path, false)
-        return
-    end
     show(path .. "/HealthTrack", unit ~= nil and not preparing)
     show(health_path, unit ~= nil and unit.health > 0 and not preparing)
     if not mirrored then
@@ -354,6 +350,7 @@ local function arrange(preparing)
     local track_y = preparing and 17 or -15
     control("Field/PrepRail"):SetAnchoredPosition(0, track_y)
     control("Field/TrackShadow"):SetAnchoredPosition(0, track_y - 7)
+    show("Field/RivalTrack", not preparing)
     control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
     control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
     control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)

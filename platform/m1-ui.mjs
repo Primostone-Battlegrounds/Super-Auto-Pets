@@ -44,7 +44,7 @@ function portrait() {
 }
 
 function card(name, position, width, type, interactive = true, visible = true, front = false) {
-  const size = [width, 154];
+  const size = [front ? width + 22 : width, 154];
   const market = type === 'market';
   const badgeWidth = market ? 60 : 49;
   const badgeX = market ? 35 : 26;
@@ -53,7 +53,7 @@ function card(name, position, width, type, interactive = true, visible = true, f
     ...(interactive ? [image('Selected', [0, 6], [102, 47], '#d19a3f', { image: 107015, visible: false })] : []),
     roundedPlate('Rim', [0, 5], [90, 34], ticket, pigment.edge),
     roundedPlate('Face', [0, 9], [90, 34], ticket, pigment[type]),
-    ...(front ? [image('Front', [type === 'enemy' ? -40 : 40, 14], [25, 23], '#804516',
+    ...(front ? [image('Front', [type === 'enemy' ? -52 : 52, 7], [22, 22], '#6d4219',
       { image: type === 'enemy' ? 100104 : 100103 })] : []),
     portrait(),
     label('Name', [0, -18], [width - 4, 32], '', market ? 24 : 22),
@@ -83,7 +83,7 @@ function card(name, position, width, type, interactive = true, visible = true, f
     );
   }
   if (interactive) {
-    children.push({ name: 'Hit', kind: 'cursorArea', size });
+    children.push({ name: 'Hit', kind: 'cursorArea', size: [width, size[1]] });
   }
   return group(name, position, size, children, visible);
 }
@@ -144,6 +144,7 @@ export const nativeRun = {
       image('Ground', [0, -56], [1172, 221], '#94b36a'),
       image('TrackShadow', [0, -22], [1172, 106], '#bc995c'),
       image('PrepRail', [0, -15], [1172, 103], '#e3c183'),
+      image('RivalTrack', [293, -15], [586, 103], '#dfb380', { visible: false }),
       image('LeftBrush', [-507, 55], [152, 64], '#7e9a6b', { image: 105135 }),
       image('RightBrush', [500, 52], [170, 62], '#8ca970', { image: 105136 }),
       image('Foreground', [-519, -117], [98, 54], '#89a468', { image: 105137 }),
@@ -153,8 +154,8 @@ export const nativeRun = {
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player', true, true, slot === 1)),
     ...slots.map(slot => card(`Enemy${slot}`, [82 + (slot - 1) * 112, 54], 106, 'enemy', false, false, slot === 1)),
-    group('Shop', [0, -124], [1164, 428], [
-      image('Paper', [0, 0], [1164, 268], '#e8c880'),
+    group('Shop', [0, -124], [1172, 428], [
+      image('Paper', [0, 0], [1172, 268], '#e8c880'),
       image('Rail', [0, 0], [1128, 174], '#f9e5b2'),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
