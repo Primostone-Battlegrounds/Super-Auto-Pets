@@ -201,7 +201,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
       click('Room/Match/Replay/Follow/Hit');
       await capture('client-2-replay-loss');
       requireText('Room/Match/Replay/RoundText', /本轮落败/u);
-      requireText(eventTrail, /对方胜利/u);
+      requireText(eventTrail, /对方获胜/u);
       api.setPlayView(session, 1);
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
