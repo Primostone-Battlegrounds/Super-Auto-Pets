@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "designId": "v2.0.0",
+  "projectBaseline": "ab73443adee5a2b5b37268779356c2fe67220886",
+  "sources": [
+    {
+      "key": "TW-STORE",
+      "url": "https://store.steampowered.com/app/1714040/",
+      "kind": "official-store",
+      "version": "unversioned store; release date 2021-09-24 is not screenshot build",
+      "observed": "2026-11-25",
+      "supports": [
+        "Arena asynchronous/no timer/10 wins",
+        "Versus synchronous eight-player/last standing",
+        "prebuilt standard packs"
+      ]
+    },
+    {
+      "key": "TW-ITCH",
+      "url": "https://teamwood.itch.io/super-auto-pets",
+      "kind": "official-public-app",
+      "version": "page updated 2026-11-23T13:30Z; client build unknown",
+      "observed": "2026-11-25",
+      "supports": [
+        "self-observed launch failure",
+        "public mouse input declaration"
+      ],
+      "limits": [
+        "No playable client or game version obtained"
+      ]
+    },
+    {
+      "key": "TW-SHOP",
+      "url": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1714040/ss_f61be4caff97d77b7df02bcdadee2687232e991f.1920x1080.jpg?t=1680944541",
+      "local": "official-shop.jpg",
+      "kind": "official-promotional-screenshot",
+      "version": "unknown; URL cache token is not build/version/date proof",
+      "supports": [
+        "five-slot formation above shop",
+        "top resources",
+        "adjacent ability panel",
+        "visible pet stats"
+      ],
+      "sha256": "a1018370a60eae91f90a14222a6bddf601615723b7f08a2bf193f36191969e18"
+    },
+    {
+      "key": "TW-BATTLE",
+      "url": "https://cdn.cloudflare.steamstatic.com/steam/apps/1714040/ss_75e2d405204fa963fc6d5cb99c272c15f0f6dcc3.1920x1080.jpg?t=1660917023",
+      "local": "official-battle.jpg",
+      "kind": "official-promotional-screenshot",
+      "version": "unknown; not verified current Turtle",
+      "supports": [
+        "opposing front lines",
+        "attack/health/level near pets",
+        "visible playback icons"
+      ],
+      "sha256": "774e41359dd033544120fa93dc6279ba59950393f8c252002dca0a9efde5cf08"
+    },
+    {
+      "key": "TW-VIDEO",
+      "url": "https://www.youtube.com/watch?v=m5EcJ2nZWC4",
+      "kind": "official-video",
+      "version": "Team Wood Games; published 2023-03-20; duration 00:57",
+      "timestamps": [],
+      "limits": [
+        "Metadata located by web search; browser ERR_TUNNEL_CONNECTION_FAILED; no frames viewed, timestamps unverified"
+      ]
+    },
+    {
+      "key": "TW-NEWS-API",
+      "url": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=1714040&count=100&maxlength=0",
+      "kind": "official-news-api",
+      "version": "feed_type=1 developer announcements; queried 2026-11-25",
+      "supports": [
+        "0.28 UI/replays/1v1 changes",
+        "0.29 versus timer changes",
+        "v44 difficulty/lobby changes"
+      ]
+    }
+  ]
+}
