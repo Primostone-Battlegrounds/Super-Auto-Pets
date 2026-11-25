@@ -33,7 +33,7 @@ function roomLayout(unified) {
     if (unified && art) {
       const team = art === 'team';
       surface = terrain('Surface', [0, 3], [width - 20, 32], team ? clearing.recess : fill);
-      captionSize[1] = team ? 60 : 52;
+      captionSize[1] = team ? 33 : 52;
       captionPosition[1] = team ? -11 : -16;
       visualSize[1] = team ? 128 : 110;
       fontSize = 21;
@@ -52,7 +52,7 @@ function roomLayout(unified) {
     const main = button(name, x, y, width, height, '', false, 17, fill, art);
     const caption = main.children.find(c => c.name === 'Text');
     caption.position[0] = -inspectWidth / 2;
-    caption.size[0] = width - inspectWidth - 10;
+    caption.size[0] = width - inspectWidth - (unified && art === 'team' ? 0 : 10);
     main.children.find(c => c.name === 'Hit').position = [-inspectWidth / 2, 0];
     main.children.find(c => c.name === 'Hit').size = [width - inspectWidth, height];
     if (unified && art) {

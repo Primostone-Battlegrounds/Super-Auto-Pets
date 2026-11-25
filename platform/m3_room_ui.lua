@@ -143,7 +143,7 @@ local function paint_shop()
             badges.paint(slot, unit and unit.attack, unit and unit.health)
             object("Shop/Team" .. slot .. "/Surface").imageColor =
                 picked == slot and Color(228, 176, 94, 255) or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
-            name = unit and (name .. "\nL" .. unit.level) or ""
+            name = unit and (name .. " L" .. unit.level) or ""
         elseif unit then
             local values = portrait and replay_view.combat_values(unit.attack, unit.health)
                 or string.format("%d攻 %d命", unit.attack, unit.health)

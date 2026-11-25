@@ -313,6 +313,10 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText(`${shop}/AbilityBody`, /经验 1/u);
     requireText(`${shopBadges}/Attack1`, /^攻3$/u);
     requireText(`${shopBadges}/Life1`, /^命2$/u);
+    if (!duel) {
+      requireText(`${shop}/Team1/Text`, /^芦纹龟 L2$/u);
+      assert.equal(visibleText(`${shop}/Team1/Text`).textLayout.visibleLineCount, 1);
+    }
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
     await capture('client-1-buy-request');
