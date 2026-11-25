@@ -99,6 +99,7 @@ function stat(name, x, title, paper, number) {
 
 const slots = [1, 2, 3, 4, 5];
 const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
+export const sharedPortraitHomes = offers.slice(0, slots.length).map(name => `Shop/${name}`);
 const playButtonHeight = 82;
 const actions = [
   ['Buy', '购买'], ['Freeze', '冻结 / 解冻'], ['Sell', '出售'], ['Merge', '合并队员'],

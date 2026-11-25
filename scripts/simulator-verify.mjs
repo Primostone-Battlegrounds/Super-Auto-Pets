@@ -255,8 +255,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {
-    const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
-    const foodPortrait = control('Practice/Enemy4/Portrait/Layer1').Id;
+    const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
+    const foodPortrait = control('Practice/Shop/Food1/Portrait/Layer1').Id;
     const shopPortraits = [...portraits, foodPortrait];
     function requireShopPortraits(frame) {
       assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),

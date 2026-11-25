@@ -30,7 +30,8 @@ local difficulty
 local confirming_restart
 local reward_index, event_index = 1, 1
 local listeners, controls = {}, {}
-local portrait
+local portrait, shared_portraits
+local parked_portraits = {}
 local visibility, displayed_text, displayed_colour = {}, {}, {}
 local playing, elapsed, replay_speed = false, 0, 1
 local replay_complete, reviewing = false, false
@@ -53,6 +54,39 @@ local effects = {
 local function control(path)
     if not controls[path] then controls[path] = assert(root:FindChild(path), "missing control: " .. path) end
     return controls[path]
+end
+
+local function portrait_control(path)
+    local enemy, suffix = path:match("^Enemy(%d+)(/Portrait.*)$")
+    if shared_portraits and enemy then return control(shared_portrait_homes[tonumber(enemy)] .. suffix) end
+    return control(path)
+end
+
+local function restore_portraits()
+    for _, entry in ipairs(parked_portraits) do
+        if entry.picture.alive and entry.parent.alive then
+            entry.picture.parent = entry.parent
+            entry.picture:SetSiblingIndex(entry.sibling)
+            entry.picture:SetAnchoredPosition(entry.x, entry.y)
+        end
+    end
+    parked_portraits = {}
+end
+
+local function arrange_portraits(preparing)
+    if not shared_portraits then return end
+    restore_portraits()
+    if not preparing then
+        for index, path in ipairs(shared_portrait_homes) do
+            local picture = control(path .. "/Portrait")
+            local x, y = picture:GetAnchoredPosition()
+            parked_portraits[index] = {picture = picture, parent = control(path), sibling = picture:GetSiblingIndex(), x = x, y = y}
+            picture.parent = control("Enemy" .. index)
+            picture:SetAsLastSibling()
+        end
+    end
+    portrait = bind_portrait(portrait_control, 1.68)
+    lunging = nil
 end
 
 local function clear_drag()
@@ -294,6 +328,7 @@ end
 local function arrange(preparing)
     if preparing_layout == preparing then return end
     preparing_layout = preparing
+    arrange_portraits(preparing)
     show("Field/PrepRail", preparing)
     show("Field/AllyRail", not preparing)
     show("Field/RivalRail", not preparing)
@@ -318,7 +353,7 @@ local function draw_battle_cue(event, passed)
     local strike = event and event.type == "attack"
     local impact = event and event.type == "damage"
     local actor = strike and unit_path(event.side, event.slot)
-    if lunging and lunging ~= actor then control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
+    if lunging and lunging ~= actor then portrait_control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
     lunging = actor
     local intensity = math.max(0, 1 - (passed or 0) / 0.28)
     show("BattleFX", impact == true or (strike == true and intensity > 0))
@@ -327,7 +362,7 @@ local function draw_battle_cue(event, passed)
     if strike then
         local direction = event.side == "player" and 1 or -1
         local lunge = direction * 10 * intensity
-        control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
+        portrait_control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
         local x, y = control(actor):GetAnchoredPosition()
         local target_x, target_y = control(unit_path(event.target_side, event.target_slot)):GetAnchoredPosition()
         control("BattleFX/Strike"):SetAnchoredPosition((x + lunge + target_x) / 2, (y + target_y) / 2 + 27 - 118)
@@ -910,6 +945,7 @@ end
 local function release_view()
     view_enabled = false
     clear_drag()
+    restore_portraits()
     set_playing(false)
     stop_sound()
     for hit, bound in pairs(listeners) do
@@ -930,7 +966,8 @@ function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
     if not view_root then set_visual_plates(root) end
-    portrait = bind_portrait(control, 1.68)
+    shared_portraits = view_root ~= nil
+    portrait = bind_portrait(portrait_control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1
@@ -997,6 +1034,8 @@ end
 function OnDisable()
     view_enabled = false
     clear_drag()
+    restore_portraits()
+    preparing_layout = nil
     press, pending_drop = nil, nil
     sync_updates()
     stop_sound()

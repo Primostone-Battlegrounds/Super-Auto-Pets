@@ -69,7 +69,8 @@ local function online_portraits(duel)
     for slot = 1, 5 do
         for _, side in ipairs({"Own", "Enemy"}) do
             local own = side == "Own"
-            local source = practice_board:GetChild((own and "Team" or "Enemy") .. slot)
+            local source = own and practice_board:GetChild("Team" .. slot)
+                or practice_board:FindChild(shared_portrait_homes[slot])
             local picture = source:GetChild("Portrait")
             local label = replay:GetChild(side .. slot)
             local px, py = picture:GetAnchoredPosition()

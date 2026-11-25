@@ -30,6 +30,9 @@ const view = (name, controls) => ({ ...group(name, [0, 0], [1280, 720], controls
 
 function layout(duelRules) {
   const practice = nativeRun.controls.map(control => {
+    if (/^Enemy[1-5]$/u.test(control.name)) {
+      return { ...control, children: control.children.filter(child => child.name !== 'Portrait') };
+    }
     if (control.name !== 'Menu') return control;
     return { ...control, children: [...control.children.map(child => {
       if (child.name === 'Heading') return { ...child, text: { ...child.text, content: '单人 AI 练习' } };
