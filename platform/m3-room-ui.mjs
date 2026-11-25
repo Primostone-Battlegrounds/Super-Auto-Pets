@@ -13,12 +13,13 @@ function button(name, x, y, width, height, text, primary = false) {
 }
 
 function inspectable(name, inspect, x, y, width, height) {
+  const inspectWidth = 48;
   const main = button(name, x, y, width, height, '');
-  main.children.find(c => c.name === 'Text').position = [-22, 0];
-  main.children.find(c => c.name === 'Text').size = [width - 54, height];
-  main.children.find(c => c.name === 'Hit').position = [-22, 0];
-  main.children.find(c => c.name === 'Hit').size = [width - 44, height];
-  return [main, button(inspect, x + width / 2 - 22, y, 44, height, '技能')];
+  main.children.find(c => c.name === 'Text').position = [-inspectWidth / 2, 0];
+  main.children.find(c => c.name === 'Text').size = [width - inspectWidth - 10, height];
+  main.children.find(c => c.name === 'Hit').position = [-inspectWidth / 2, 0];
+  main.children.find(c => c.name === 'Hit').size = [width - inspectWidth, height];
+  return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height, '技能')];
 }
 const slots = [1, 2, 3, 4, 5];
 const slotX = slot => (slot - 3) * 162;
