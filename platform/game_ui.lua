@@ -138,7 +138,7 @@ local function online_portraits(duel)
             plate.imageType = Enum.ImageType.Basic
             plate:SetAnchoredPosition(0, duel and -32 or -30)
             plate:SetSizeDelta(duel and 68 or 58, 18)
-            plate.imageColor = mirrored and Color(170, 130, 84, 255) or Color(133, 139, 89, 255)
+            plate.imageColor = mirrored and Color(118, 80, 59, 255) or Color(75, 98, 59, 255)
             set_visible(plate, true)
         elseif id ~= nil then
             draw(tostring(slot), id, mirrored)

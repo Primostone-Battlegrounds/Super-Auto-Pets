@@ -313,11 +313,14 @@ local function draw_tooltip(preparing)
     end
     local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
     local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
-    local card_x = control(path):GetAnchoredPosition()
+    local card_x, card_y = control(path):GetAnchoredPosition()
     local x = math.max(-370, math.min(370, card_x))
     caption:SetAnchoredPosition(x < -150 and 452 or -465, 106)
     local beside_team = picked.kind == "team"
-    control("Tooltip"):SetAnchoredPosition(x, beside_team and -18 or -2)
+    local tooltip = control("Tooltip")
+    local _, tooltip_height = tooltip:GetSizeDelta()
+    local _, hit_height = control(path .. "/Hit"):GetSizeDelta()
+    tooltip:SetAnchoredPosition(x, beside_team and card_y - (tooltip_height + hit_height) / 2 - 6 or -2)
     control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, beside_team and 40 or -40)
     local heading, body = selected_info(picked)
     text("Tooltip/Heading", heading)
@@ -447,7 +450,7 @@ local function draw(refresh)
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
     text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x9c3328 or 0x733b31)
-    text("TeamCaption", preparing and "我的阵容" or "我方")
+    text("TeamCaption", preparing and "我的阵容 · 右侧前排" or "我方")
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
     text("OpponentCaption", style and (opponent .. " · " .. style) or opponent)
