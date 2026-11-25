@@ -6,20 +6,41 @@
     "v1.0.0": {
       "status": "Active",
       "gameVersion": "0.4.0",
-      "original": { "version": "sap-turtle-grounded-2026-03-16", "verification": "partial" },
+      "original": {
+        "version": "sap-turtle-grounded-2026-03-16",
+        "verification": "partial"
+      },
       "references": [],
       "importedFrom": "ab73443adee5a2b5b37268779356c2fe67220886"
     },
     "v2.0.0": {
       "status": "Proposed",
       "gameVersion": "0.5.0",
-      "original": { "version": null, "verification": "unverified" },
+      "original": {
+        "version": null,
+        "verification": "unverified"
+      },
       "references": [
         "v2.0.0/reference-first.md",
         "v2.0.0/sources.json",
         "v2.0.0/official-shop.jpg",
         "v2.0.0/official-battle.jpg",
-        "v2.0.0/portable-platform-reuse.md"
+        "v2.0.0/portable-platform-reuse.md",
+        "v2.0.0/steam-trailer-observation.md",
+        "v2.0.0/steam-trailer/dash_h264.txt",
+        "v2.0.0/steam-trailer/frame-18-0s.jpg",
+        "v2.0.0/steam-trailer/frame-26-0s.jpg",
+        "v2.0.0/steam-trailer/frame-27-0s.jpg",
+        "v2.0.0/steam-trailer/frame-28-0s.jpg",
+        "v2.0.0/steam-trailer/frame-29-0s.jpg",
+        "v2.0.0/steam-trailer/frame-4-0s.jpg",
+        "v2.0.0/steam-trailer/frame-5-0s.jpg",
+        "v2.0.0/steam-trailer/frame-5-5s.jpg",
+        "v2.0.0/steam-trailer/frame-8-5s.jpg",
+        "v2.0.0/steam-trailer/frame-9-5s.jpg",
+        "v2.0.0/steam-trailer/hls_h264.txt",
+        "v2.0.0/steam-trailer/movie-metadata.json",
+        "v2.0.0/steam-trailer/trace.json"
       ]
     }
   }

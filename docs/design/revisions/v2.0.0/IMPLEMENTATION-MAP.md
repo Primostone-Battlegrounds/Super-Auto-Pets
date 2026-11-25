@@ -1,6 +1,6 @@
 # Intended design, implementation and release boundary
 
-Status: Proposed. Implementation snapshot reviewed here: PR #51 head `179e65ca513ba63c17cf759a01a8e320cf4bb05a`; later work must attach its own exact SHA and evidence. Source version, design version, product version, Git SHA and GIL hash are distinct identifiers.
+The initial implementation snapshot is PR #51 head `179e65ca513ba63c17cf759a01a8e320cf4bb05a`. Later evidence uses its own exact Git SHA and GIL hash. Design status is recorded in [the manifest](../../manifest.json).
 
 | Area | Complete intended v2 design | Implementation visible at the snapshot | What is not thereby verified |
 |---|---|---|---|

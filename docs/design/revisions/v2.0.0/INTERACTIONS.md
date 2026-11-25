@@ -1,6 +1,6 @@
 # v2.0.0 interaction ledger
 
-Status: Proposed. This file separates the intended interaction basis from the narrower HTML study. Preserve verified source actions, order and information priority; justify changed behavior through actual Miliastra invite/practice/touch/native constraints. Unobserved details remain disclosed assumptions, not verified source defaults. Independent review can approve bounded assumptions for implementation without asserting release acceptance.
+Design status is recorded in [the manifest](../../manifest.json). Preserve verified source actions, order and information priority. Document behavior adapted to Miliastra invitations, practice, touch or native input. Independent review can approve bounded assumptions for implementation. Release acceptance uses the exact candidate's evidence.
 
 ## Intended interaction basis and observed source
 

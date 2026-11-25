@@ -1,6 +1,6 @@
 # 苔原小队 / Moss & Might — v2.0.0
 
-Status: **Proposed — not active**. Baseline: `ab73443adee5a2b5b37268779356c2fe67220886` (`develop`). This revision is a reviewable remediation proposal. Substantive independent review can approve its exact design as an implementation basis while disclosed official-device checks remain pending and product/release stays NO-GO. Design approval, manifest activation and product acceptance are separate decisions; this edit performs none of them. It does not change the active release manifest or production rules.
+Design status is recorded in [the manifest](../../manifest.json). The remediation baseline is `ab73443adee5a2b5b37268779356c2fe67220886` (`develop`). Substantive independent review can approve this exact design as an implementation basis while disclosed official-device checks remain pending and product acceptance stays NO-GO.
 
 ## Product and scope
 

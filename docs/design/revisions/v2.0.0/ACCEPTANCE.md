@@ -1,6 +1,6 @@
 # v2.0.0 acceptance and evidence contract
 
-Design status: **Proposed**. Product/release decision: **NO-GO**; these are separate axes. A passing HTML study does not satisfy native/runtime, source-reuse, multiplayer, license, balance or release gates. Evidence records must use actual observations and immutable artifact references. Never replace `not_run` with an inferred pass.
+Read design status in [the manifest](../../manifest.json) and product acceptance in the exact candidate package. Evidence records use actual observations and immutable artifact references. Keep unexecuted cases as `not_run`.
 
 ## Independent design-basis review
 
