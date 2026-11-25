@@ -45,9 +45,11 @@ jobs:
           package="$RUNNER_TEMP/game-package"
           node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/game-validation" lua5.3 "$package"
           node scripts/check-design.mjs delivery "$package"
-          node scripts/acceptance-gate.mjs "$package"
+          gate=$(node scripts/acceptance-gate.mjs "$package")
+          verdict=$(node -p 'JSON.parse(process.argv[1]).verdict' "$gate")
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
           printf 'name=super-auto-pets-%s\n' "${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+          printf 'verdict=%s\n' "$verdict" >> "$GITHUB_OUTPUT"
       - name: Upload the verified game
         id: artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -67,10 +69,12 @@ jobs:
         env:
           ARTIFACT_NAME: ${{ steps.build.outputs.name }}
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          ACCEPTANCE_VERDICT: ${{ steps.build.outputs.verdict }}
         run: |
           {
-            printf '## 小动物自走棋 · 千星奇域\n\n'
+            printf '## 小动物自走棋 · 千星隔离候选\n\n'
             printf '[下载 %s.zip](%s)\n\n' "$ARTIFACT_NAME" "$ARTIFACT_URL"
             printf 'Git SHA `%s`\n\n' "$GITHUB_SHA"
-            printf '解压后导入 `super-auto-pets.gil`。包内有 SHA-256 校验和离线与真机验收说明。\n'
+            printf '成品验收 `%s`。包内 `ACCEPTANCE.json` 列出每层状态。\n\n' "$ACCEPTANCE_VERDICT"
+            printf '解压后将 `super-auto-pets.gil` 导入隔离存档。\n'
           } >> "$GITHUB_STEP_SUMMARY"

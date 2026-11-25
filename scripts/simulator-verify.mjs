@@ -33,9 +33,15 @@ receipt.practiceInputFixtureSha256=sha256(roundsSource);
 const results=[];
 const canvases=['pc-16-9','pc-21-9','mobile-16-9','mobile-19.5-9','mobile-4-3'];
 const configurations=canvases.map(canvasId=>({canvasId,playerCount:1}));
-if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame')configurations.push({canvasId:'mobile-16-9',playerCount:2},{canvasId:'mobile-16-9',playerCount:8});
-for(const {canvasId,playerCount} of configurations) {
-  const prefix=canvasId+(playerCount>1?'-'+playerCount+'clients':'');
+if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
+  configurations.push(
+    { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
+    { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
+    { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
+  );
+}
+for(const {canvasId,playerCount,mode} of configurations) {
+  const prefix = mode ? `${canvasId}-${playerCount}clients` : canvasId;
   const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,canvasId,playerCount,language:'zh-CN'});
   const inputs=[];
   const click=trail=>{let c=session.runtime.roots[0];for(const name of trail.split('/')) c=c?.children.find(n=>n.name===name);assert.ok(c,'Missing input '+trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
@@ -49,8 +55,14 @@ for(const {canvasId,playerCount} of configurations) {
   try {
   await capture('startup');
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
-  if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&playerCount===1) {
+  if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
     requireText('Lobby/Title', /小动物自走棋/u);
+    click('Lobby/Choices/Room/Hit');
+    await capture('first-request-before-sync');
+    requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
+    for (let frame = 0; frame < 61; frame++) api.stepPlay(session, 0.1);
+    await capture('lobby-request-timeout');
+    requireText('Lobby/Feedback', /可以重试/u);
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);await capture('lobby-fixture');
     requireText('Lobby/Status', /已进入 1 人/u);
     click('Lobby/Choices/Duel/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,2,1]);await capture('duel-wait-fixture');
@@ -94,9 +106,8 @@ for(const {canvasId,playerCount} of configurations) {
     press('Primary');await capture('practice-restart');
     requireText('Practice/Round/Value', /第 1 轮/u);
   }
-  if(playerCount>1) {
+  if(mode) {
     // Client-only fixture from the native wire schema. No graph output claimed.
-    const mode=playerCount===2?2:8;
     const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
     api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
     click('Lobby/Choices/'+(mode===2?'Duel':'Room')+'/Hit');
@@ -107,15 +118,21 @@ for(const {canvasId,playerCount} of configurations) {
       else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
       api.setPlayView(session,player);await capture('client-'+player+'-preparation-fixture');
       requireText(mode === 2 ? 'Duel/MarketGold' : 'Room/Match/Shop/Money', new RegExp('金币 ' + (11 - player) + '(?: |$)', 'u'));
+      if (mode === 8) requireText('Room/Standings/Count', new RegExp(`${playerCount} 真人 · ${8 - playerCount} 机器人`, 'u'));
     }
     api.setPlayView(session,1);
     click(mode===2?'Duel/MarketOffers/Buy1':'Room/Match/Shop/Offer1/Hit');
     await capture('client-1-buy-request');
     assert.ok(api.playSnapshot(session).server.inbound.some(row=>row.name===(mode===2?'AP_DuelRequest':'AP_RoomRequest')&&row.values[0]===11),'Client buy did not send native request');
+    click(mode === 2 ? 'Duel/Back/Hit' : 'Room/Back/Hit');
+    await capture('client-1-return');
+    requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
+    click('Lobby/Continue/Hit');
+    await capture('client-1-reenter');
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
-  results.push({canvasId,playerCount,runtimeExceptions,inputs,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
 }
 const buildPath=path.join(path.dirname(gil),'BUILD.json');
 const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
