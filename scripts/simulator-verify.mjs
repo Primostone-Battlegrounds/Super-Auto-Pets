@@ -40,12 +40,14 @@ if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
     { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
     { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
+    { canvasId: 'mobile-19.5-9', playerCount: 2, mode: 2 },
+    { canvasId: 'mobile-19.5-9', playerCount: 8, mode: 8 },
   );
 }
 for(const {canvasId,playerCount,mode} of configurations) {
   const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
   const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,canvasId,playerCount,language:'zh-CN'});
-  const inputs=[];
+  const inputs=[],playButtons=[];
   const control = trail => {
     let node = session.runtime.roots[0];
     for (const name of trail.split('/')) node = node?.children.find(child => child.name === name);
@@ -53,10 +55,33 @@ for(const {canvasId,playerCount,mode} of configurations) {
     return node;
   };
   const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
+  function requirePlayButton(trail, neighbors = []) {
+    const { Id } = control(trail);
+    const boxes = api.runtimeLayout(session);
+    const { centerX, centerY, width, height } = boxes.get(Id);
+    const { canvasWidth, canvasHeight } = api.playSnapshot(session);
+    const scale = Math.min(844 / canvasWidth, 390 / canvasHeight);
+    if (canvasId === 'mobile-19.5-9') {
+      assert.ok(Math.min(width, height) * scale >= 44, `Touch target too small at 844×390: ${trail}`);
+    }
+    assert.ok(centerX - width / 2 >= 0 && centerX + width / 2 <= canvasWidth &&
+      centerY - height / 2 >= 0 && centerY + height / 2 <= canvasHeight, `Offscreen play button: ${trail}`);
+    for (const neighbor of neighbors) {
+      const box = boxes.get(control(neighbor).Id);
+      const separated = Math.abs(centerX - box.centerX) >= (width + box.width) / 2 ||
+        Math.abs(centerY - box.centerY) >= (height + box.height) / 2;
+      assert.ok(separated, `${trail} overlaps ${neighbor}`);
+    }
+    for (const [dx, dy] of [[0, 0], [2 - width / 2, 0], [width / 2 - 2, 0], [0, 2 - height / 2], [0, height / 2 - 2]]) {
+      assert.equal(api.hitPlayControl(session, centerX + dx, centerY + dy)?.Id, Id, `Button edge is occluded: ${trail}`);
+    }
+    playButtons.push({ trail, width, height, projectedWidth: width * scale, projectedHeight: height * scale });
+  }
   const frames=[],runtimeExceptions=[];
   const capture=async name=>{const paths=new Map();const visit=(node,trail)=>{paths.set(node.Id,trail);for(const child of node.children)visit(child,trail?trail+'/'+child.name:child.name);};visit(session.runtime.roots[0],'');const s=api.playSnapshot(session,{inspect:true,paint:true});fs.writeFileSync(path.join(output,prefix+'-'+name+'.json'),JSON.stringify(s));const prepared=await imageAssets.prepare(s.paint);const png=renderPaintPng(s.paint,s.canvasWidth,s.canvasHeight,prepared).data;fs.writeFileSync(path.join(output,prefix+'-'+name+'.png'),png);frames.push({name,assetWarnings:prepared.warnings,sha256:sha256(png),mountError:s.mountError,logs:s.logs.filter(l=>/error/.test(l.level)),visibleTexts:s.paint.filter(p=>p.kind==='textbox').map(p=>({path:paths.get(p.id),name:p.name,text:p.text,textLayout:p.textLayout,left:p.left,bottom:p.bottom,width:p.width,height:p.height}))});return s;};
+  const visibleText = trail => frames.at(-1).visibleTexts.find(entry => entry.path === trail);
   const requireText = (trail, expected) => {
-    const item = frames.at(-1).visibleTexts.find(entry => entry.path === trail);
+    const item = visibleText(trail);
     assert.ok(item?.textLayout?.fits && item.textLayout.visibleLineCount > 0, `Missing or clipped text: ${trail}`);
     assert.match(item.text, expected, trail);
   };
@@ -65,6 +90,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
   if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
     requireText('Lobby/Title', /小动物自走棋/u);
+    for (const name of ['Room', 'Duel', 'Practice']) {
+      requirePlayButton(`Lobby/Choices/${name}/Hit`, ['Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
+    }
     click('Lobby/Choices/Room/Hit');
     await capture('first-request-before-sync');
     requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
@@ -80,6 +108,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');await capture('practice-shop');
+    requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Shop/RewardNext/Hit', 'Practice/Hint']);
+    requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Shop/Buy/Hit', 'Practice/Shop/Freeze/Hit', 'Practice/Hint']);
     requireText('Practice/Money/Value', /^10$/u);
     requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
@@ -105,16 +135,31 @@ for(const {canvasId,playerCount,mode} of configurations) {
         requireText('Practice/Battle/Event', /攻击/u);
         for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
         await capture('practice-replay');
+        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
       }
       press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
     }
     const final=await capture('practice-complete');
+    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
     assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
     requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
     requireText('Practice/Round/Value', /第 1 轮/u);
+    const readOfferNames = () => [1, 2, 3].map(slot => visibleText(`Practice/Shop/Pet${slot}/Name`).text);
+    const beforeReroll = readOfferNames();
+    press('Shop/Pet1');await capture('practice-offer-detail');
+    requireText('Practice/Tooltip/Heading', /芦纹龟/u);
+    press('Shop/Freeze');press('Shop/Reroll');
+    await capture('practice-frozen-reroll');
+    requireText('Practice/Money/Value', /^9$/u);
+    requireText('Practice/Shop/Pet1/Tag', /^已冻结$/u);
+    const afterReroll = readOfferNames();
+    assert.equal(afterReroll[0], beforeReroll[0]);
+    assert.ok(afterReroll.slice(1).some((name, index) => name !== beforeReroll[index + 1]),
+      'At least one unfrozen offer must change for the fixed restart seed');
   }
   if(mode) {
+    const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
     // Client-only fixture from the native wire schema. No graph output claimed.
     const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
     api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
@@ -132,6 +177,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.setPlayView(session,1);
     const duel = mode === 2;
     const shop = duel ? 'Duel' : 'Room/Match/Shop';
+    const rerollButton = duel ? 'Duel/Reroll' : `${shop}/Reroll/Hit`;
+    const readyButton = duel ? 'Duel/Ready' : 'Room/Match/Ready/Hit';
+    const between = duel ? 'Duel/InspectReward' : 'Room/Match/Hint';
+    requirePlayButton(rerollButton, [readyButton, between]);
+    requirePlayButton(readyButton, [rerollButton, between]);
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
@@ -162,6 +212,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
     }
     await capture('client-1-replay-wait');
+    if (duel) requireText('Duel/Status', /战斗计算中/u);
     sendReplay(2);
     const rejected = await capture('client-1-replay-bad-outcome');
     assert.ok(rejected.logs.some(entry => entry.text.includes('replay_mismatch')), 'A contradictory result must be rejected');
@@ -180,13 +231,22 @@ for(const {canvasId,playerCount,mode} of configurations) {
       const [name, pattern] = expectEvents[0];
       const eventText = renderedEvent();
       if (eventText && pattern.test(eventText)) {
-        await capture(`client-1-replay-${name}`);
+        const replayFrame = await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
+        if (duel && name === 'attack') requireText('Duel/Status', /正在播放本轮战斗/u);
+        if (duel && name === 'result') requireText('Duel/Status', /回放结束 · 等待结算/u);
         if (name === 'attack') {
+          const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
+          assert.ok(own && enemy && own.left + own.width < enemy.left,
+            'The original portraits must appear on opposing lanes');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
           assert.equal(renderedEvent(), eventText, 'Paused playback changed the rendered event');
+          if (duel) {
+            await capture('client-1-replay-paused');
+            requireText('Duel/Status', /本轮回放已暂停/u);
+          }
           click(playback);
         }
         expectEvents.shift();
@@ -194,6 +254,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
       api.stepPlay(session, 0.05);
     }
     assert.deepEqual(expectEvents.map(([name]) => name), [], 'Replay must visibly progress through authority-derived phases');
+    if (duel) {
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 1, true, false, 1, 3, 3, 0, 0, 7, 0, 5, 4, 1], 'Player1');
+      await capture('client-1-settlement');
+      requireText('Duel/Status', /本轮获胜 · 确认下一轮/u);
+    }
     if (!duel && playerCount > 1) {
       api.sendPlaySignal(session, 'AP_RoomView', [2, 3, 1, 2, 2, playerCount, 0, true,
         Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player2');
@@ -206,14 +271,41 @@ for(const {canvasId,playerCount,mode} of configurations) {
       api.setPlayView(session, 1);
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
-    await capture('client-1-return');
+    const returned = await capture('client-1-return');
+    assert.ok(!returned.paint.some(item => portraits.includes(item.id)), 'Replay portraits must be hidden in the lobby');
+    requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
     await capture('client-1-reenter');
+    function nextMarket(version, gold) {
+      const next = [...market];
+      next[0] = 2;
+      next[2] = gold;
+      if (duel) {
+        api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 2, 0, false, false, 1, version, version,
+          0, 0, 30, 0, 5, 4, 0], 'Player1');
+        api.sendPlaySignal(session, 'AP_DuelMarket', [2, version, next], 'Player1');
+      } else {
+        api.sendPlaySignal(session, 'AP_RoomView', [version, 2, 2, 1, version, playerCount, 0, false,
+          Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), next, 0, 42], 'Player1');
+      }
+    }
+    function requireSingleRequest(trail, action) {
+      const before = requests();
+      click(trail);click(trail);
+      const after = api.playSnapshot(session).server.inbound.filter(row => row.name === requestName);
+      assert.equal(after.length, before + 1, `Expected one pending request from ${trail}`);
+      assert.equal(after.at(-1).values[0], action);
+    }
+    nextMarket(4, 10);
+    requireSingleRequest(rerollButton, 10);
+    nextMarket(5, 9);
+    requireSingleRequest(readyButton, 1);
+    await capture('client-1-next-round-actions-fixture');
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
-  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
 }
 const buildPath=path.join(path.dirname(gil),'BUILD.json');
 const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};

@@ -11,6 +11,9 @@ function M.board(events, position)
         if events[index].board then return events[index].board end
     end
 end
+function M.stats(name, attack, health, shield)
+    return string.format("%s\n%d攻 %d命%s", name, attack, health, (shield or 0) > 0 and ("\n盾 " .. shield) or "")
+end
 function M.describe(event, catalog, sides)
     sides = sides or {player = "席1", enemy = "席2"}
     local actor = who(event.side, event.name, sides)

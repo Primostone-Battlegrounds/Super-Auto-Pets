@@ -26,9 +26,10 @@ function bundleModules(parse, names, entry, release, prefix = []) {
     return source;
   }
 
-  const factories = modules.map(name =>
-    `factories['autopets.${name}'] = function()\n${convert(`../src/autopets/${name}.lua`)}\nend`,
-  );
+  const factories = modules.map(name => {
+    const file = name === 'native_portrait' ? './native_portrait.lua' : `../src/autopets/${name}.lua`;
+    return `factories['autopets.${name}'] = function()\n${convert(file)}\nend`;
+  });
   return [
     ...prefix,
     'local factories, loaded, loading = {}, {}, {}',
@@ -48,7 +49,8 @@ function bundleModules(parse, names, entry, release, prefix = []) {
 }
 
 export function bundleRun(parse, release = false, entry = './m1_ui.lua') {
-  const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'shop_wire', 'animal_ability', 'replay_view'];
+  const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'native_portrait',
+    'shop_wire', 'animal_ability', 'replay_view'];
   return bundleModules(parse, names, entry, release, [`local portrait_layers = ${portraitLayers}`]);
 }
 

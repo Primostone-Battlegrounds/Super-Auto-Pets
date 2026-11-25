@@ -39,7 +39,9 @@ local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
-local playback, status_line, seconds, hint
+local playback, status_header, status_message, seconds, hint
+local awaiting_settlement = false
+local portrait
 local draw_status
 local visible = {}
 local bindings = {}
@@ -284,7 +286,10 @@ local function bind(name, callback, parent)
 end
 
 local function show_replay()
-    show_action("Replay", "ReplayLabel", playback ~= nil)
+    draw_status()
+    local replay_available = not preparing or offers == root
+    show(replay_status, replay_available)
+    show_action("Replay", "ReplayLabel", replay_available and playback ~= nil)
     local board_root = child("ReplayBoard")
     show(board_root, playback ~= nil and not preparing)
     for slot = 1, rules.team_size do
@@ -315,11 +320,20 @@ local function show_replay()
             local display = "空位"
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-                local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
-                display = seat .. replay_view.mark(event, unit, key) .. definition.name
-                    .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
+                if portrait then
+                    display = replay_view.stats(definition.name, unit.attack, unit.health, unit.shield)
+                else
+                    local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
+                    display = seat .. replay_view.mark(event, unit, key) .. definition.name
+                        .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
+                end
             end
-            board_root:GetChild((side == 1 and "Own" or "Enemy") .. slot).text = display
+            local path = (side == 1 and "Own" or "Enemy") .. slot
+            board_root:GetChild(path).text = display
+            if portrait then
+                local attacking = unit and event.type == "attack" and event.uid == unit.uid and event.side == key
+                portrait(path, unit and unit.id, side == 2, attacking)
+            end
         end
     end
     replay_status.text = string.format("第 %d 轮  %d/%d  %s", playback.round,
@@ -433,8 +447,17 @@ local function receive_market(_, parameters)
 end
 
 draw_status = function()
+    if not status_header then return end
+    local message = status_message
+    if awaiting_settlement and playback and playback.round == round then
+        if playback.position == #playback.events then
+            message = "回放结束 · 等待结算"
+        else
+            message = playback.playing and "正在播放本轮战斗" or "本轮回放已暂停"
+        end
+    end
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
-    local content = status_line .. suffix .. (hint and ("\n" .. hint) or "")
+    local content = status_header .. "\n" .. message .. suffix .. (hint and ("\n" .. hint) or "")
     if status.text ~= content then status.text = content end
 end
 
@@ -476,9 +499,10 @@ local function receive_snapshot(_, parameters)
         end
     end
     local seat_text = seat > 0 and string.format("席位 %d", seat) or "等候席位"
-    status_line = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d\n%s", seat_text, round, lives, opponent_lives, message)
+    status_header = string.format("%s  ·  第 %d 轮  ·  生命 %d / 对手 %d", seat_text, round, lives, opponent_lives)
+    status_message = message
+    awaiting_settlement = players == 2 and seat > 0 and phase == 3
     seconds = players == 2 and seat > 0 and (phase == 0 or phase == 1) and math.max(0, remaining) or nil
-    draw_status()
     show_actions()
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
@@ -487,7 +511,8 @@ local function receive_snapshot(_, parameters)
     show_replay()
 end
 
-function OnStart()
+function OnStart(_, painter)
+    portrait = painter
     script:RegisterServerSignalHandler("AP_DuelSnapshot", receive_snapshot)
     script:RegisterServerSignalHandler("AP_DuelMarket", receive_market)
     script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
@@ -521,7 +546,9 @@ function OnDestroy()
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
-    playback, status_line, seconds, hint, visible = nil, nil, nil, nil, {}
+    playback, status_header, status_message, seconds, hint, visible = nil, nil, nil, nil, nil, {}
+    awaiting_settlement = false
+    portrait = nil
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

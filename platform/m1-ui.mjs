@@ -70,11 +70,11 @@ function card(name, position, width, type, interactive = true, visible = true) {
   return group(name, position, size, children, visible);
 }
 
-export function button(name, position, size, title, primary = false) {
+export function button(name, position, size, title, primary = false, fontSize = primary ? 23 : 17) {
   return group(name, position, size, [
     image('Rim', [0, 0], size, primary ? '#1e4f43' : pigment.edge),
     image('Face', [0, 0], [size[0] - 4, size[1] - 4], primary ? pigment.primary : pigment.chip),
-    label('Title', [0, 0], [size[0] - 20, size[1] - 12], title, primary ? 23 : 17, primary ? pigment.cream : pigment.ink),
+    label('Title', [0, 0], [size[0] - 20, size[1] - 12], title, fontSize, primary ? pigment.cream : pigment.ink),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
 }
@@ -89,9 +89,10 @@ function stat(name, x, title) {
 
 const slots = [1, 2, 3, 4, 5];
 const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
+const playButtonHeight = 82;
 const actions = [
   ['Buy', '购买'], ['Freeze', '冻结 / 解冻'], ['Sell', '出售'], ['Merge', '合并队员'],
-  ['Reroll', '刷新'], ['RewardNext', '下个奖励'],
+  ['RewardNext', '下个奖励'],
 ];
 
 export const nativeRun = {
@@ -123,7 +124,8 @@ export const nativeRun = {
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
     ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
-    group('Shop', [0, -124], [1164, 268], [
+    image('FooterLine', [0, -262], [1152, 2], pigment.edge),
+    group('Shop', [0, -124], [1164, 428], [
       image('Paper', [0, 0], [1164, 268], pigment.cream),
       image('Rail', [0, 0], [1128, 164], pigment.shelf),
       image('Rule', [0, 83], [1128, 2], pigment.shelfRule),
@@ -131,7 +133,8 @@ export const nativeRun = {
       image('RewardDivider', [372, 0], [2, 146], pigment.shelfRule),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
-      ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -104], [172, 52], title)),
+      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
+      button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
     ]),
     group('Tooltip', [0, -10], [360, 72], [
       image('Border', [0, 0], [360, 72], '#78a090'),
@@ -155,20 +158,19 @@ export const nativeRun = {
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),
-    group('Battle', [0, -165], [1152, 143], [
-      image('Border', [0, 0], [1152, 143], pigment.edge),
-      image('Surface', [0, 0], [1148, 139], '#eaf0d7'),
-      image('Rule', [-540, 37], [4, 35], pigment.gold),
-      label('Outcome', [0, 43], [1038, 30], '', 25, pigment.ink, 'left'),
-      label('Event', [0, 12], [1038, 30], '', 18, pigment.ink, 'left'),
-      button('Replay', [-430, -37], [202, 48], '下一条战斗事件'),
-      button('Auto', [-216, -37], [202, 48], '暂停回放'),
-      button('Fast', [-2, -37], [202, 48], '速度：1 倍'),
-      button('Rewatch', [212, -37], [202, 48], '重新回放'),
-      button('NewSeed', [426, -37], [202, 48], '新一局'),
+    group('Battle', [0, -165], [1152, 170], [
+      image('Border', [0, 0], [1152, 170], pigment.edge),
+      image('Surface', [0, 0], [1148, 166], '#eaf0d7'),
+      image('Rule', [-540, 48], [4, 35], pigment.gold),
+      label('Outcome', [0, 54], [1038, 30], '', 25, pigment.ink, 'left'),
+      label('Event', [0, 22], [1038, 30], '', 18, pigment.ink, 'left'),
+      button('Replay', [-430, -36], [202, playButtonHeight], '下一条战斗事件'),
+      button('Auto', [-216, -36], [202, playButtonHeight], '暂停回放'),
+      button('Fast', [-2, -36], [202, playButtonHeight], '速度：1 倍'),
+      button('Rewatch', [212, -36], [202, playButtonHeight], '重新回放'),
+      button('NewSeed', [426, -36], [202, playButtonHeight], '新一局'),
     ], false),
-    image('FooterLine', [0, -262], [1152, 2], pigment.edge),
-    button('Primary', [411, -293], [329, 58], '开战', true),
+    button('Primary', [411, -296], [329, playButtonHeight], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
     { ...group('Menu', [0, 0], [1202, 684], [
       image('Backdrop', [0, 0], [1202, 684], '#dce9e4'),
