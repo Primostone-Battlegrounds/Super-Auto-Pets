@@ -213,12 +213,14 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText(`${team}/DropLabel`, /^喂食$/u);
     requireLiftedClearance('Practice/Portrait');
     assert.ok(!visibleText(`${team}/XP`), 'Drop feedback replaces the experience label');
+    assert.ok(!visibleText('Practice/OpponentCaption'), 'The lifted portrait must not cover the board caption');
     pointer('up', nearBottom);
     await capture('practice-drag-feed');
     requireText('Practice/Money/Value', /^3$/u);
     requireText(`${food}/Name`, /^空商品$/u);
     assert.notEqual(visibleText(`${team}/Detail`).text, statsBefore);
     requireText(`${team}/XP`, /^L1/u);
+    requireText('Practice/OpponentCaption', /下一位电脑对手/u);
     assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {

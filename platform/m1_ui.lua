@@ -394,6 +394,10 @@ local function draw(refresh)
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
     text("OpponentCaption", style and (opponent .. " · " .. style) or opponent)
+    if drag then
+        show("TeamCaption", false)
+        show("OpponentCaption", false)
+    end
     for index = 1, rules.team_size do
         local hit = effect and event.slot == index
         if not preparing then
