@@ -128,7 +128,6 @@ export const nativeRun = {
       ellipse('PrepRail', [0, 31], [1016, 82], '#c6d39a'),
       ellipse('AllyRail', [-294, -1], [570, 104], '#cbd69c', { visible: false }),
       ellipse('RivalRail', [294, -1], [570, 104], '#dfc396', { visible: false }),
-      ellipse('Clash', [0, 12], [15, 15], '#faf5e6', { visible: false }),
     ]),
     label('TeamCaption', [-309, 208], [521, 32], '', 19, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),

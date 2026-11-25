@@ -256,6 +256,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
   }
   if(mode) {
     const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
+    const foodPortrait = control('Practice/Enemy4/Portrait/Layer1').Id;
+    const shopPortraits = [...portraits, foodPortrait];
+    function requireShopPortraits(frame) {
+      assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),
+        'The online shop must show the pooled lineup, pet and food artwork');
+    }
     // Client-only fixture from the native wire schema. No graph output claimed.
     const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
     api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
@@ -266,7 +272,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
       personalMarket[15] = 2;
       if(mode===2){api.sendPlaySignal(session,'AP_DuelSnapshot',[2,player,1,0,false,false,0,1,1,0,0,30,0,5,5,0],target);api.sendPlaySignal(session,'AP_DuelMarket',[1,1,personalMarket],target);}
       else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
-      api.setPlayView(session,player);await capture('client-'+player+'-preparation-fixture');
+      api.setPlayView(session,player);
+      requireShopPortraits(await capture('client-'+player+'-preparation-fixture'));
       requireText(mode === 2 ? 'Duel/MarketGold' : 'Room/Match/Shop/Money', new RegExp('金币 ' + (11 - player) + '(?: |$)', 'u'));
       if (mode === 8) requireText('Room/Standings/Count', new RegExp(`${playerCount} 真人 · ${8 - playerCount} 机器人`, 'u'));
     }
@@ -335,6 +342,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
           const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
           assert.ok(own && enemy && own.left + own.width < enemy.left,
             'The original portraits must appear on opposing lanes');
+          assert.ok(!replayFrame.paint.some(item => item.id === foodPortrait),
+            'A food offer must not appear in battle');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
@@ -368,7 +377,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     const returned = await capture('client-1-return');
-    assert.ok(!returned.paint.some(item => portraits.includes(item.id)), 'Replay portraits must be hidden in the lobby');
+    assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id)), 'Pooled portraits must be hidden in the lobby');
     requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
@@ -397,7 +406,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireSingleRequest(rerollButton, 10);
     nextMarket(5, 9);
     requireSingleRequest(readyButton, 1);
-    await capture('client-1-next-round-actions-fixture');
+    requireShopPortraits(await capture('client-1-next-round-actions-fixture'));
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}

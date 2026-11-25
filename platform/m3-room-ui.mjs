@@ -78,11 +78,14 @@ function roomLayout(unified) {
         ], false),
         group('Replay', [0, 10], [832, 370], [
           label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
-          image('Ally', [-207, 24], [403, 143], pigment.rail),
-          image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
+          ...(unified ? [image('Meadow', [0, 24], [820, 156], '#afc996')] : []),
+          image('Ally', [-207, unified ? 10 : 24], [403, unified ? 99 : 143],
+            unified ? '#cbd69c' : pigment.rail, unified ? { image: 106025 } : {}),
+          image('Enemy', [207, unified ? 10 : 24], [403, unified ? 99 : 143],
+            unified ? '#dfc396' : pigment.opposingRail, unified ? { image: 106025 } : {}),
           ...slots.flatMap(slot => [
-            label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
-            label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
+            label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', unified ? 17 : 14, pigment.ink),
+            label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', unified ? 17 : 14, pigment.ink),
           ]),
           label('Event', [0, -72], [800, 50], '', unified ? 20 : 18, unified ? '#65441d' : pigment.ink),
           ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
