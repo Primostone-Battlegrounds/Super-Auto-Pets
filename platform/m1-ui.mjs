@@ -20,6 +20,10 @@ function ellipse(name, position, size, colour, options = {}) {
   return image(name, position, size, colour, { image: disc, ...options });
 }
 
+export function terrain(name, position, size, colour, options = {}) {
+  return image(name, position, size, colour, { image: 100002, ...options });
+}
+
 export function label(name, position, size, content = '', fontSize = 20, colour = pigment.ink, align = 'centre') {
   return {
     name, kind: 'text', position, size,
@@ -120,14 +124,14 @@ export const nativeRun = {
     stat('Lives', 417, '生命', '#f9dfcb', '#893e2e'),
     group('Field', [0, 61], [1172, 334], [
       image('Surface', [0, 0], [1172, 334], '#c1e5ec'),
-      ellipse('Cloud', [365, 121], [122, 28], '#edf6e6'),
-      ellipse('Ridge', [125, 52], [918, 162], '#88b5a9'),
-      ellipse('Divider', [-270, 30], [625, 176], '#77a58e'),
-      ellipse('FarHill', [256, 17], [650, 194], '#8cb28c'),
+      terrain('Cloud', [365, 121], [122, 28], '#edf6e6'),
+      terrain('Ridge', [125, 34], [918, 152], '#8bbaae'),
+      terrain('Divider', [-270, 17], [625, 157], '#77a58e'),
+      terrain('FarHill', [256, -12], [650, 158], '#8cb28c'),
       image('Ground', [0, -86], [1172, 162], '#a5c383'),
-      ellipse('PrepRail', [0, 31], [1016, 82], '#c6d39a'),
-      ellipse('AllyRail', [-294, -1], [570, 104], '#cbd69c', { visible: false }),
-      ellipse('RivalRail', [294, -1], [570, 104], '#dfc396', { visible: false }),
+      terrain('PrepRail', [0, 31], [1016, 82], '#c0d390'),
+      terrain('AllyRail', [-294, -1], [570, 104], '#c3d48d', { visible: false }),
+      terrain('RivalRail', [294, -1], [570, 104], '#e2c490', { visible: false }),
     ]),
     label('TeamCaption', [-309, 208], [521, 32], '', 19, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),

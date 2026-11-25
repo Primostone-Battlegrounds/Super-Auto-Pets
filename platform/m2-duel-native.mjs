@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { image, pigment } from './m1-ui.mjs';
+import { image, pigment, terrain } from './m1-ui.mjs';
 import { bindFaintColumns, faintArguments } from './m3-battle-opening.mjs';
 
 export const duelSignals = {
@@ -123,10 +123,13 @@ export function duelLayout(rule, includeProbeButtons = false) {
       text('AbilityBody', includeProbeButtons ? [75, -339] : [0, -292], [includeProbeButtons ? 800 : 940, 40], '', 18, statusInk),
       { name: 'ReplayBoard', kind: 'container', position: [0, 90], size: [900, 210], visible: false, children: [
         ...(!includeProbeButtons ? [image('Meadow', [0, 0], [900, 210], '#afc996')] : []),
-        image('Ally', [-225, includeProbeButtons ? 0 : -21], [440, includeProbeButtons ? 200 : 123],
-          includeProbeButtons ? '#335b44' : '#cbd69c', includeProbeButtons ? {} : { image: 106025 }),
-        image('Enemy', [225, includeProbeButtons ? 0 : -21], [440, includeProbeButtons ? 200 : 123],
-          includeProbeButtons ? '#605432' : '#dfc396', includeProbeButtons ? {} : { image: 106025 }),
+        ...(includeProbeButtons ? [
+          image('Ally', [-225, 0], [440, 200], '#335b44'),
+          image('Enemy', [225, 0], [440, 200], '#605432'),
+        ] : [
+          terrain('Ally', [-225, -21], [440, 123], '#c3d48d'),
+          terrain('Enemy', [225, -21], [440, 123], '#e2c490'),
+        ]),
         ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => [
           text(`Own${index + 1}`, [-45 - index * 87, 0], [82, 178], '', includeProbeButtons ? 16 : 18, replayInk),
           text(`Enemy${index + 1}`, [45 + index * 87, 0], [82, 178], '', includeProbeButtons ? 16 : 18, replayInk),

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { group, image, label, pigment } from './m1-ui.mjs';
+import { group, image, label, pigment, terrain } from './m1-ui.mjs';
 import { bundleBattleReplay } from './m1-bundle.mjs';
 import { standingsLayout } from './multiplayer-standings.mjs';
 
@@ -79,10 +79,13 @@ function roomLayout(unified) {
         group('Replay', [0, 10], [832, 370], [
           label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
           ...(unified ? [image('Meadow', [0, 24], [820, 156], '#afc996')] : []),
-          image('Ally', [-207, unified ? 10 : 24], [403, unified ? 99 : 143],
-            unified ? '#cbd69c' : pigment.rail, unified ? { image: 106025 } : {}),
-          image('Enemy', [207, unified ? 10 : 24], [403, unified ? 99 : 143],
-            unified ? '#dfc396' : pigment.opposingRail, unified ? { image: 106025 } : {}),
+          ...(unified ? [
+            terrain('Ally', [-207, 10], [403, 99], '#c3d48d'),
+            terrain('Enemy', [207, 10], [403, 99], '#e2c490'),
+          ] : [
+            image('Ally', [-207, 24], [403, 143], pigment.rail),
+            image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
+          ]),
           ...slots.flatMap(slot => [
             label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', unified ? 17 : 14, pigment.ink),
             label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', unified ? 17 : 14, pigment.ink),
