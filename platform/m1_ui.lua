@@ -142,8 +142,7 @@ local function team_card(path, unit, index, selected, effect)
         show(path .. "/XPPaper", preparing and unit ~= nil)
         if preparing and unit then
             local threshold = rules.level_xp[unit.level + 1]
-            local progress = threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满"
-            text(path .. "/XP", "L" .. unit.level .. "  " .. progress)
+            text(path .. "/XP", index .. (index == 1 and "前 " or "后 ") .. "L" .. unit.level .. " " .. (threshold and (unit.xp .. "/" .. threshold) or "满"))
         else
             show(path .. "/XP", false)
         end
@@ -303,8 +302,8 @@ local function draw_tooltip(preparing)
     local card_x = control(path):GetAnchoredPosition()
     local x = math.max(-394, math.min(394, card_x))
     caption:SetAnchoredPosition(x < -185 and 452 or -465, 106)
-    control("Tooltip"):SetAnchoredPosition(x, -17)
-    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, picked.kind == "team" and 26 or -26)
+    control("Tooltip"):SetAnchoredPosition(x, -10)
+    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, picked.kind == "team" and 33 or -33)
     local heading, body = selected_info(picked)
     text("Tooltip/Heading", heading)
     text("Tooltip/Body", body)
