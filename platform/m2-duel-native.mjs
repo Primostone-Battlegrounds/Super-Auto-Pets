@@ -87,6 +87,14 @@ export function duelLayout(rule, includeProbeButtons = false) {
       ...card('InspectReward', 'InspectRewardLabel', [0, -218], [176, 40], '查看奖励技能', '#416c59', 17),
       text('AbilityTitle', [0, -258], [940, 30], '点动物旁的「技能」查看，购买操作保持不变', 19),
       text('AbilityBody', [0, -292], [940, 40], '', 18),
+      { name: 'ReplayBoard', kind: 'container', position: [0, 90], size: [900, 210], visible: false, children: [
+        { name: 'Ally', kind: 'image', position: [-225, 0], size: [440, 200], image: 100001, colour: '#335b44' },
+        { name: 'Enemy', kind: 'image', position: [225, 0], size: [440, 200], image: 100001, colour: '#605432' },
+        ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => [
+          text(`Own${index + 1}`, [-45 - index * 87, 0], [82, 178], '', 16),
+          text(`Enemy${index + 1}`, [45 + index * 87, 0], [82, 178], '', 16),
+        ]).flat(),
+      ] },
       text('ReplayStatus', [-75, -170], [774, 50], '', 18),
       ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', '#335b44'),
       ...(includeProbeButtons ? duelProbeButtons : []).map(({ label, position }, index) => text(`NativeLegend${index + 1}`,

@@ -61,8 +61,9 @@ export const m3RoomLayout = {
           label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
           label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
         ]),
-        ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Follow', '追到最新']]
-          .map(([name, text], index) => button(name, (index - 1) * 202, -133, 188, 52, text)),
+        label('Event', [0, -72], [800, 50], '', 18, pigment.ink),
+        ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
+          .map(([name, text], index) => button(name, (index - 1.5) * 202, -133, 188, 52, text)),
       ], false),
       button('Refresh', -327, -254, 164, 48, '同步 · E'),
       button('Ready', -131, -254, 182, 48, '准备 · F', true),

@@ -2,6 +2,7 @@ local animal_ability = require("autopets.animal_ability")
 local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
 local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
 local battle = require("autopets.battle")
+local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
 local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
@@ -11,6 +12,7 @@ local inspected
 local render_standings, panel
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
+local replay_playing, replay_elapsed = false, 0
 local token = 0
 local source_ready = false
 
@@ -120,7 +122,12 @@ local function paint_battle()
     for _, name in ipairs({"Previous", "Forward", "Follow", "Ally", "Enemy"}) do
         visible("Replay/" .. name, has_frame)
     end
+    visible("Replay/Auto", has_frame and frame.event ~= nil)
+    if has_frame and frame.event then
+        text("Replay/Auto/Text", replay_playing and "暂停" or frame_index == #frames and "重播" or "继续")
+    end
     if not has_frame then
+        text("Replay/Event", "")
         local opponent = match.opponents[match.seat]
         local result = result_names[match.results[match.seat]]
         if not result then
@@ -148,7 +155,8 @@ local function paint_battle()
                 local unit = frame.teams[side == 0 and "player" or "enemy"][slot]
                 if unit then
                     local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-                    display = string.format("%s\n%d攻 · %d命\n盾 %d", def.name, unit.attack, unit.health, unit.shield)
+                    local marker = frame.event and replay_view.mark(frame.event, unit, side == 0 and "player" or "enemy") or ""
+                    display = string.format("%s%s\n%d攻 · %d命\n盾 %d", marker, def.name, unit.attack, unit.health, unit.shield)
                 end
             elseif slot <= board[61 + side] then
                 local head = board[63 + side]
@@ -162,6 +170,8 @@ local function paint_battle()
             text("Replay/" .. name .. slot, display)
         end
     end
+    local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
+    text("Replay/Event", frame.event and replay_view.describe(frame.event, native_catalog, sides) or "服务端战斗快照")
     local result
     if frame.outcome == 1 or frame.outcome == 2 then
         result = frame.outcome == allied_side + 1 and "本轮获胜" or "本轮落败"
@@ -225,6 +235,7 @@ local function receive_view(_, values)
     end
     if frame_round < round then
         frames, frame_round, frame_index, following = {}, round, 0, true
+        replay_playing, replay_elapsed = false, 0
     end
     if transitioned or acknowledged or pending and sequence > pending[3] then pending = nil end
     latest, forfeiting = revision, false
@@ -257,7 +268,10 @@ local function receive_battle(_, values)
     local stamp, round, left, right, outcome, board = table.unpack(values)
     if #board < 66 or round <= canonical_round or round < frame_round or match and round < match.round then return end
     if match and round == match.round and match.seat ~= left and match.seat ~= right then return end
-    if round > frame_round then frames, frame_round, frame_index, following = {}, round, 0, true end
+    if round > frame_round then
+        frames, frame_round, frame_index, following = {}, round, 0, true
+        replay_playing, replay_elapsed = false, 0
+    end
     local at = #frames + 1
     while at > 1 and frames[at - 1].stamp > stamp do at = at - 1 end
     if at > 1 and frames[at - 1].stamp == stamp then return end
@@ -294,14 +308,14 @@ local function receive_replay(_, values)
         print(string.format("AUTO_PETS_M3 replay_mismatch round=%d", round))
         return
     end
-    local resolved = {}
+    local resolved, board = {}, nil
     for _, event in ipairs(result.events) do
-        if event.board then
-            resolved[#resolved + 1] = {left = left, right = right, outcome = event.type == "result" and outcome or 0,
-                teams = event.board}
-        end
+        board = event.board or board
+        resolved[#resolved + 1] = {left = left, right = right, outcome = event.type == "result" and outcome or 0,
+            teams = board, event = event}
     end
     frames, frame_round, frame_index, following, canonical_round = resolved, round, 1, false, round
+    replay_playing, replay_elapsed = #resolved > 1, 0
     print(string.format("AUTO_PETS_M3 replay round=%d events=%d outcome=%d", round, #result.events, outcome))
     if match.round == round and match.phase >= 3 then paint_battle() end
 end
@@ -359,6 +373,7 @@ end
 
 local function scrub(offset)
     if not match or frame_round ~= match.round or #frames == 0 then return end
+    replay_playing, replay_elapsed = false, 0
     following = offset == 0
     frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
 end
@@ -373,6 +388,7 @@ function OnStart(view_root)
     controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
     inspected = nil
     source_ready = true
+    replay_playing, replay_elapsed = false, 0
     visible("Ready", false)
     visible("Forfeit", false)
     button("Shop/InspectReward", function() inspected = {kind = "reward", slot = reward} end)
@@ -409,6 +425,13 @@ function OnStart(view_root)
     end)
     button("Replay/Previous", function() scrub(-1) end)
     button("Replay/Forward", function() scrub(1) end)
+    button("Replay/Auto", function()
+        local frame = frames[frame_index]
+        if not match or frame_round ~= match.round or not frame or not frame.event then return end
+        if frame_index == #frames then frame_index = 1; replay_playing = true
+        else replay_playing = not replay_playing end
+        following, replay_elapsed = false, 0
+    end)
     button("Replay/Follow", function() scrub(0) end)
     button("Refresh", refresh)
     button("Ready", ready_up)
@@ -426,13 +449,25 @@ function OnStart(view_root)
 end
 
 function OnUpdate(dt)
-    if not seconds then return end
-    seconds = math.max(0, seconds - dt)
-    draw_status()
+    if not source_ready then return end
+    if seconds then
+        seconds = math.max(0, seconds - dt)
+        draw_status()
+    end
+    if not replay_playing or not match or match.phase < 3 or frame_round ~= match.round then return end
+    local frame = frames[frame_index]
+    if not frame or not frame.event then return end
+    replay_elapsed = replay_elapsed + dt
+    if replay_elapsed < replay_view.duration(frame.event) then return end
+    replay_elapsed = 0
+    frame_index = math.min(#frames, frame_index + 1)
+    replay_playing = frame_index < #frames
+    paint_battle()
 end
 
 function OnDestroy()
     source_ready = false
+    replay_playing, replay_elapsed = false, 0
     seconds = nil
     script:UnregisterServerSignalHandler("AP_RoomView")
     script:UnregisterServerSignalHandler("AP_RoomBattle")

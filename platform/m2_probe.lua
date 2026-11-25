@@ -14,6 +14,7 @@ local replay_label = child("ReplayLabel")
 local replay_status = child("ReplayStatus")
 local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
+local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
 local pets = {
     -- AP_DUEL_PETS
@@ -282,31 +283,46 @@ local function bind(name, callback, parent)
     bindings[#bindings + 1] = {object = (parent or root):GetChild(name), callback = callback}
 end
 
-local event_text = {start = "入场", skill = "技能", attack = "攻击", damage = "受击", shield = "护盾",
-    faint = "退场", buff = "强化", summon = "召唤", result = "结算"}
-
 local function show_replay()
     show_action("Replay", "ReplayLabel", playback ~= nil)
+    local board_root = child("ReplayBoard")
+    show(board_root, playback ~= nil and not preparing)
+    for slot = 1, rules.team_size do
+        show_action("Team" .. slot, "TeamLabel" .. slot, preparing)
+    end
+    show(team_label, preparing)
+    if offers == root then
+        -- Standalone compatibility UI has no MarketOffers parent to hide.
+        for slot = 1, rules.pet_slots do
+            show_action("Buy" .. slot, "OfferLabel" .. slot, preparing)
+            show_action("FreezePet" .. slot, "FreezePetLabel" .. slot, preparing)
+        end
+        for slot = 1, rules.food_slots do
+            show_action("Food" .. slot, "FoodLabel" .. slot, preparing)
+            show_action("FreezeFood" .. slot, "FreezeFoodLabel" .. slot, preparing)
+        end
+    end
     if not playback then
         replay_status.text = "等待战斗回放"
         replay_label.text = "回放"
         return
     end
     local event = playback.events[playback.position]
-    local step = event_text[event.type] or event.type
-    local side = event.side == "player" and "席1" or event.side == "enemy" and "席2" or "双方"
-    if event.board then playback.board = event.board end
-    local names = {}
-    for _, key in ipairs({"player", "enemy"}) do
-        local units = {}
-        for _, unit in ipairs(playback.board[key]) do
-            local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-            units[#units + 1] = string.format("%s%d", definition.name, unit.health)
+    playback.board = replay_view.board(playback.events, playback.position)
+    for side, key in ipairs({"player", "enemy"}) do
+        for slot = 1, rules.team_size do
+            local unit = playback.board[key][slot]
+            local display = "空位"
+            if unit then
+                local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
+                display = replay_view.mark(event, unit, key) .. definition.name
+                    .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
+            end
+            board_root:GetChild((side == 1 and "Own" or "Enemy") .. slot).text = display
         end
-        names[#names + 1] = #units > 0 and table.concat(units, " ") or "空"
     end
-    replay_status.text = string.format("第 %d 轮  %d/%d  %s · %s\n席1 %s  |  席2 %s", playback.round,
-        playback.position, #playback.events, side, step, names[1], names[2])
+    replay_status.text = string.format("第 %d 轮  %d/%d  %s", playback.round,
+        playback.position, #playback.events, replay_view.describe(event, native_catalog))
     replay_label.text = playback.playing and "暂停" or playback.position == #playback.events and "重播" or "继续"
 end
 
@@ -467,6 +483,7 @@ local function receive_snapshot(_, parameters)
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
     print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
     render_market()
+    show_replay()
 end
 
 function OnStart()
@@ -487,7 +504,7 @@ function OnUpdate(dt)
     end
     if not playback or not playback.playing then return end
     playback.elapsed = playback.elapsed + dt
-    if playback.elapsed < 0.18 then return end
+    if playback.elapsed < replay_view.duration(playback.events[playback.position]) then return end
     playback.elapsed = 0
     playback.position = playback.position + 1
     if playback.position == #playback.events then playback.playing = false end
