@@ -356,8 +356,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
           const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
           assert.ok(own && enemy && own.left + own.width < enemy.left,
             'The original portraits must appear on opposing lanes');
-          assert.ok(!replayFrame.paint.some(item => item.id === foodPortrait || item.id === priceId),
-            'A food offer or price must not appear in battle');
+          const emptySeat = replayFrame.paint.find(item => item.id === foodPortrait);
+          assert.equal(emptySeat?.imageId, 106053, 'The borrowed food control must render only an empty seat in battle');
+          assert.ok(!replayFrame.paint.some(item => item.id === priceId), 'A shop price must not appear in battle');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);

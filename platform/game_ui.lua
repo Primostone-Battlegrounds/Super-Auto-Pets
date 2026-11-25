@@ -135,6 +135,7 @@ local function online_portraits(duel)
             draw(tostring(slot), nil, mirrored)
             local plate = picture.control:GetChild("Layer1")
             plate:SetImage(Enum.ImageSource.StaticReference, 106053)
+            plate.imageType = Enum.ImageType.Basic
             plate:SetAnchoredPosition(0, duel and -32 or -30)
             plate:SetSizeDelta(duel and 68 or 58, 18)
             plate.imageColor = mirrored and Color(170, 130, 84, 255) or Color(133, 139, 89, 255)
