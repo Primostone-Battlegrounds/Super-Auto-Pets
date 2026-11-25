@@ -15,21 +15,27 @@ const browse = [
 function roomLayout(unified) {
   function button(name, x, y, width, height, text, primary = false, fontSize = 17, fill = pigment.chip, art) {
     const size = [width, height];
-    const surface = unified ? image('Surface', [0, 0], size, primary ? '#ffffff' : fill, { image: primary ? 107015 : 107102 })
-      : image('Surface', [0, 0], size, primary ? '#206258' : pigment.chip);
     const captionSize = [width - 10, height];
     const captionPosition = [0, 0];
     const visualSize = [...size];
+    const blue = unified && (name.startsWith('Freeze') || ['Auto', 'Follow', 'Refresh'].includes(name));
+    const surfaceSize = unified && name.startsWith('Inspect') ? [width, 34] : size;
+    let surface = unified
+      ? image('Surface', [0, 0], surfaceSize, blue ? '#b9e4e6' : primary ? '#ffffff' : fill,
+        { image: blue ? 107034 : primary ? 107015 : 107102 })
+      : image('Surface', [0, 0], size, primary ? '#206258' : pigment.chip);
     if (unified && art) {
       const team = art === 'team';
-      captionSize[1] = team ? 64 : 48;
-      captionPosition[1] = team ? -15 : -17;
-      visualSize[1] = team ? 94 : 82;
-      fontSize = team ? 15 : 16;
+      surface = terrain('Surface', [-10, -6], [width - 20, 82], team ? '#d7e2b3' : fill);
+      captionSize[1] = team ? 68 : 50;
+      captionPosition[1] = team ? -19 : -14;
+      visualSize[1] = team ? 128 : 110;
+      fontSize = 18;
     }
+    const ink = blue ? '#fffdf2' : primary ? (unified ? '#372917' : pigment.cream) : pigment.ink;
     return group(name, [x, y], visualSize, [
       surface,
-      label('Text', captionPosition, captionSize, text, fontSize, primary ? (unified ? '#372917' : pigment.cream) : pigment.ink),
+      label('Text', captionPosition, captionSize, text, fontSize, ink),
       { name: 'Hit', kind: 'cursorArea', size },
     ]);
   }
@@ -59,41 +65,46 @@ function roomLayout(unified) {
         label('Heading', [-207, 276], [412, 54], '八席淘汰赛', unified ? 35 : 33, pigment.ink, 'left'),
         label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
         group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
-          label('Money', [0, 160], [810, 36], '', unified ? 23 : 22, pigment.ink, 'left'),
+          ...(unified ? [
+            image('Sky', [0, 68], [828, 178], '#c1e5ec'),
+            terrain('Turf', [0, 55], [828, 112], '#b2cd8e'),
+          ] : []),
+          label('Money', [0, unified ? 174 : 160], [810, 36], '', unified ? 25 : 22, pigment.ink, 'left'),
           ...slots.flatMap(slot => [
-            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80, '#fff4d9', 'offer')
-              : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '', false, 17, '#f8dbb3', 'offer')]),
-            button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
-            ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), 94, 154, 76, pigment.rail, 'team'),
+            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, '#fff4d9', 'offer')
+              : [button(`Offer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, '', false, 17, '#ecbe91', 'offer')]),
+            button(`Freeze${slot}`, slotX(slot), unified ? -80 : -74, 154, 48, '冻结', false, 19),
+            ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), unified ? 103 : 94, 154, unified ? 96 : 76, pigment.rail, 'team'),
           ]),
           ...browse.flatMap(([name, text], index) => {
             if (unified && name === 'Reroll') return [button(name, -310, shopActionsY, 206, 82, text, true, 24)];
             const x = unified ? (index - 2.5) * 192 : slotX(index + 1);
-            return name === 'Reward' ? inspectable(name, 'InspectReward', x, -135, 154, 52)
-              : [button(name, x, -135, 154, 52, text)];
+            const y = unified ? -204 : -135;
+            return name === 'Reward' ? inspectable(name, 'InspectReward', x, y, 154, 52)
+              : [button(name, x, y, 154, 52, text, false, unified ? 19 : 17)];
           }),
-          label('AbilityTitle', [0, -182], [810, 28], '点动物旁的「技能」查看', unified ? 19 : 18,
+          label('AbilityTitle', [0, unified ? -124 : -182], [810, unified ? 32 : 28], '点动物旁的「技能」查看', unified ? 22 : 18,
             unified ? '#65441d' : pigment.ink, 'left'),
-          label('AbilityBody', [0, -215], [810, 38], '', 17, pigment.ink, 'left'),
+          label('AbilityBody', [0, unified ? -155 : -215], [810, 38], '', unified ? 20 : 17, pigment.ink, 'left'),
         ], false),
-        group('Replay', [0, 10], [832, 370], [
-          label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
-          ...(unified ? [image('Meadow', [0, 24], [820, 156], '#afc996')] : []),
+        group('Replay', [0, 10], [832, unified ? 426 : 370], [
+          label('RoundText', [0, unified ? 164 : 144], [800, 66], '', unified ? 25 : 23, pigment.ink, 'left'),
+          ...(unified ? [image('Meadow', [0, 33], [820, 194], '#afc996')] : []),
           ...(unified ? [
-            terrain('Ally', [-207, 10], [403, 99], '#c3d48d'),
-            terrain('Enemy', [207, 10], [403, 99], '#e2c490'),
+            terrain('Ally', [-207, 21], [403, 126], '#c3d48d'),
+            terrain('Enemy', [207, 21], [403, 126], '#e2c490'),
           ] : [
             image('Ally', [-207, 24], [403, 143], pigment.rail),
             image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
           ]),
           ...slots.flatMap(slot => [
-            label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', unified ? 17 : 14, pigment.ink),
-            label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', unified ? 17 : 14, pigment.ink),
+            label(`Own${slot}`, [-48 - (slot - 1) * 80, unified ? 31 : 24], [78, 112], '', unified ? 19 : 14, pigment.ink),
+            label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [78, 112], '', unified ? 19 : 14, pigment.ink),
           ]),
-          label('Event', [0, -72], [800, 50], '', unified ? 20 : 18, unified ? '#65441d' : pigment.ink),
+          label('Event', [0, unified ? -85 : -72], [800, unified ? 42 : 50], '', unified ? 22 : 18, unified ? '#65441d' : pigment.ink),
           ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
-            .map(([name, text], index) => button(name, (index - 1.5) * 202, -133, 188, 52, text,
-              unified && name === 'Auto', unified ? 18 : 17)),
+            .map(([name, text], index) => button(name, (index - 1.5) * 202, unified ? -155 : -133,
+              188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
         ], false),
         unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),
         unified ? button('Ready', 310, shopActionsY, 206, 82, '准备 · F', true, 24)

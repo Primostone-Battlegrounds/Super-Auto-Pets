@@ -127,7 +127,6 @@ export const nativeRun = {
       terrain('Cloud', [365, 121], [122, 28], '#edf6e6'),
       terrain('Ridge', [125, 34], [918, 152], '#8bbaae'),
       terrain('Divider', [-270, 17], [625, 157], '#77a58e'),
-      terrain('FarHill', [256, -12], [650, 158], '#8cb28c'),
       image('Ground', [0, -86], [1172, 162], '#a5c383'),
       terrain('PrepRail', [0, 31], [1016, 82], '#c0d390'),
       terrain('AllyRail', [-294, -1], [570, 104], '#c3d48d', { visible: false }),
@@ -140,7 +139,6 @@ export const nativeRun = {
     group('Shop', [0, -124], [1164, 428], [
       roundedPlate('Paper', [0, 0], [1164, 268], 107102, '#ffeaca'),
       roundedPlate('Rail', [0, 0], [1128, 164], 107102, '#ebc389'),
-      image('Rule', [0, 83], [1128, 2], pigment.shelfRule),
       image('FoodDivider', [0, 0], [2, 146], pigment.shelfRule),
       image('RewardDivider', [372, 0], [2, 146], pigment.shelfRule),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
@@ -185,7 +183,6 @@ export const nativeRun = {
       roundedPlate('Backdrop', [0, 0], [1202, 684], 107102, '#9fcfc0'),
       roundedPlate('Rim', [0, 0], [556, 416], 107011, pigment.edge),
       roundedPlate('Paper', [0, 2], [548, 406], 107102, pigment.cream),
-      image('Rule', [0, 88], [336, 2], pigment.shelfRule),
       label('Heading', [0, 134], [500, 63], '小动物自走棋', 43),
       label('Progress', [0, 55], [496, 28], '', 21, pigment.muted),
       button('Continue', [0, 0], [334, 56], '单人练习', true),
@@ -195,7 +192,6 @@ export const nativeRun = {
     ], false), blockCursor: true },
     { ...group('Restart', [0, 0], [1202, 684], [
       image('Shade', [0, 0], [1202, 684], pigment.ink, { opacity: 0.65 }),
-      roundedPlate('Rim', [0, 5], [620, 234], 107011, pigment.edge),
       roundedPlate('Paper', [0, 7], [610, 224], 107102, pigment.cream),
       label('Heading', [0, 68], [560, 44], '重开本局？', 31),
       label('Body', [0, 15], [560, 39], '清空本局阵容与战绩，用同一种子开始。', 20),

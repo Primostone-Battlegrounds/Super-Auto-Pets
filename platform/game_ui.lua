@@ -109,7 +109,7 @@ local function online_portraits(duel)
         draw = bind_portrait(function(path)
             local slot, layer = path:match("^([^/]+)/([^/]+)$")
             return pictures[tonumber(slot)].control:GetChild(layer)
-        end, view == "shop" and 1.08 or 1.55)
+        end, view == "shop" and (duel and 1.32 or 1.25) or 1.55)
         for _, picture in ipairs(pictures) do
             set_visible(picture.control, false)
             picture.shown, picture.lunge = false, 0

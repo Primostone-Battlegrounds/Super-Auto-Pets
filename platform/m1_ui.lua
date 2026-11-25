@@ -967,13 +967,13 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Reset", function() show_restart("board") end)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
-    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/FarHill", "Field/Ground",
-        "Shop/Paper", "Shop/Rail", "Shop/Rule", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
+    for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/Ground",
+        "Shop/Paper", "Shop/Rail", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
         "Battle/Surface", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
-        "Menu/Rule", "Menu/Heading"}) do
+        "Menu/Heading"}) do
         show(path, true)
     end
-    for _, name in ipairs({"Shade", "Rim", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
+    for _, name in ipairs({"Shade", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
     for _, path in ipairs({"Tooltip/Border", "Tooltip/Paper", "Tooltip/Pointer",
         "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper", "BattleFX/Strike/Lower",
         "BattleFX/Impact/Burst", "BattleFX/Impact/Flash", "BattleFX/Impact/Spark"}) do show(path, true) end
