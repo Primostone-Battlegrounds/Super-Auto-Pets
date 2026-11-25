@@ -39,7 +39,7 @@ export const m3RoomLayout = {
       image('Paper', [0, 0], [860, 636], pigment.canvas),
       label('Heading', [-207, 276], [412, 54], '八席淘汰赛', 33, pigment.ink, 'left'),
       label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
-      group('Shop', [0, 10], [832, 448], [
+      group('Shop', [0, 10], [832, 470], [
         label('Money', [0, 160], [810, 36], '', 22, pigment.ink, 'left'),
         ...slots.flatMap(slot => [
           ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80)
