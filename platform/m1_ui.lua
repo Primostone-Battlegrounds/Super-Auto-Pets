@@ -156,7 +156,7 @@ local function team_card(path, unit, index, selected, effect)
     local bar = control(health_path)
     if width > 0 then
         bar:SetSizeDelta(width, 4)
-        bar:SetAnchoredPosition((width - 88) / 2, -61)
+        bar:SetAnchoredPosition((width - 88) / 2, -71)
     end
     bar.imageColor = colour(ratio <= 0.35 and 0x984434 or 0x448269)
 end

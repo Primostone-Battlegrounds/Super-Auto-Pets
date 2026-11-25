@@ -44,23 +44,23 @@ function card(name, position, width, type, interactive = true, visible = true) {
     ellipse('Rim', [0, 7], [94, 32], pigment.edge),
     ellipse('Face', [0, 10], [88, 24], pigment[type]),
     portrait(),
-    label('Name', [0, -19], [width - 4, 29], '', market ? 21 : 19),
-    roundedPlate('StatsPaper', [0, -50], [width - 8, 30], 107102, market ? '#fff4d8' : '#edf6e8'),
-    label('Detail', [0, -50], [width - 8, 30], '', 21),
+    label('Name', [0, -18], [width - 4, 32], '', market ? 24 : 22),
+    ellipse('StatsPaper', [0, -50], [width - 8, 37], market ? '#604629' : type === 'enemy' ? '#693e31' : '#2c5142'),
+    label('Detail', [0, -50], [width - 8, 34], '', 23, '#fff7e5'),
     label('Tag', [0, 61], [width - 4, 29], '', 18, market ? pigment.ice : '#58431f'),
   ];
   if (market) {
     children.push(image('Frozen', [0, 49], [86, 3], pigment.ice, { visible: false }));
   } else {
     children.push(
-      image('HealthTrack', [0, -61], [88, 4], '#d5dfc4', { visible: false }),
-      image('Health', [0, -61], [88, 4], '#448269', { visible: false }),
+      image('HealthTrack', [0, -71], [88, 4], '#c9d8b2', { visible: false }),
+      image('Health', [0, -71], [88, 4], '#448269', { visible: false }),
     );
   }
   if (type === 'player') {
     children.push(
-      image('XPPaper', [0, 63], [width - 8, 25], '#dbe9cf'),
-      label('XP', [0, 63], [width - 8, 25], '', 14),
+      ellipse('XPPaper', [0, 63], [width - 8, 28], '#dcebd1'),
+      label('XP', [0, 63], [width - 8, 28], '', 17),
       image('DropTarget', [0, -74], [86, 6], pigment.ice, { visible: false }),
       label('DropLabel', [0, 60], [width - 4, 34], '', 22, '#204250'),
     );
@@ -119,16 +119,16 @@ export const nativeRun = {
     stat('Wins', 243, '胜场', '#dcedc3', '#2b5c40'),
     stat('Lives', 417, '生命', '#f9dfcb', '#893e2e'),
     group('Field', [0, 61], [1172, 334], [
-      image('Surface', [0, 0], [1172, 334], '#b9e1e7'),
-      image('Cloud', [263, 124], [247, 32], '#e3f2e0', { image: 100002 }),
-      image('Ridge', [43, 67], [706, 184], '#79a9a7', { image: 100003 }),
-      image('Divider', [-237, 56], [688, 154], '#6da794', { image: 100003 }),
-      image('FarHill', [190, 34], [790, 138], '#86b086', { image: 100002 }),
-      image('Ground', [0, -80], [1172, 174], '#90b76c'),
-      roundedPlate('PrepRail', [0, 37], [1028, 130], 107102, '#f9e5af'),
-      { ...roundedPlate('AllyRail', [-305, 7], [548, 152], 107102, '#e9edb8'), visible: false },
-      { ...roundedPlate('RivalRail', [305, 7], [548, 152], 107102, '#f4c5a5'), visible: false },
-      ellipse('Clash', [0, 12], [23, 23], '#faf5e6', { visible: false }),
+      image('Surface', [0, 0], [1172, 334], '#c1e5ec'),
+      ellipse('Cloud', [365, 121], [122, 28], '#edf6e6'),
+      ellipse('Ridge', [125, 52], [918, 162], '#88b5a9'),
+      ellipse('Divider', [-270, 30], [625, 176], '#77a58e'),
+      ellipse('FarHill', [256, 17], [650, 194], '#8cb28c'),
+      image('Ground', [0, -86], [1172, 162], '#a5c383'),
+      ellipse('PrepRail', [0, 31], [1016, 82], '#c6d39a'),
+      ellipse('AllyRail', [-294, -1], [570, 104], '#cbd69c', { visible: false }),
+      ellipse('RivalRail', [294, -1], [570, 104], '#dfc396', { visible: false }),
+      ellipse('Clash', [0, 12], [15, 15], '#faf5e6', { visible: false }),
     ]),
     label('TeamCaption', [-309, 208], [521, 32], '', 19, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
