@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "key": "TW-STEAM-TRAILER-256846199",
+  "projectBaseline": "179e65ca513ba63c17cf759a01a8e320cf4bb05a",
+  "observedAt": "2026-11-25T16:12:59Z",
+  "sourceApi": "https://store.steampowered.com/api/appdetails?appids=1714040&l=english",
+  "movieId": 256846199,
+  "title": "Super Auto Pets - Trailer #1",
+  "clientBuild": "UNVERIFIED",
+  "pack": "UNVERIFIED; team name is not pack identity",
+  "videoRemux": {
+    "sha256": "fc0818146367569e815c2751c8be8e6cd0d8ef99e700f454fb72caf7bd2d1c0f",
+    "bytes": 17896969,
+    "durationSeconds": 56.083333,
+    "width": 1280,
+    "height": 720,
+    "note": "Video-only HLS stream 0:v:1, packet copy; local research intermediate, not shipped"
+  },
+  "extraction": "ffmpeg -ss <seconds> -i official-trailer-video.mp4 -frames:v 1 -q:v 3 <frame.jpg>",
+  "cases": [
+    {
+      "key": "STV-SHOP-DETAIL",
+      "timestampSeconds": 4.0,
+      "frame": "frame-4-0s.jpg",
+      "sha256": "f373d7c34d0d847ec63a860561fc0a4fecf0c79e55ddb0292c62bffe8ecd37f8",
+      "claim": "Ladybug ability panel appears by the shop pet and pointer; exact activation gesture unknown"
+    },
+    {
+      "key": "STV-SHOP-DRAG",
+      "timestampSeconds": 5.0,
+      "frame": "frame-5-0s.jpg",
+      "sha256": "1b176fbe4680404b26f753b40663baa0af02c7362e3aee200ed20f00803e7f03",
+      "claim": "Lifted pet, shop silhouette, formation target arrows and contextual Freeze button"
+    },
+    {
+      "key": "STV-SHOP-PURCHASE",
+      "timestampSeconds": 5.5,
+      "frame": "frame-5-5s.jpg",
+      "sha256": "1375c681bd9ff6bfda051a51226818ca77f69cbb04c352e2d148200e18b80f71",
+      "claim": "Pet occupies team slot and gold is 7 rather than preceding 10"
+    },
+    {
+      "key": "STV-FOOD-DETAIL",
+      "timestampSeconds": 8.5,
+      "frame": "frame-8-5s.jpg",
+      "sha256": "89873857217a41102b5cc4b93a5492c0c2edf0fecbcfab540c0c0e87a420c7ba",
+      "claim": "Apple detail includes price and effect"
+    },
+    {
+      "key": "STV-FOOD-TARGET",
+      "timestampSeconds": 9.5,
+      "frame": "frame-9-5s.jpg",
+      "sha256": "2b6e19ee942f85644be651e8ccdd167869ab1af6fbfa538477f32de5fe0f8165",
+      "claim": "Dotted source-to-target guide and target circles"
+    },
+    {
+      "key": "STV-MATCH-WAIT",
+      "timestampSeconds": 18.0,
+      "frame": "frame-18-0s.jpg",
+      "sha256": "8f6836b238b620a4e95a5ede927c85f93fdc75a5defdad3592a07236b2e62381",
+      "claim": "Same-turn opponent search text visible"
+    },
+    {
+      "key": "STV-BATTLE-CONTROLS",
+      "timestampSeconds": 26.0,
+      "frame": "frame-26-0s.jpg",
+      "sha256": "3e0f01f1ef3b70dd2aa4fef61621463ebfa117c88f5bcd9b224ed8fe4203008d",
+      "claim": "Rewind Pause Autoplay Fast Skip controls visible; no actual click evidence"
+    },
+    {
+      "key": "STV-BATTLE-ABILITY",
+      "timestampSeconds": 27.0,
+      "frame": "frame-27-0s.jpg",
+      "sha256": "54e405b260d65d3707a95cc6fb17f06defc7d1170fcefad705d9d85f4ee0abf0",
+      "claim": "Dolphin highlight and start-of-battle detail precede visible damage"
+    },
+    {
+      "key": "STV-BATTLE-DAMAGE",
+      "timestampSeconds": 28.0,
+      "frame": "frame-28-0s.jpg",
+      "sha256": "39c25409cb82fd66440b1b0a1a9bd60365d4b5f9abe55402e14b70d51c39248d",
+      "claim": "Damage number and negative Spider health visible"
+    },
+    {
+      "key": "STV-BATTLE-FAINT",
+      "timestampSeconds": 29.0,
+      "frame": "frame-29-0s.jpg",
+      "sha256": "921bcdaee5b3cc2835b6cee3efd590ff4492116cee5955d56d48bf4e9b08f6f7",
+      "claim": "Spider faint detail and a camel in the vacated position"
+    }
+  ],
+  "provenanceFiles": [
+    {
+      "path": "movie-metadata.json",
+      "sha256": "97e7298f95fa8a63f77279a4871f815dbf652ac1339fc5bba8f7cc1bc9e299b2"
+    },
+    {
+      "path": "hls_h264.txt",
+      "sha256": "42417f864a9f2405c8eb54ac7c1a8392f067ea69eb4365e1c5acecf4470e4b03"
+    },
+    {
+      "path": "dash_h264.txt",
+      "sha256": "92ec5aa6799fed85180c6f5e1ad97a0d31fd6ce43b95878f94f6416f4121eb80"
+    }
+  ]
+}

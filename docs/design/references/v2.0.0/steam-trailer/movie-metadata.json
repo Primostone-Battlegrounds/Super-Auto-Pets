@@ -1,0 +1,9 @@
+{
+  "id": 256846199,
+  "name": "Super Auto Pets - Trailer #1",
+  "thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/256846199/movie.293x165.jpg?t=1680944539",
+  "dash_av1": "https://video.akamai.steamstatic.com/store_trailers/1714040/391601/55971fc357ae79604c1864fe57fda29eddf9acd9/1750728318/dash_av1.mpd?t=1680944539",
+  "dash_h264": "https://video.akamai.steamstatic.com/store_trailers/1714040/391601/55971fc357ae79604c1864fe57fda29eddf9acd9/1750728318/dash_h264.mpd?t=1680944539",
+  "hls_h264": "https://video.akamai.steamstatic.com/store_trailers/1714040/391601/55971fc357ae79604c1864fe57fda29eddf9acd9/1750728318/hls_264_master.m3u8?t=1680944539",
+  "highlight": true
+}
