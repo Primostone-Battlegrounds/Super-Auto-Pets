@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { image, pigment, terrain } from './m1-ui.mjs';
 import { bindFaintColumns, faintArguments } from './m3-battle-opening.mjs';
+import { clearingColours as clearing, labelFront, onlineBadgePool, onlineBadgeSource } from './multiplayer-standings.mjs';
 
 export const duelSignals = {
   AP_DuelRequest: ['action', 'round', 'sequence', 'token', 'from', 'to', 'flag'].map(name => [name, 'integer']),
@@ -41,9 +42,9 @@ function card(action, label, position, size, content, { fill, ink, sprite, portr
   let face = image(`${action}Face`, position, size, fill, sprite && { image: sprite });
   if (portrait) {
     caption.position = [position[0], position[1] - 23];
-    caption.size = [size[0], 81];
-    caption.text.fontSize = 18;
-    face = terrain(`${action}Face`, [position[0] - inset, position[1] - 10], [size[0] - 2 * inset - 12, 47], fill);
+    caption.size = [size[0], 50];
+    caption.text.fontSize = 21;
+    face = terrain(`${action}Face`, [position[0] - inset, position[1] + 4], [size[0] - 2 * inset - 12, 32], fill);
   } else if (compact) {
     face = sprite
       ? image(`${action}Face`, position, [size[0] - 14, 33], fill, { image: sprite })
@@ -62,22 +63,26 @@ function inspectable(action, label, position, size, style, inspect, inspectStyle
   controls[1].size = [size[0] - 44, controls[1].size[1]];
   controls[2].position = [position[0] - 22, position[1]];
   controls[2].size = [size[0] - 44, size[1]];
-  return [...controls, ...card(inspect, `${inspect}Label`, [position[0] + size[0] / 2 - 22, position[1]],
-    [44, size[1]], '技能', inspectStyle, 16)];
+  const reader = card(inspect, `${inspect}Label`, [position[0] + size[0] / 2 - 22, position[1]],
+    [44, size[1]], '技能', inspectStyle, 16);
+  if (inspectStyle.compact) {
+    reader[0].position = [reader[0].position[0], position[1] - 13];
+    reader[1].position = [reader[1].position[0], position[1] - 13];
+  }
+  return [...controls, ...reader];
 }
 
 const plain = fill => ({ fill });
-const parchment = fill => ({ fill, ink: '#243c3b', sprite: 107102 });
 const gold = { fill: '#ffffff', ink: '#372917', sprite: 107015 };
-const navy = { fill: '#ffffff', ink: '#fff7de', sprite: 107034 };
-const dock = (fill, inset) => ({ fill, ink: '#243c3b', portrait: true, inset });
+const navy = { fill: '#c9eadf', ink: '#fff7de', sprite: 107034 };
+const dock = (fill, inset) => ({ fill, ink: clearing.ink, portrait: true, inset });
 
 export function duelLayout(rule, includeProbeButtons = false) {
   const script = 'm2_probe';
-  const teamStyle = includeProbeButtons ? plain('#335b44') : dock('#89ad78', 22);
-  const petStyle = includeProbeButtons ? plain('#335b44') : dock('#cba76e', 22);
-  const foodStyle = includeProbeButtons ? plain('#605432') : dock('#dcb67a', 0);
-  const secondaryStyle = includeProbeButtons ? plain('#286452') : parchment('#e8f2e4');
+  const teamStyle = includeProbeButtons ? plain('#335b44') : dock(clearing.recess, 22);
+  const petStyle = includeProbeButtons ? plain('#335b44') : dock(clearing.nearTrack, 22);
+  const foodStyle = includeProbeButtons ? plain('#605432') : dock(clearing.farTrack, 0);
+  const secondaryStyle = includeProbeButtons ? plain('#286452') : navy;
   const inspectStyle = includeProbeButtons ? plain('#416c59') : { fill: '#39695b', ink: '#fff7de', compact: true };
   const freezeStyle = includeProbeButtons ? secondaryStyle : { ...navy, compact: true };
   const statusInk = includeProbeButtons ? '#fff3d7' : '#fff7de';
@@ -85,7 +90,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
   const replayInk = includeProbeButtons ? statusInk : pigment.ink;
   const shelfX = index => includeProbeButtons ? (index - 2) * 190 : (index - 2) * 168 - 83;
   const rosterY = includeProbeButtons ? 120 : 135;
-  const stockY = includeProbeButtons ? 42 : 29;
+  const stockY = includeProbeButtons ? 42 : 19;
   const slotWidth = includeProbeButtons ? 174 : 156;
   const stock = Array.from({ length: rule.PET_SLOTS + rule.FOOD_SLOTS }, (_, index) => {
     const x = shelfX(index);
@@ -97,7 +102,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
     return [
       ...(pet ? inspectable(`Buy${slot}`, `OfferLabel${slot}`, position, size, petStyle, `InspectPet${slot}`, inspectStyle)
         : card(`Food${slot}`, `FoodLabel${slot}`, position, size, '', foodStyle)),
-      ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, includeProbeButtons ? -13 : -53],
+      ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, includeProbeButtons ? -13 : -59],
         [slotWidth, 44], '冻结', freezeStyle, 19),
     ];
   }).flat();
@@ -130,7 +135,10 @@ export function duelLayout(rule, includeProbeButtons = false) {
       ...(includeProbeButtons ? [marketGold, ...stock] : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: [
           image('ShopSky', [0, 130], [1064, 228], '#c4dcc0'),
-          image('ShopGround', [0, -45], [1064, 144], '#edca89'),
+          terrain('GroveLeft', [-183, 131], [666, 150], clearing.grove),
+          terrain('GroveRight', [253, 129], [544, 132], clearing.groveLight),
+          image('ShopGround', [0, -29], [1064, 182], clearing.ground),
+          labelFront('TeamFront', [252, 189], '前排 ›'),
           ...stock,
         ] },
         marketGold,
@@ -157,13 +165,19 @@ export function duelLayout(rule, includeProbeButtons = false) {
         includeProbeButtons ? statusInk : pigment.ink),
       { name: 'ReplayBoard', kind: 'container', position: [0, includeProbeButtons ? 90 : 83],
         size: includeProbeButtons ? [900, 210] : [1064, 300], visible: false, children: [
-        ...(!includeProbeButtons ? [image('Meadow', [0, 0], [1064, 300], '#c3d6aa')] : []),
+        ...(!includeProbeButtons ? [
+          image('Meadow', [0, 0], [1064, 300], clearing.sky),
+          terrain('Canopy', [200, 78], [646, 134], clearing.groveLight),
+        ] : []),
         ...(includeProbeButtons ? [
           image('Ally', [-225, 0], [440, 200], '#335b44'),
           image('Enemy', [225, 0], [440, 200], '#605432'),
         ] : [
-          terrain('Ally', [-260, -31], [520, 221], '#9ebd71'),
-          terrain('Enemy', [260, -31], [520, 221], '#d7ab7f'),
+          terrain('Ally', [-68, 25], [886, 196], clearing.grove),
+          image('Enemy', [0, -51], [1064, 198], clearing.grass),
+          labelFront('OwnFront', [-68, 88], '席1前排 ›'),
+          labelFront('EnemyFront', [68, 88], '‹ 席2前排'),
+          onlineBadgePool(),
         ]),
         ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => [
           text(`Own${index + 1}`, [-(includeProbeButtons ? 45 + index * 87 : 58 + index * 96), includeProbeButtons ? 0 : -13],
@@ -194,7 +208,7 @@ export function duelClientSource(template, resource) {
     .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
     .replace('-- AP_DUEL_RULES', clientRules);
   assert.doesNotMatch(source, /-- AP_DUEL_/);
-  return source;
+  return `${onlineBadgeSource}\n${source}`;
 }
 
 export function duelGraphs(resource, battleGraph, graphId, fightGraphId, startingLives, release) {

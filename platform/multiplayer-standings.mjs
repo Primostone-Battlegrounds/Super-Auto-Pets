@@ -1,6 +1,90 @@
 import fs from 'node:fs';
 import { group, image, label, pigment } from './m1-ui.mjs';
 
+export const clearingColours = {
+  sky: '#8fbdad', grove: '#648e63', groveLight: '#799e68', grass: '#9db871', ground: '#d3a969',
+  farTrack: '#caad72', nearTrack: '#b68b53', recess: '#758c5d', teal: '#2d6260', ink: '#233936',
+};
+
+export function labelFront(name, position, content) {
+  const front = label(name, position, [114, 32], content, 21, '#fff7de');
+  Object.assign(front.text, { background: '#37634e', backgroundOpacity: 1 });
+  return front;
+}
+
+export function onlineBadgePool() {
+  const badge = (name, font, ink, background) => {
+    const node = label(name, [0, 0], [52, 32], '', font, ink);
+    Object.assign(node.text, { background, backgroundOpacity: 1, minFontSize: 16 });
+    return { ...node, visible: false };
+  };
+  return group('BadgePool', [0, 0], [1064, 300], [
+    ...Array.from({ length: 10 }, (_, index) => [
+      badge(`Attack${index + 1}`, 21, '#233f49', '#d6ece5'),
+      badge(`Life${index + 1}`, 21, '#75362d', '#f5dbd1'),
+    ]).flat(),
+    ...Array.from({ length: 5 }, (_, index) => badge(`Price${index + 1}`, 19, '#694321', '#fae0a2')),
+  ], false);
+}
+
+// The mutually exclusive online views draw the same authored badges at their
+// active slot anchors. No input listeners or game state are attached to them.
+export const onlineBadgeSource = `
+local function bind_online_badges(pool)
+    if not pool then return nil end
+    local source = pool.parent
+    local index = pool:GetSiblingIndex()
+    local state, fields = nil, {}
+    local function set(control, value)
+        local visible = value ~= nil
+        if visible then control:SetActive(true); control.text = value end
+        control:SetVisible(visible)
+        if not visible then control:SetActive(false) end
+    end
+    for slot = 1, 10 do
+        fields[slot] = {pool:GetChild("Attack" .. slot), pool:GetChild("Life" .. slot),
+            slot > 5 and pool:GetChild("Price" .. (slot - 5)) or nil}
+    end
+    local function hide()
+        if state then
+            pool:SetVisible(false)
+            pool:SetActive(false)
+            state = nil
+        end
+    end
+    local function select(phase, parent, anchors)
+        if state == phase then return end
+        pool.parent = parent
+        pool:SetAsLastSibling()
+        for slot, field in ipairs(fields) do
+            local x, y, price_x, price_y = anchors(slot)
+            field[1]:SetAnchoredPosition(x - 28, y)
+            field[2]:SetAnchoredPosition(x + 28, y)
+            if price_x and field[3] then field[3]:SetAnchoredPosition(price_x, price_y) end
+            for _, control in ipairs(field) do set(control, nil) end
+        end
+        pool:SetActive(true)
+        pool:SetVisible(true)
+        state = phase
+    end
+    local function paint(slot, attack, life, price, bonus)
+        local field = fields[slot]
+        local sign = bonus and "+" or ""
+        set(field[1], attack ~= nil and ("攻" .. sign .. attack) or nil)
+        set(field[2], life ~= nil and ("命" .. sign .. life) or nil)
+        if field[3] then set(field[3], price ~= nil and (price .. " 金") or nil) end
+    end
+    return {select = select, hide = hide, paint = paint, restore = function()
+        hide()
+        if source and source.alive and pool.alive then
+            pool.parent = source
+            pool:SetSiblingIndex(index)
+            pool:SetAnchoredPosition(0, 0)
+        end
+    end}
+end
+`;
+
 const modes = {
   duel: { title: '好友 1v1', probeTitle: '双人同步样本', seats: 2,
     signal: 'AP_DuelSnapshot', refresh: 'AP_DuelRequest' },

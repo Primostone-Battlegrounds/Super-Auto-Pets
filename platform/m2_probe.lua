@@ -41,7 +41,7 @@ local reward_index = 1
 local market
 local playback, status_header, status_message, seconds, hint
 local awaiting_settlement = false
-local portrait
+local portrait, badges
 local draw_status
 local visible = {}
 local bindings = {}
@@ -133,10 +133,11 @@ end
 
 local function render_ability(view)
     local picked = inspected or {kind = "pet", slot = 1}
-    local code, level
+    local code, level, experience
     if picked.kind == "team" then
         local unit = view and view.team[picked.slot]
         code, level = unit and unit.code, unit and unit.level
+        experience = unit and unit.xp
     else
         local shelf = view and (picked.kind == "reward" and view.rewards or view.pets)
         code, level = shelf and shelf[picked.slot], 1
@@ -144,6 +145,7 @@ local function render_ability(view)
     local pet = code and native_catalog.pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
     if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
+    if badges and experience then body = body .. "\n经验 " .. experience end
     if portrait then title = title:gsub("(.*) · (.+)", "%1\n%2") end
     child("AbilityTitle").text, child("AbilityBody").text = title, body
 end
@@ -151,7 +153,24 @@ end
 local function render_market()
     local view = current_market()
     render_ability(view)
+    local shop_badges = badges and preparing
+    if shop_badges then
+        badges.select("shop", offers, function(slot)
+            if slot <= 5 then
+                local x, y = team_labels[slot]:GetAnchoredPosition()
+                return x, y - 28
+            end
+            local offer = slot - 5
+            local pet = offer <= 3
+            local control = pet and pet_labels[offer] or food_labels[offer - 3]
+            local x, y = control:GetAnchoredPosition()
+            return x, y - 25, x + (pet and 67 or 47), y + 45
+        end)
+    end
     if not view then
+        if shop_badges then
+            for slot = 1, 10 do badges.paint(slot) end
+        end
         if portrait and preparing then
             for slot = 1, rules.team_size + rules.pet_slots + rules.food_slots do portrait.shop(slot, nil) end
         end
@@ -159,7 +178,7 @@ local function render_market()
         team_label.text = "阵容 —"
         reward_label.text = "升级奖励"
         for slot, label in ipairs(team_labels) do
-            label.text = string.format("阵位 %d  ·  空", slot)
+            label.text = badges and "" or string.format("阵位 %d  ·  空", slot)
         end
         for slot, label in ipairs(pet_labels) do
             label.text = "—"
@@ -195,8 +214,9 @@ local function render_market()
         if portrait then
             local animal = native_catalog.pets[math.abs(code)]
             portrait.shop(rules.team_size + slot, animal and animal.id)
-            label.text = pet and string.format("%s\n%s\n%d金", pet.name,
-                replay_view.combat_values(pet.attack, pet.health), rules.pet_cost) or "售罄"
+            if shop_badges then badges.paint(rules.team_size + slot, pet and pet.attack, pet and pet.health, pet and rules.pet_cost) end
+            label.text = pet and (badges and pet.name or string.format("%s\n%s\n%d金", pet.name,
+                replay_view.combat_values(pet.attack, pet.health), rules.pet_cost)) or "售罄"
         else
             label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
         end
@@ -208,8 +228,12 @@ local function render_market()
         if portrait then
             local item = native_catalog.foods[math.abs(code)]
             portrait.shop(rules.team_size + rules.pet_slots + slot, item and item.id)
-            label.text = food and string.format("%s\n%s\n%d金", food.name,
-                replay_view.combat_values(food.attack, food.health, true), rules.food_cost) or "售罄"
+            if shop_badges then
+                badges.paint(rules.team_size + rules.pet_slots + slot, food and food.attack, food and food.health,
+                    food and rules.food_cost, true)
+            end
+            label.text = food and (badges and food.name or string.format("%s\n%s\n%d金", food.name,
+                replay_view.combat_values(food.attack, food.health, true), rules.food_cost)) or "售罄"
         else
             label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
                 food.name, food.attack, food.health, rules.food_cost) or "售罄"
@@ -221,12 +245,15 @@ local function render_market()
         if portrait then
             local animal = unit and native_catalog.pets[unit.code]
             portrait.shop(slot, animal and animal.id)
-            child("Team" .. slot .. "Face").imageColor = slot == picked and Color(239, 211, 114, 255) or Color(137, 173, 120, 255)
+            child("Team" .. slot .. "Face").imageColor = slot == picked and Color(228, 176, 94, 255) or Color(117, 140, 93, 255)
+            if shop_badges then badges.paint(slot, unit and unit.attack, unit and unit.health) end
         end
         if unit then
             local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
-            if portrait then
+            if badges then
+                label.text = string.format("%s · L%d", name, unit.level)
+            elseif portrait then
                 label.text = string.format("%s\n%s\nL%d · 经验%d", name,
                     replay_view.combat_values(unit.attack, unit.health), unit.level, unit.xp)
             else
@@ -234,7 +261,7 @@ local function render_market()
                 label.text = string.format("%s%s\n%d/%d · Lv%d 经验%d", prefix, name, unit.attack, unit.health, unit.level, unit.xp)
             end
         else
-            label.text = string.format("阵位 %d  ·  空", slot)
+            label.text = badges and "" or string.format("阵位 %d  ·  空", slot)
         end
     end
     team_label.text = string.format("阵容 %d / %d · 右侧为前排", #view.team, rules.team_size)
@@ -329,6 +356,14 @@ local function show_replay()
     show_action("Replay", "ReplayLabel", replay_available and playback ~= nil)
     local board_root = child("ReplayBoard")
     show(board_root, playback ~= nil and not preparing)
+    local replay_badges = badges and not preparing and playback
+    if replay_badges then
+        badges.select("replay", board_root, function(slot)
+            local label = board_root:GetChild(slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5)))
+            local x, y = label:GetAnchoredPosition()
+            return x, y - 40
+        end)
+    elseif badges and not preparing then badges.hide() end
     for slot = 1, rules.team_size do
         show_action("Team" .. slot, "TeamLabel" .. slot, preparing)
     end
@@ -354,10 +389,12 @@ local function show_replay()
     for side, key in ipairs({"player", "enemy"}) do
         for slot = 1, rules.team_size do
             local unit = playback.board[key][slot]
-            local display = portrait and "—" or "空位"
+            local display = badges and "" or portrait and "—" or "空位"
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-                if portrait then
+                if badges then
+                    display = definition.name .. ((unit.shield or 0) > 0 and ("\n盾 " .. unit.shield) or "")
+                elseif portrait then
                     display = replay_view.stats(definition.name, unit.attack, unit.health, unit.shield)
                 else
                     local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
@@ -367,6 +404,7 @@ local function show_replay()
             end
             local path = (side == 1 and "Own" or "Enemy") .. slot
             board_root:GetChild(path).text = display
+            if replay_badges then badges.paint((side - 1) * rules.team_size + slot, unit and unit.attack, unit and unit.health) end
             if portrait then
                 local attacking = unit and event.type == "attack" and event.uid == unit.uid and event.side == key
                 portrait.replay(path, unit and unit.id, side == 2, attacking)
@@ -548,8 +586,9 @@ local function receive_snapshot(_, parameters)
     show_replay()
 end
 
-function OnStart(_, painter)
+function OnStart(_, painter, badge_pool)
     portrait = painter
+    badges = bind_online_badges(badge_pool)
     script:RegisterServerSignalHandler("AP_DuelSnapshot", receive_snapshot)
     script:RegisterServerSignalHandler("AP_DuelMarket", receive_market)
     script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
@@ -585,7 +624,8 @@ function OnDestroy()
     pending, market, selected_uid = nil, nil, nil
     playback, status_header, status_message, seconds, hint, visible = nil, nil, nil, nil, nil, {}
     awaiting_settlement = false
-    portrait = nil
+    if badges then badges.restore() end
+    portrait, badges = nil, nil
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end
