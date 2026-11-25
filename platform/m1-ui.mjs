@@ -47,7 +47,7 @@ function card(name, position, width, type, interactive = true, visible = true) {
     label('Name', [0, -19], [width - 4, 29], '', market ? 21 : 19),
     roundedPlate('StatsPaper', [0, -50], [width - 8, 30], 107102, market ? '#fff4d8' : '#edf6e8'),
     label('Detail', [0, -50], [width - 8, 30], '', 21),
-    label('Tag', [0, 63], [width - 4, 25], '', 14, market ? pigment.ice : pigment.gold),
+    label('Tag', [0, 61], [width - 4, 29], '', 18, market ? pigment.ice : '#58431f'),
   ];
   if (market) {
     children.push(image('Frozen', [0, 49], [86, 3], pigment.ice, { visible: false }));
@@ -61,8 +61,8 @@ function card(name, position, width, type, interactive = true, visible = true) {
     children.push(
       image('XPPaper', [0, 63], [width - 8, 25], '#dbe9cf'),
       label('XP', [0, 63], [width - 8, 25], '', 14),
-      image('DropTarget', [0, -74], [86, 4], pigment.primary, { visible: false }),
-      label('DropLabel', [0, 63], [width - 4, 25], '', 14, pigment.primary),
+      image('DropTarget', [0, -74], [86, 6], pigment.ice, { visible: false }),
+      label('DropLabel', [0, 60], [width - 4, 34], '', 22, '#204250'),
     );
   }
   if (interactive) {
@@ -145,13 +145,12 @@ export const nativeRun = {
       ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
       button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
     ]),
-    group('Tooltip', [0, -10], [360, 72], [
-      roundedPlate('Border', [0, 0], [360, 72], 107011, '#325650'),
-      roundedPlate('Paper', [0, 0], [354, 68], 107102),
-      ellipse('Pointer', [0, -33], [12, 6], pigment.edge),
-      label('Heading', [0, 22], [326, 28], '', 20, pigment.ink, 'left'),
-      { ...label('Body', [0, -14], [326, 44], '', 16, pigment.ink, 'left'),
-        text: { ...label('', [0, 0], [1, 1], '', 16, pigment.ink, 'left').text, minFontSize: 14 } },
+    group('Tooltip', [0, -10], [420, 86], [
+      roundedPlate('Border', [0, 0], [420, 86], 107011, '#325650'),
+      roundedPlate('Paper', [0, 0], [414, 82], 107102),
+      ellipse('Pointer', [0, -40], [14, 6], pigment.edge),
+      label('Heading', [0, 24], [384, 34], '', 23, pigment.ink, 'left'),
+      label('Body', [0, -16], [384, 46], '', 19, pigment.ink, 'left'),
     ], false),
     group('BattleFX', [0, 118], [1184, 208], [
       group('Strike', [0, 0], [66, 38], [

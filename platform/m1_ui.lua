@@ -262,10 +262,11 @@ local function draw_tooltip(preparing)
     local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
     local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
     local card_x = control(path):GetAnchoredPosition()
-    local x = math.max(-394, math.min(394, card_x))
+    local x = math.max(-370, math.min(370, card_x))
     caption:SetAnchoredPosition(x < -185 and 452 or -465, 106)
-    control("Tooltip"):SetAnchoredPosition(x, -10)
-    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, picked.kind == "team" and 33 or -33)
+    local beside_team = picked.kind == "team"
+    control("Tooltip"):SetAnchoredPosition(x, beside_team and -18 or -2)
+    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, beside_team and 40 or -40)
     local heading, body = selected_info(picked)
     text("Tooltip/Heading", heading)
     text("Tooltip/Body", body)
