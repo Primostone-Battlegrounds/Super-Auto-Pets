@@ -67,6 +67,8 @@ local function show_actions()
     if offers ~= root then
         show(offers, preparing)
         show(market_gold, preparing)
+        show(child("ShopSky"), preparing)
+        show(child("ShopGround"), preparing)
     end
     for slot = 1, rules.team_size do show(child("Team" .. slot), preparing) end
     for _, binding in ipairs({{"Reroll", "RerollLabel"}, {"Sell", "SellLabel"}, {"Merge", "MergeLabel"},
@@ -218,6 +220,7 @@ local function render_market()
         if portrait then
             local animal = unit and native_catalog.pets[unit.code]
             portrait.shop(slot, animal and animal.id)
+            child("Team" .. slot .. "Face").imageColor = slot == picked and Color(239, 211, 114, 255) or Color(137, 173, 120, 255)
         end
         if unit then
             local pet = pets[unit.code]
@@ -349,7 +352,7 @@ local function show_replay()
     for side, key in ipairs({"player", "enemy"}) do
         for slot = 1, rules.team_size do
             local unit = playback.board[key][slot]
-            local display = "空位"
+            local display = portrait and "—" or "空位"
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                 if portrait then
