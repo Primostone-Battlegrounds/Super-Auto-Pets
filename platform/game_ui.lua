@@ -144,11 +144,11 @@ local function online_portraits(duel)
             draw(tostring(slot), id, mirrored)
         end
         picture.recess = recess
-        local lunge = attacking and (mirrored and -9 or 9) or 0
+        local lunge = attacking and (mirrored and -15 or 15) or 0
         if picture.lunge ~= lunge then
             picture.lunge = lunge
             local target = picture[view]
-            picture.control:SetAnchoredPosition(target.x + lunge, target.y)
+            picture.control:SetAnchoredPosition(target.x + lunge, target.y + (lunge == 0 and 0 or 4))
         end
     end
 
