@@ -6,6 +6,24 @@ import { lowerCombatMath } from './m3_collision_lower.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
+// Column order matches the five faint fields exported by Lua. All columns
+// use the same zero-based index (pet code minus one).
+const faintFields = ['faintEffect', 'faintPower', 'faintTarget', 'faintAttack', 'faintHealth'];
+
+export function faintColumns(rows) {
+  assert.ok(rows.every(row => row.length === faintFields.length));
+  return Object.fromEntries(faintFields.map((name, index) => [name, rows.map(row => row[index])]));
+}
+
+export function bindFaintColumns(source, columns) {
+  assert.ok(source.includes('// AP_FAINT_DEFAULTS') && source.includes('// AP_FAINT_READS'));
+  return source.replace('// AP_FAINT_DEFAULTS', faintFields.map(name =>
+    `${name}: [${columns[name].map(value => `${value}n`).join(', ')}],`).join('\n    '))
+    .replace('// AP_FAINT_READS', faintFields.map(name => `const ${name} = f.get('${name}');`).join('\n  '));
+}
+
+export const faintArguments = faintFields.join(', ');
+
 function catalog(lua53, lua54, profile) {
   const extract = lua => execFileSync(lua, ['-E', 'platform/m3_battle_opening_data.lua', profile], {
     cwd: root, encoding: 'utf8', timeout: 10_000,
@@ -13,7 +31,7 @@ function catalog(lua53, lua54, profile) {
   const definition = extract(lua53);
   assert.equal(definition, extract(lua54));
   const openingMetadata = [];
-  const faintMetadata = [];
+  const faintRows = [];
   const ids = [];
   for (const line of definition.trimEnd().split('\n')) {
     const [id, ...numbers] = line.split('\t');
@@ -21,9 +39,9 @@ function catalog(lua53, lua54, profile) {
     const values = numbers.map(BigInt);
     ids.push(id);
     openingMetadata.push(...values.slice(0, 3));
-    faintMetadata.push(...values.slice(3));
+    faintRows.push(values.slice(3));
   }
-  return { ids, openingMetadata, faintMetadata };
+  return { ids, openingMetadata, faintMetadata: faintColumns(faintRows) };
 }
 
 function combatMath(parse) {

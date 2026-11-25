@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { checkRuntimeListCall } from './gil-list-limits.mjs';
 import { shopFlow } from './versus-shop-parity.mjs';
 
 const viewSignal = 'client:AP_RoomView';
@@ -97,7 +98,7 @@ function session(sources, ts, count, settings, delayedSignals = false) {
     },
   };
 
-  function flowFor(variables) {
+  function flowFor(id, variables) {
     const scoped = {
       ...methods,
       get: name => variables[name],
@@ -106,7 +107,7 @@ function session(sources, ts, count, settings, delayedSignals = false) {
     return new Proxy(scoped, {
       get: (target, key) => (...args) => {
         calls += 1;
-        return target[key](...args);
+        return checkRuntimeListCall(id, key, target[key], args);
       },
     });
   }
@@ -116,10 +117,10 @@ function session(sources, ts, count, settings, delayedSignals = false) {
     }).outputText;
     const runtime = {
       defineSignal: (name, params) => ({ name, params }),
-      g: { server: ({ name, variables }) => {
+      g: { server: ({ id, name, variables }) => {
         if (name === '_GSTS_AP_EightRoom') controller = variables;
         if (name === '_GSTS_AP_EightFight') worker = variables;
-        const flow = flowFor(variables);
+        const flow = flowFor(id, variables);
         const graph = {
           on(signal, handler) { eventHandlers.push({ signal, handler, flow }); return graph; },
           onSignal(signal, handler) {

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { nativeBattle } from '../../platform/m3-battle-opening.mjs';
+import { bindFaintColumns, faintArguments, nativeBattle } from '../../platform/m3-battle-opening.mjs';
 import { nativeShop } from '../../platform/versus-shop.mjs';
 
 const [checkoutArg, scratch, lua53, lua54, outputArg, profile = 'compatibility'] = process.argv.slice(2);
@@ -38,7 +38,7 @@ const fixtures = [];
 let current;
 for (const row of expected.trimEnd().split('\n')) {
   const [kind, ...fields] = row.split('\t');
-  if (kind === 'def') faintCatalog.push(...fields.map(BigInt));
+  if (kind === 'def') faintCatalog.push(fields.map(BigInt));
   else if (kind === 'case') {
     current = { seed: BigInt(fields[0]), events: [], strikes: [], strikeEvents: [] };
     fixtures.push(current);
@@ -53,8 +53,10 @@ for (const row of expected.trimEnd().split('\n')) {
   else if (kind === 'outcome') current.outcome = BigInt(fields[0]);
   else assert.fail(kind);
 }
-assert.deepEqual(faintCatalog, battle.faintMetadata);
-assert.equal(faintCatalog.length / 5, battle.openingMetadata.length / 3);
+const columns = Object.values(battle.faintMetadata);
+assert.deepEqual(faintCatalog, faintCatalog.map((_, index) => columns.map(column => column[index])));
+assert.ok(columns.every(column => column.length === faintCatalog.length));
+assert.equal(faintCatalog.length, battle.openingMetadata.length / 3);
 assert.equal(fixtures.length, profile === 'release' ? 339 : 329);
 
 const ts = load('typescript');
@@ -124,7 +126,7 @@ for (const fixture of fixtures) {
   let done = false;
   for (let step = 0; !done && step < 10; step += 1) {
     calls = 0;
-    done = exports.step(tracked, board, faintCatalog, battle.openingMetadata, state, true);
+    done = exports.step(tracked, board, ...columns, battle.openingMetadata, state, true);
     peakCalls = Math.max(peakCalls, calls);
   }
   assert.ok(done);
@@ -142,7 +144,7 @@ for (const fixture of fixtures) {
       assert.equal(outcome, 0n);
       printed.length = 0;
       calls = 0;
-      outcome = exports.collide(tracked, board, faintCatalog, battle.openingMetadata, state, true);
+      outcome = exports.collide(tracked, board, ...columns, battle.openingMetadata, state, true);
       peakCollisionCalls = Math.max(peakCollisionCalls, calls);
       assert.deepEqual(active(board), active(strike.board), `strike board, seed ${fixture.seed}`);
       const events = eventsFromLog(printed);
@@ -186,9 +188,8 @@ const settle = release ? `
   if (f.get('colliding')) {
     const board = f.get('board');
     const opening = f.get('opening');
-    const catalog = f.get('faint');
     const metadata = f.get('metadata');
-    const outcome = ${battle.collisionFunction}(f, board, catalog, metadata, opening, true);
+    const outcome = ${battle.collisionFunction}(f, board, ${faintArguments}, metadata, opening, true);
     f.set('board', board);
     f.set('opening', opening);
     if (outcome !== 0n) {
@@ -204,14 +205,15 @@ const finishOpening = release ? "if (done) f.set('colliding', true);"
     f.set('finished', true);
     f.stopTimer(event.eventSourceEntity, 'AP_OpeningProbe');
   }`;
-const source = `import { g } from 'genshin-ts/runtime/core';
+const source = bindFaintColumns(`import { g } from 'genshin-ts/runtime/core';
 ${kernel}
 g.server({
   id: ${graph.graphId},
   name: '_GSTS_AP_OpeningProbe',
   variables: {
     board: ${literal(probeBoard)}, opening: [0n], finished: false,${release ? ' colliding: false,' : ''}
-    faint: ${literal(faintCatalog)}, metadata: ${literal(battle.openingMetadata)},
+    // AP_FAINT_DEFAULTS
+    metadata: ${literal(battle.openingMetadata)},
   },
 })
 .on('whenEntityIsCreated', (event, f) => {
@@ -222,17 +224,17 @@ g.server({
   f.startTimer(event.eventSourceEntity, 'AP_OpeningProbe', true, [1]);
 })
 .on('whenTimerIsTriggered', (event, f) => {
-  if (event.timerName !== 'AP_OpeningProbe' || f.get('finished')) return;${settle}
+  if (event.timerName !== 'AP_OpeningProbe' || f.get('finished')) return;
+  // AP_FAINT_READS${settle}
   const board = f.get('board');
   const opening = f.get('opening');
-  const catalog = f.get('faint');
   const metadata = f.get('metadata');
-  const done = gstsServerOpeningStep(f, board, catalog, metadata, opening, true);
+  const done = gstsServerOpeningStep(f, board, ${faintArguments}, metadata, opening, true);
   f.set('board', board);
   f.set('opening', opening);
   ${finishOpening}
 });
-`;
+`, battle.faintMetadata);
 const handlers = new Map();
 let variables;
 const stage = {

@@ -37,7 +37,7 @@ g.server({
   name: '_GSTS_AP_DuelBattle',
   variables: {
     attempt: 0n, active: false, round: 0n, outcome: 0n, openingDone: false, board: [0n], openingState: [0n],
-    fainting: [0n], // AP_DUEL_FAINT
+    // AP_FAINT_DEFAULTS
     metadata: [0n], // AP_DUEL_OPENING
   },
 }).onSignal(fightStart, (event, f) => {
@@ -71,15 +71,15 @@ g.server({
 }).on('whenTimerIsTriggered', (event, f) => {
   if (event.timerName !== fightClock || !f.get('active')) return;
   const board = f.get('board');
-  const fainting = f.get('fainting');
+  // AP_FAINT_READS
   const metadata = f.get('metadata');
   let outcome = gstsServerBattleOutcome(f, board);
   if (outcome === 0n) {
     if (f.get('openingDone')) {
-      outcome = gstsServerCollisionStep(f, board, fainting, false); // AP_DUEL_COLLISION
+      // AP_DUEL_COLLISION
     } else {
       const opening = f.get('openingState');
-      const complete = gstsServerOpeningStep(f, board, fainting, metadata, opening, false);
+      const complete = gstsServerOpeningStep(f, board, faintEffect, faintPower, faintTarget, faintAttack, faintHealth, metadata, opening, false);
       f.set('openingState', opening);
       f.set('openingDone', complete);
       outcome = gstsServerBattleOutcome(f, board);
