@@ -228,6 +228,8 @@ g.server({
     stocks: dict('int', 'int_list', 0),
     fightStarted: list('int', [0n, 0n, 0n, 0n]),
     fightSeeds: list('int', [0n, 0n, 0n, 0n]),
+    replayPairs: list('int', [0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n]),
+    replayFormations: dict('int', 'int_list', 0),
     scheduledFrame: -1n, scheduledPair: -1n, acceptedFrame: -1n,
     phase: lobby, round: 0n, revision: 0n, cursor: 0n, presenceCursor: 0n, deadline: -1n, untilEnd: -1n, lastTick: -1n,
     alive: 0n, winner: 0n, readyCount: 0n, fightCount: 0n, place: 0n, forceRank: false, broadcast: false,
@@ -433,6 +435,7 @@ g.server({
   } else if (phase === settlement && now >= deadline) {
     phase = opening;
     round += 1n;
+    f.set('replayPairs', f.assemblyList([0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n], 'int'));
     cursor = 0n;
     changed = true;
   }
@@ -566,6 +569,22 @@ g.server({
     gstsServerRoomPublic(f, table, roomLivesAt), gstsServerRoomPublic(f, table, roomPlacesAt),
     gstsServerRoomPublic(f, table, roomOpponentAt), f.get('results'), market, event.params.token,
     f.takeLargerValue(f.get('deadline') - now, 0n));
+  // Rebuilt clients first need their seat snapshot, then the immutable round replay.
+  if (action === 0n && seat >= 0n) {
+    const replay = f.getCorrespondingValueFromList(f.get('replayPairs'), seat);
+    if (replay > 0n) {
+      const pair = replay - 1n;
+      const pairings = f.get('pairs');
+      const left = f.getCorrespondingValueFromList(pairings, pair * 2n);
+      const right = f.getCorrespondingValueFromList(pairings, pair * 2n + 1n);
+      const outcome = f.getCorrespondingValueFromList(f.get('results'), left);
+      const seed = f.getCorrespondingValueFromList(f.get('fightSeeds'), pair);
+      const formations = f.get('replayFormations');
+      const first = f.queryDictionaryValueByKey(formations, left);
+      const second = f.queryDictionaryValueByKey(formations, right);
+      f.sendSignal(roomReplay, player, round, left + 1n, right + 1n, outcome, seed, first, second);
+    }
+  }
 })
 .onSignal(roomFightDone, (event, f) => {
   const self = f.getSelfEntity();
@@ -603,6 +622,15 @@ g.server({
     const stocks = f.get('stocks');
     first = gstsServerRoomFormation(f, f.queryDictionaryValueByKey(stocks, left));
     second = gstsServerRoomFormation(f, f.queryDictionaryValueByKey(stocks, right));
+    const replays = f.copyList(f.get('replayPairs'));
+    f.modifyValueInList(replays, left, pair + 1n);
+    f.modifyValueInList(replays, right, pair + 1n);
+    f.set('replayPairs', replays);
+    // One frozen formation for each logical seat; at most eight entries.
+    const formations = f.get('replayFormations');
+    f.setOrAddKeyValuePairsToDictionary(formations, left, first);
+    f.setOrAddKeyValuePairsToDictionary(formations, right, second);
+    f.set('replayFormations', formations);
   }
   for (let side = 0n; side < 2n; side += 1n) {
     const seat = f.getCorrespondingValueFromList(pairings, pair * 2n + side);

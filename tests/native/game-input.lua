@@ -176,6 +176,7 @@ duel.expect("AP_DuelRequest:11,1,1,1,1,0,0")
 duel.capture("duel_shop")
 duel.receive("AP_DuelSnapshot", duel_snapshot(2, 2, false, 2, 1))
 assert(duel.get("Duel/Status").text:find("告负"))
+assert(duel.get("Duel/ReplayStatus").text == "本局无战斗回放")
 for _, name in ipairs({"MarketOffers", "Ready", "Advance", "Leave", "Replay"}) do
     assert(not duel.get("Duel/" .. name).active and not duel.get("Duel/" .. name).visible, name)
 end
@@ -186,6 +187,14 @@ assert(duel.get("Lobby/Continue").active and not duel.get("Lobby/Choices").activ
 duel.press("Lobby/Continue/Hit")
 assert(duel.get("Duel").active)
 duel.destroy()
+
+local duel_with_replay = simulate()
+duel_with_replay.view(2, 2)
+duel_with_replay.receive("AP_DuelSnapshot", duel_snapshot(1, 0, false))
+duel_with_replay.receive("AP_DuelReplay", {1, 11, 1, {1, 21, 40, 100, 1}, {2, 22, 1, 1, 1}})
+duel_with_replay.receive("AP_DuelSnapshot", duel_snapshot(2, 2, false))
+assert(duel_with_replay.get("Duel/Replay").active and duel_with_replay.get("Duel/ReplayStatus").text:find("1/", 1, true))
+duel_with_replay.destroy()
 
 local room = simulate()
 room.view(0, 1, 1)
@@ -217,5 +226,25 @@ room.press("Room/Back/Hit")
 room.expect("AP_GameChooseMode:0,false")
 assert(room.get("Lobby").active and not room.get("Room").active)
 room.destroy()
+
+local reconnect = simulate()
+reconnect.view(8, 1)
+local first, second = {1, 1, 21, 40, 100, 1, 0}, {1, 2, 22, 1, 1, 1, 0}
+local own_replay = {1, 1, 2, 1, 11, first, second}
+reconnect.receive("AP_RoomReplay", {1, 3, 4, 1, 11, first, second})
+reconnect.receive("AP_RoomReplay", own_replay)
+assert(not (reconnect.get("Room/Match/Replay/Own1").text or ""):find("40攻", 1, true))
+local lobby_snapshot = room_snapshot(1, 0, 1)
+lobby_snapshot[3], lobby_snapshot[4] = 0, 0
+reconnect.receive("AP_RoomView", lobby_snapshot)
+reconnect.receive("AP_RoomView", room_snapshot(2, 4, 1))
+assert(reconnect.get("Room/Match/Replay/Own1").text:find("40攻 · 100命", 1, true))
+reconnect.press("Room/Match/Replay/Follow/Hit")
+local final_replay = reconnect.get("Room/Match/Replay/RoundText").text
+assert(final_replay:find("本轮获胜", 1, true))
+reconnect.receive("AP_RoomReplay", own_replay)
+assert(reconnect.get("Room/Match/Replay/RoundText").text == final_replay, "duplicate replay reset cursor")
+reconnect.destroy()
+
 output:close()
 print("Game readback controls: six-tier practice to victory, restart and return; two-player and eight-seat choice, shop, terminal and return.")

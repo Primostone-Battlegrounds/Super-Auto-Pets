@@ -384,7 +384,51 @@ function checkRounds(run, settings, receiptChecks = [], positionChecks = []) {
   };
 }
 
+function verifyReplayRecovery(sources, ts, settings) {
+  const recovering = session(sources, ts, 2, settings);
+  const tick = () => recovering.tick(Number(recovering.clock()) + settings.CADENCE);
+  const phase = () => recovering.controller.phase;
+  while (phase() !== 2n && recovering.clock() < settings.WAIT + 10 * settings.CADENCE) tick();
+  assert.equal(phase(), 2n);
+  for (const actor of recovering.enrolled) {
+    let view = read(recovering.request(actor, 0n), actor);
+    for (let offer = 1n; offer <= 3n; offer += 1n) {
+      view = read(recovering.request(actor, 11n, view.round, view.sequence, offer), actor);
+    }
+    assert.ok(read(recovering.request(actor, 1n, view.round, view.sequence), actor).ready);
+  }
+  let original;
+  while (phase() !== 4n && recovering.clock() < settings.MAX_TIME + settings.WAIT) {
+    const deliveries = tick();
+    original ??= deliveries.find(entry => entry.name === replaySignal);
+  }
+  assert.equal(phase(), 4n);
+  assert.ok(original, 'a human fight must have delivered a replay');
+  const actor = original.target;
+  const index = recovering.field.indexOf(actor);
+  recovering.field.splice(index, 1);
+  tick();
+  recovering.field.splice(index, 0, actor);
+  // The reloaded client has no cache; require its original replay after the first seat sync.
+  const restored = recovering.request(actor, 0n);
+  assert.deepEqual(restored.map(entry => [entry.target, entry.name]), [[actor, viewSignal], [actor, replaySignal]]);
+  assert.deepEqual(restored[1].values, original.values);
+  const state = read(restored, actor);
+  const retry = recovering.request(actor, 11n, state.round, state.sequence, 1n);
+  assert.equal(retry.length, 1, 'normal or rejected input must not request a replay');
+  assert.deepEqual(read(retry, actor).market, state.market);
+  recovering.field.push('replacement');
+  const unknown = recovering.request('replacement', 0n);
+  assert.equal(unknown.length, 1);
+  assert.equal(read(unknown, 'replacement').seat, 0n);
+  while (phase() === 4n) tick();
+  const movedOn = recovering.request(actor, 0n);
+  assert.equal(movedOn.length, 1, 'the old replay must not be reported in a new round');
+  assert.equal(read(movedOn, actor).round, state.round + 1n);
+}
+
 export function verifyRoom(sources, ts, settings, receiptChecks, positionChecks) {
+  verifyReplayRecovery(sources, ts, settings);
   const combinations = [];
   for (let humans = 1; humans <= 8; humans += 1) {
     combinations.push(checkRounds(session(sources, ts, humans, settings), settings, receiptChecks, positionChecks));
@@ -419,5 +463,5 @@ export function verifyRoom(sources, ts, settings, receiptChecks, positionChecks)
   assert.equal(recovering.controller.table[9], 8n);
   return { combinations, delayedSignalRecovery: { droppedWork: 1, delayedReceipt: 1, repeatedBotActions: 2,
     places: recoveredMatch.places },
-    recovery: ['same entity recovered', 'replacement rejected', 'absence timed out'] };
+    recovery: ['same entity recovered', 'replacement rejected', 'absence timed out', 'current battle replay restored'] };
 }

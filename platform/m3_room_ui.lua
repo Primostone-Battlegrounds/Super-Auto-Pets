@@ -9,6 +9,7 @@ local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
 local render_standings, panel
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
+local queued_replays, receive_replay = {}, nil
 local token = 0
 local source_ready = false
 
@@ -229,6 +230,11 @@ local function receive_view(_, values)
             place = place > 0 and place or nil, ready = index == seat and ready}
     end
     render_standings(view)
+    if #queued_replays > 0 then
+        local waiting = queued_replays
+        queued_replays = {}
+        for _, receipt in ipairs(waiting) do receive_replay(nil, receipt) end
+    end
     redraw()
 end
 
@@ -262,9 +268,19 @@ local function decode_formation(wire)
     return team
 end
 
-local function receive_replay(_, values)
-    if not source_ready or not match then return end
+receive_replay = function(_, values)
+    if not source_ready then return end
     local round, left, right, outcome, seed, first, second = table.unpack(values)
+    if not match or round > match.round then
+        -- View and replay are separate signals. Do not resolve or paint until
+        -- the authoritative snapshot identifies the current round and seat.
+        for _, receipt in ipairs(queued_replays) do
+            if receipt[1] == round and receipt[2] == left and receipt[3] == right then return end
+        end
+        if #queued_replays == 8 then table.remove(queued_replays, 1) end
+        queued_replays[#queued_replays + 1] = values
+        return
+    end
     if round < match.round or round < frame_round or round <= canonical_round
         or (match.seat ~= left and match.seat ~= right) then return end
     local left_team, right_team = decode_formation(first), decode_formation(second)
@@ -348,6 +364,7 @@ function OnStart(view_root)
     latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
     frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
     controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
+    queued_replays = {}
     source_ready = true
     visible("Ready", false)
     visible("Forfeit", false)
@@ -404,6 +421,7 @@ end
 
 function OnDestroy()
     source_ready = false
+    queued_replays = {}
     seconds = nil
     script:UnregisterServerSignalHandler("AP_RoomView")
     script:UnregisterServerSignalHandler("AP_RoomBattle")
