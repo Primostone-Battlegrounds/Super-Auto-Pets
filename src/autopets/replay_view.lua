@@ -33,7 +33,7 @@ function M.describe(event, catalog, sides)
     elseif event.type == "buff" then
         return actor .. string.format(" +%d攻 +%d命", event.attack_amount or 0, event.amount)
     elseif event.type == "result" then
-        return "战斗结束 · " .. (outcomes[event.outcome] or event.outcome)
+        return "战斗结束 · " .. (event.reason == "strike_limit" and "步数上限" or outcomes[event.outcome] or event.outcome)
     end
     return "双方入场"
 end

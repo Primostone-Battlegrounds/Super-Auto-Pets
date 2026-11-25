@@ -315,7 +315,8 @@ local function show_replay()
             local display = "空位"
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
-                display = replay_view.mark(event, unit, key) .. definition.name
+                local seat = slot == 1 and (side == 1 and "席1 · 前排\n" or "席2 · 前排\n") or ""
+                display = seat .. replay_view.mark(event, unit, key) .. definition.name
                     .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
             end
             board_root:GetChild((side == 1 and "Own" or "Enemy") .. slot).text = display
