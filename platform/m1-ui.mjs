@@ -124,6 +124,7 @@ export const nativeRun = {
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
     ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
+    image('FooterLine', [0, -262], [1152, 2], pigment.edge),
     group('Shop', [0, -124], [1164, 428], [
       image('Paper', [0, 0], [1164, 268], pigment.cream),
       image('Rail', [0, 0], [1128, 164], pigment.shelf),
@@ -132,7 +133,7 @@ export const nativeRun = {
       image('RewardDivider', [372, 0], [2, 146], pigment.shelfRule),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
-      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
+      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -100], [172, 52], title)),
       button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
     ]),
     group('Tooltip', [0, -10], [360, 72], [
@@ -169,7 +170,6 @@ export const nativeRun = {
       button('Rewatch', [212, -36], [202, playButtonHeight], '重新回放'),
       button('NewSeed', [426, -36], [202, playButtonHeight], '新一局'),
     ], false),
-    image('FooterLine', [0, -262], [1152, 2], pigment.edge),
     button('Primary', [411, -296], [329, playButtonHeight], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
     { ...group('Menu', [0, 0], [1202, 684], [

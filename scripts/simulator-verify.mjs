@@ -78,8 +78,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
   }
   const frames=[],runtimeExceptions=[];
   const capture=async name=>{const paths=new Map();const visit=(node,trail)=>{paths.set(node.Id,trail);for(const child of node.children)visit(child,trail?trail+'/'+child.name:child.name);};visit(session.runtime.roots[0],'');const s=api.playSnapshot(session,{inspect:true,paint:true});fs.writeFileSync(path.join(output,prefix+'-'+name+'.json'),JSON.stringify(s));const prepared=await imageAssets.prepare(s.paint);const png=renderPaintPng(s.paint,s.canvasWidth,s.canvasHeight,prepared).data;fs.writeFileSync(path.join(output,prefix+'-'+name+'.png'),png);frames.push({name,assetWarnings:prepared.warnings,sha256:sha256(png),mountError:s.mountError,logs:s.logs.filter(l=>/error/.test(l.level)),visibleTexts:s.paint.filter(p=>p.kind==='textbox').map(p=>({path:paths.get(p.id),name:p.name,text:p.text,textLayout:p.textLayout,left:p.left,bottom:p.bottom,width:p.width,height:p.height}))});return s;};
+  const visibleText = trail => frames.at(-1).visibleTexts.find(entry => entry.path === trail);
   const requireText = (trail, expected) => {
-    const item = frames.at(-1).visibleTexts.find(entry => entry.path === trail);
+    const item = visibleText(trail);
     assert.ok(item?.textLayout?.fits && item.textLayout.visibleLineCount > 0, `Missing or clipped text: ${trail}`);
     assert.match(item.text, expected, trail);
   };
@@ -140,13 +141,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
     requireText('Practice/Round/Value', /第 1 轮/u);
-    const offerNames = [1, 2, 3].map(slot => control(`Practice/Shop/Pet${slot}/Name`).text);
-    press('Shop/Pet1');press('Shop/Freeze');press('Shop/Reroll');
+    const readOfferNames = () => [1, 2, 3].map(slot => visibleText(`Practice/Shop/Pet${slot}/Name`).text);
+    const beforeReroll = readOfferNames();
+    press('Shop/Pet1');await capture('practice-offer-detail');
+    requireText('Practice/Tooltip/Heading', /芦纹龟/u);
+    press('Shop/Freeze');press('Shop/Reroll');
     await capture('practice-frozen-reroll');
     requireText('Practice/Money/Value', /^9$/u);
     requireText('Practice/Shop/Pet1/Tag', /^已冻结$/u);
-    assert.equal(control('Practice/Shop/Pet1/Name').text, offerNames[0]);
-    assert.ok([2, 3].some(slot => control(`Practice/Shop/Pet${slot}/Name`).text !== offerNames[slot - 1]),
+    const afterReroll = readOfferNames();
+    assert.equal(afterReroll[0], beforeReroll[0]);
+    assert.ok(afterReroll.slice(1).some((name, index) => name !== beforeReroll[index + 1]),
       'At least one unfrozen offer must change for the fixed restart seed');
   }
   if(mode) {
