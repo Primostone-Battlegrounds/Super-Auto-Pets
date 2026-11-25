@@ -171,6 +171,10 @@ local function team_card(path, unit, selected, effect)
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
     local preparing = state.phase == "preparation"
+    if not unit and not preparing then
+        show(path, false)
+        return
+    end
     show(path .. "/HealthTrack", unit ~= nil and not preparing)
     show(health_path, unit ~= nil and unit.health > 0 and not preparing)
     if not mirrored then
@@ -516,6 +520,7 @@ local function draw(refresh)
         show("Battle/Fast", replaying)
         show("Battle/Rewatch", replay_complete and not reviewing)
         show("Battle/NewSeed", state.phase == "ended" and not reviewing)
+        control("Battle/Rewatch"):SetAnchoredPosition(state.phase == "ended" and -111 or 0, -33)
         if replaying then
             title = "跳过回放"
             hint = "可暂停、调整速度或跳到本轮结果"
@@ -587,13 +592,14 @@ local function move_drag_picture(event, target)
     -- Keep the dragged portrait clear of the target portrait and the drop label.
     local picture_width, picture_height = drag.picture:GetSizeDelta()
     local half_width, half_height = picture_width / 2, picture_height / 2
-    local center_x = math.max(half_width, math.min(width - half_width, x))
     local lift = y + 42
     if target then
         local path = "Team" .. target
-        local _, slot_y = control(path):GetAnchoredPosition()
-        lift = math.max(lift, height / 2 + slot_y + 71 + half_height)
+        local slot_x, slot_y = control(path):GetAnchoredPosition()
+        x = width / 2 + slot_x + (slot_x > 0 and -88 or 88)
+        lift = height / 2 + slot_y + 72
     end
+    local center_x = math.max(half_width, math.min(width - half_width, x))
     local center_y = math.max(half_height, math.min(height - half_height, lift))
     drag.picture:SetAnchoredPosition(center_x - width / 2, center_y - height / 2)
 end

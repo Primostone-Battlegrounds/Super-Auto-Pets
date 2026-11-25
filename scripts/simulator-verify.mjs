@@ -109,7 +109,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
     const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
-    assert.ok(primarySkin?.imageId === 106046 && primarySkin.imageType === 'Stretch',
+    assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
       'Practice primary action must use its sliced native plate');
     requireText('Practice/Shop/Pet1/Price', /^3金$/u);
     requireText('Practice/Shop/Pet1/Detail', /^\d+攻$/u);
@@ -181,10 +181,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const outside = box('Practice/TeamCaption');
     function requireLiftedClearance(trail) {
       const lifted = box(trail);
-      assert.equal(lifted.centerX, slot.centerX);
+      assert.ok(Math.abs(lifted.centerX - slot.centerX) <= slot.width, 'Dragged portrait should stay near the active slot');
       for (const target of ['Portrait', 'DropLabel']) {
         const obstacle = box(`${team}/${target}`);
-        assert.ok(lifted.centerY - lifted.height / 2 > obstacle.centerY + obstacle.height / 2,
+        assert.ok(Math.abs(lifted.centerX - obstacle.centerX) >= (lifted.width + obstacle.width) / 2
+          || Math.abs(lifted.centerY - obstacle.centerY) >= (lifted.height + obstacle.height) / 2,
           `Dragged portrait obscures the destination ${target}`);
       }
     }

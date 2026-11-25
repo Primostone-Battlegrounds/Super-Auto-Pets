@@ -274,7 +274,8 @@ local function event_card(pattern)
     for _, team in ipairs({"Team", "Enemy"}) do
         for slot = 1, 5 do
             local path = team .. slot
-            if label(path .. "/Tag"):match(pattern) then return path end
+            local tag = nodes[path .. "/Tag"]
+            if nodes[path].active and tag.active and tag.text:match(pattern) then return path end
         end
     end
 end
@@ -296,7 +297,8 @@ local function mirrored_portrait()
     for ally = 1, 5 do
         for enemy = 1, 5 do
             local left, right = "Team" .. ally, "Enemy" .. enemy
-            if label(left .. "/Name") == label(right .. "/Name") and nodes[left .. "/Portrait/Layer1"].visible then
+            if nodes[left].active and nodes[right].active and nodes[left .. "/Portrait/Layer1"].visible
+                and label(left .. "/Name") == label(right .. "/Name") then
                 assert(nodes[left .. "/Name"].x == nodes[right .. "/Name"].x)
                 local asymmetry = false
                 for layer = 1, layers do

@@ -1,6 +1,6 @@
 const plane = 100001;
 const disc = 106025;
-const paper = 106046;
+const fadedTeal = 107012;
 const ticket = 106053;
 export const portraitLayers = 16;
 export const pigment = {
@@ -49,15 +49,15 @@ function card(name, position, width, type, interactive = true, visible = true, f
   const badgeWidth = market ? 60 : 49;
   const badgeX = market ? 35 : 26;
   const children = [
-    ...(type === 'player' ? [image('DropTarget', [0, 6], [104, 53], '#246c64', { image: ticket, visible: false })] : []),
-    ...(interactive ? [image('Selected', [0, 6], [101, 48], '#aa5b24', { image: ticket, visible: false })] : []),
-    roundedPlate('Rim', [0, 6], [96, 42], ticket, pigment.edge),
-    roundedPlate('Face', [0, 9], [88, 34], ticket, pigment[type]),
+    ...(type === 'player' ? [image('DropTarget', [0, 6], [104, 54], '#438d7e', { image: fadedTeal, visible: false })] : []),
+    ...(interactive ? [image('Selected', [0, 6], [102, 47], '#d19a3f', { image: 107015, visible: false })] : []),
+    roundedPlate('Rim', [0, 5], [96, 41], fadedTeal, pigment.edge),
+    roundedPlate('Face', [0, 8], [87, 32], fadedTeal, pigment[type]),
     ...(front ? [image('Front', [type === 'enemy' ? -40 : 40, 13], [21, 22], '#94531e',
       { image: type === 'enemy' ? 100104 : 100103 })] : []),
     portrait(),
     label('Name', [0, -18], [width - 4, 32], '', market ? 24 : 22),
-    roundedPlate('StatsPaper', [-badgeX, -49], [badgeWidth, 36], ticket, '#e6edf3'),
+    image('StatsPaper', [-badgeX, -49], [badgeWidth, 34], '#e2edf6'),
     terrain('LifePaper', [badgeX, -49], [badgeWidth, 36], '#f9d8ce'),
     label('Detail', [-badgeX, -49], [badgeWidth, 35], '', 25, '#253e58'),
     label('LifeValue', [badgeX, -49], [badgeWidth, 35], '', 25, '#813830'),
@@ -90,9 +90,13 @@ function card(name, position, width, type, interactive = true, visible = true, f
 
 export function button(name, position, size, title, primary = false, fontSize = primary ? 28 : 20) {
   const blue = ['Freeze', 'Auto', 'Fast'].includes(name);
+  const buttonSurface = primary ? roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], 107015, '#fff5da')
+    : blue ? roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], fadedTeal, '#81a997')
+    : terrain('Face', [0, 2], [size[0] - 4, size[1] - 7], '#fff3ce');
   return group(name, position, size, [
-    roundedPlate('Rim', [0, 0], size, paper, primary ? '#73401f' : '#46604b'),
-    roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], paper, primary ? pigment.primary : blue ? '#296965' : '#fff3ce'),
+    primary ? roundedPlate('Rim', [0, 0], size, 107015, '#a06339')
+      : blue ? roundedPlate('Rim', [0, 0], size, fadedTeal, '#3c634d') : terrain('Rim', [0, 0], size, '#776d49'),
+    buttonSurface,
     label('Title', [0, 2], [size[0] - 20, size[1] - 10], title, fontSize, blue ? '#fffdf2' : '#39291b'),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
@@ -100,7 +104,7 @@ export function button(name, position, size, title, primary = false, fontSize = 
 
 function stat(name, x, title, paper, number) {
   return group(name, [x, 281], [152, 65], [
-    roundedPlate('Surface', [0, 0], [152, 65], 106046, paper),
+    image('Surface', [0, 0], [152, 65], paper),
     label('Label', [0, 18], [144, 28], title, 17, pigment.muted),
     label('Value', [0, -15], [144, 35], '', name === 'Round' ? 23 : 28, number),
   ]);
@@ -134,14 +138,14 @@ export const nativeRun = {
     stat('Lives', 417, '生命', '#f9dfcb', '#893e2e'),
     group('Field', [0, 61], [1172, 334], [
       image('Surface', [0, 0], [1172, 334], '#bbdfdd'),
-      terrain('Cloud', [325, 115], [217, 30], '#fbf3d9'),
+      image('Cloud', [342, 122], [199, 47], '#ffffff', { image: 105102 }),
       terrain('Ridge', [72, 48], [1004, 157], '#6d9e8d'),
       terrain('Divider', [-192, 34], [766, 147], '#55805f'),
       image('Ground', [0, -56], [1172, 221], '#94b36a'),
       terrain('PrepRail', [0, -25], [1172, 154], '#e1bb72'),
-      terrain('LeftBrush', [-459, -106], [252, 75], '#678d4c'),
-      terrain('RightBrush', [443, -115], [282, 72], '#739650'),
-      terrain('Foreground', [-453, -147], [264, 38], '#4f7447'),
+      image('LeftBrush', [-470, -103], [214, 92], '#a4b27a', { image: 105135 }),
+      image('RightBrush', [467, -111], [228, 82], '#a0b977', { image: 105136 }),
+      image('Foreground', [-380, -137], [98, 54], '#89a468', { image: 105137 }),
     ]),
     label('TeamCaption', [-309, 208], [521, 32], '', 19, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
@@ -149,15 +153,15 @@ export const nativeRun = {
     ...slots.map(slot => card(`Enemy${slot}`, [82 + (slot - 1) * 112, 54], 106, 'enemy', false, false, slot === 1)),
     group('Shop', [0, -124], [1164, 428], [
       image('Paper', [0, 0], [1164, 268], '#e8c880'),
-      roundedPlate('Rail', [0, 0], [1128, 174], paper, '#f8e2ad'),
+      image('Rail', [0, 0], [1128, 174], '#f9e5b2'),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
       ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
       button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
     ]),
     group('Tooltip', [0, -10], [420, 86], [
-      roundedPlate('Border', [0, 0], [420, 86], paper, '#4d623c'),
-      roundedPlate('Paper', [0, 0], [414, 82], paper, '#fff8e2'),
+      image('Border', [0, 0], [420, 86], '#4d623c'),
+      image('Paper', [0, 0], [414, 82], '#fff8e2'),
       ellipse('Pointer', [0, -40], [14, 6], pigment.edge),
       label('Heading', [0, 24], [384, 34], '', 23, pigment.ink, 'left'),
       label('Body', [0, -16], [384, 46], '', 19, pigment.ink, 'left'),
@@ -177,20 +181,20 @@ export const nativeRun = {
     ], false),
     group('Battle', [0, -174], [1152, 154], [
       image('Surface', [0, 0], [1148, 154], '#e6e9bb'),
-      label('Outcome', [0, 60], [1038, 34], '', 28, pigment.ink, 'left'),
-      label('Event', [0, 29], [1038, 28], '', 20, pigment.ink, 'left'),
-      button('Replay', [-430, -33], [202, playButtonHeight], '下一条战斗事件'),
-      button('Auto', [-216, -33], [202, playButtonHeight], '暂停回放'),
-      button('Fast', [-2, -33], [202, playButtonHeight], '速度：1 倍'),
-      button('Rewatch', [212, -33], [202, playButtonHeight], '重新回放'),
-      button('NewSeed', [426, -33], [202, playButtonHeight], '新一局'),
+      label('Outcome', [0, 60], [1038, 34], '', 28, pigment.ink),
+      label('Event', [0, 29], [1038, 28], '', 20, pigment.ink),
+      button('Replay', [-222, -33], [202, playButtonHeight], '下一条战斗事件'),
+      button('Auto', [0, -33], [202, playButtonHeight], '暂停回放'),
+      button('Fast', [222, -33], [202, playButtonHeight], '速度：1 倍'),
+      button('Rewatch', [-111, -33], [202, playButtonHeight], '重新回放'),
+      button('NewSeed', [111, -33], [202, playButtonHeight], '新一局'),
     ], false),
     button('Primary', [411, -296], [329, playButtonHeight], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
     { ...group('Menu', [0, 0], [1202, 684], [
       image('Backdrop', [0, 0], [1202, 684], '#a3be82'),
-      roundedPlate('Rim', [0, 0], [556, 416], paper, pigment.edge),
-      roundedPlate('Paper', [0, 2], [548, 406], paper, pigment.cream),
+      image('Rim', [0, 0], [556, 416], pigment.edge),
+      image('Paper', [0, 2], [548, 406], pigment.cream),
       label('Heading', [0, 134], [500, 63], '小动物自走棋', 43),
       label('Progress', [0, 55], [496, 28], '', 21, pigment.muted),
       button('Continue', [0, 0], [334, 56], '单人练习', true),
@@ -200,7 +204,7 @@ export const nativeRun = {
     ], false), blockCursor: true },
     { ...group('Restart', [0, 0], [1202, 684], [
       image('Shade', [0, 0], [1202, 684], pigment.ink, { opacity: 0.65 }),
-      roundedPlate('Paper', [0, 7], [610, 224], paper, pigment.cream),
+      image('Paper', [0, 7], [610, 224], pigment.cream),
       label('Heading', [0, 68], [560, 44], '重开本局？', 31),
       label('Body', [0, 15], [560, 39], '清空本局阵容与战绩，用同一种子开始。', 20),
       button('Cancel', [-135, -56], [230, 50], '继续本局'),

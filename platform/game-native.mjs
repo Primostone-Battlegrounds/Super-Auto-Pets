@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { bundleRun } from './m1-bundle.mjs';
-import { button, group, image, label, nativeRun, pigment, roundedPlate } from './m1-ui.mjs';
+import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
@@ -44,8 +44,8 @@ function layout(duelRules) {
     controls: [
       { ...image('GameBackdrop', [0, 0], [1, 1], '#587454'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        roundedPlate('Border', [0, 0], [652, 596], 106046, '#3c5140'),
-        roundedPlate('Paper', [0, 4], [640, 580], 106046, '#fff3d9'),
+        image('Border', [0, 0], [652, 596], '#3c5140'),
+        image('Paper', [0, 4], [640, 580], '#fff3d9'),
         label('Title', [0, 221], [560, 76], '小动物自走棋', 52),
         label('Status', [0, 158], [560, 43], '正在连接千星关卡', 24, pigment.muted),
         group('Choices', [0, -5], [396, 270], [
