@@ -442,8 +442,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
       }
       await capture('client-1-replay-long-stats');
       requireText(stats, /盾 \d+/u);
-      requireText(`${replayBadges}/Attack1`, /^攻999$/u);
-      requireText(`${replayBadges}/Life1`, /^命99[89]$/u);
+      for (const [name, expected] of [['Attack1', /^攻999$/u], ['Life1', /^命99[89]$/u]]) {
+        const measurement = visibleText(`${replayBadges}/${name}`)?.textLayout;
+        assert.ok(measurement?.fits && measurement.visibleLineCount === 1);
+        assert.match(measurement.lines[0], expected);
+      }
     }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
