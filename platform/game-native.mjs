@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { bundleRun } from './m1-bundle.mjs';
-import { button, group, image, label, nativeRun, pigment, roundedPlate } from './m1-ui.mjs';
+import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
@@ -30,6 +30,9 @@ const view = (name, controls) => ({ ...group(name, [0, 0], [1280, 720], controls
 
 function layout(duelRules) {
   const practice = nativeRun.controls.map(control => {
+    if (/^Enemy[1-5]$/u.test(control.name)) {
+      return { ...control, children: control.children.filter(child => child.name !== 'Portrait') };
+    }
     if (control.name !== 'Menu') return control;
     return { ...control, children: [...control.children.map(child => {
       if (child.name === 'Heading') return { ...child, text: { ...child.text, content: '单人 AI 练习' } };
@@ -39,10 +42,10 @@ function layout(duelRules) {
   return {
     name: gameInterface, script: gameScript, showCursor: true, blockCursor: true, blockKeys: true,
     controls: [
-      { ...image('GameBackdrop', [0, 0], [1, 1], '#649c89'), anchor: { min: [0, 0], max: [1, 1] } },
+      { ...image('GameBackdrop', [0, 0], [1, 1], '#587454'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        roundedPlate('Border', [0, 0], [652, 596], 107011, '#24443c'),
-        roundedPlate('Paper', [0, 4], [640, 580], 107102, '#fff5d7'),
+        image('Border', [0, 0], [652, 596], '#3c5140'),
+        image('Paper', [0, 4], [640, 580], '#fff3d9'),
         label('Title', [0, 221], [560, 76], '小动物自走棋', 52),
         label('Status', [0, 158], [560, 43], '正在连接千星关卡', 24, pigment.muted),
         group('Choices', [0, -5], [396, 270], [

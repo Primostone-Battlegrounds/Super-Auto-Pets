@@ -274,18 +274,22 @@ local function event_card(pattern)
     for _, team in ipairs({"Team", "Enemy"}) do
         for slot = 1, 5 do
             local path = team .. slot
-            if label(path .. "/Tag"):match(pattern) then return path end
+            local tag = nodes[path .. "/Tag"]
+            if nodes[path].active and tag.active and tag.text:match(pattern) then return path end
         end
     end
 end
 
 local function inward_formation()
-    assert(nodes.Team1.x + nodes.Team1.width / 2 < nodes.Enemy1.x - nodes.Enemy1.width / 2)
+    local ally_mark, enemy_mark = nodes["Team1/Front"], nodes["Enemy1/Front"]
+    assert(nodes.Team1.x + ally_mark.x + ally_mark.width / 2 < nodes.Enemy1.x + enemy_mark.x - enemy_mark.width / 2)
     for slot = 2, 5 do
         local ally, front_ally = nodes["Team" .. slot], nodes["Team" .. (slot - 1)]
         local enemy, front_enemy = nodes["Enemy" .. slot], nodes["Enemy" .. (slot - 1)]
-        assert(ally.x + ally.width / 2 < front_ally.x - front_ally.width / 2)
-        assert(enemy.x - enemy.width / 2 > front_enemy.x + front_enemy.width / 2)
+        local left_seat, right_seat = nodes["Team" .. slot .. "/Name"], nodes["Enemy" .. slot .. "/Name"]
+        local left_front, right_front = nodes["Team" .. (slot - 1) .. "/Name"], nodes["Enemy" .. (slot - 1) .. "/Name"]
+        assert(ally.x + left_seat.width / 2 < front_ally.x - left_front.width / 2)
+        assert(enemy.x - right_seat.width / 2 > front_enemy.x + right_front.width / 2)
     end
 end
 
@@ -296,7 +300,8 @@ local function mirrored_portrait()
     for ally = 1, 5 do
         for enemy = 1, 5 do
             local left, right = "Team" .. ally, "Enemy" .. enemy
-            if label(left .. "/Name") == label(right .. "/Name") and nodes[left .. "/Portrait/Layer1"].visible then
+            if nodes[left].active and nodes[right].active and nodes[left .. "/Portrait/Layer1"].visible
+                and label(left .. "/Name") == label(right .. "/Name") then
                 assert(nodes[left .. "/Name"].x == nodes[right .. "/Name"].x)
                 local asymmetry = false
                 for layer = 1, layers do
@@ -366,7 +371,7 @@ local function finish(outcome, terminal, inspect_playback, observe_event)
                         break
                     end
                 end
-                assert(hit and label(hit .. "/Detail"):match(" " .. health .. "命$"))
+                assert(hit and label(hit .. "/LifeValue") == health .. "命")
                 local bar = nodes[hit .. "/Health"]
                 assert(not bar.visible or bar.width < nodes[hit .. "/HealthTrack"].width)
                 capture("battle_damage")
@@ -447,11 +452,11 @@ local function opening(expected_seed)
     assert(label("Round/Value") == "第 1 轮 · 准备")
     assert(logs[#logs]:find("seed=" .. expected_seed .. "$"))
     assert(label("Money/Value") == "10")
-    assert(label("TeamCaption"):find("右侧为前排", 1, true))
+    assert(label("TeamCaption"):find("右侧前排", 1, true) and nodes["Team1/Front"].visible)
     assert(label("OpponentCaption"):find("电脑对手", 1, true))
     assert(nodes.Team1.x > nodes.Team5.x and nodes.Team5.y == nodes.Team1.y)
     for index = 1, 5 do assert(nodes["Enemy" .. index].active == false) end
-    assert(label("Team1/Name") == "空位 1")
+    assert(not nodes["Team1/Name"].active)
     assert(label("Primary/Title") == "开战")
     assert(nodes.Reset.active and nodes["Reset/Title"].visible and not nodes.Restart.active)
     assert(label("Shop/Buy/Title") == "购买 · 3 金" and label("Shop/Reroll/Title") == "刷新 · 1 金")
@@ -595,11 +600,11 @@ assert(label("Team1/Name") == "棉尾兔")
 click("Shop/Food1")
 assert(label("Tooltip/Body"):find("一名队员获得", 1, true))
 assert_tooltip("Shop/Food1", true)
-local detail_before_food = label("Team2/Detail")
+local detail_before_food = label("Team2/Detail") .. label("Team2/LifeValue")
 drag_to("Shop/Food1", "Team5", 4)
-assert(label("Team2/Detail") == detail_before_food and label("Money/Value") == "4")
+assert(label("Team2/Detail") .. label("Team2/LifeValue") == detail_before_food and label("Money/Value") == "4")
 drag_to("Shop/Food1", "Team2", 4, 0, -nodes["Team2/Hit"].height / 2 + 1)
-assert(label("Team2/Detail") ~= detail_before_food and label("Money/Value") == "1")
+assert(label("Team2/Detail") .. label("Team2/LifeValue") ~= detail_before_food and label("Money/Value") == "1")
 shop("freeze", 3)
 assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].active)
 shop("reroll")
@@ -624,7 +629,7 @@ assert(label("Team2/Name") == "棉尾兔" and label("Team1/XP") == "L1  经验 0
 click("Team2")
 click("Shop/Merge")
 click("Team1")
-assert(label("Team2/Name") == "空位 2")
+assert(not nodes["Team2/Name"].active)
 shop("reroll")
 shop("combine", 1, 1)
 assert(label("Team1/XP") == "L2  经验 2/5")
@@ -638,7 +643,7 @@ click("Team1")
 assert_tooltip("Team1", false)
 assert(label("Team1/XP") == "L2  经验 2/5" and label("Shop/Sell/Title") == "出售 · +2 金")
 click("Shop/Sell")
-assert(label("Team1/Name") == "空位 1")
+assert(not nodes["Team1/Name"].active)
 
 restart_script()
 opening(interaction_seed)
@@ -648,18 +653,18 @@ local merge_drag = start_drag("Team2", 11)
 assert(nodes["Team2/Selected"].active)
 assert(label("Hint"):find("同种队员会合并", 1, true))
 merge_drag.CursorEndDrag(cursor_event(12, hit_centre("Team1")))
-assert(label("Team2/Name") == "棉尾兔")
+assert(label("Team2/Name") == "拖动中")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 assert(label("Team1/DropLabel") == "合并" and nodes["Team1/DropTarget"].active)
-assert(label("Hint"):find("确认合并后会消耗拖动的队员", 1, true) and label("Team2/Name") == "棉尾兔")
+assert(label("Hint"):find("确认合并后会消耗拖动的队员", 1, true) and label("Team2/Name") == "拖动中")
 capture("merge_preview")
 merge_drag.CursorDrag(cursor_event(11, 0, 0))
-assert(not nodes["Team1/DropTarget"].active and label("Team2/Name") == "棉尾兔")
+assert(not nodes["Team1/DropLabel"].active and label("Team2/Name") == "拖动中")
 merge_drag.CursorDrag(cursor_event(11, hit_centre("Team1")))
 merge_drag.CursorEndDrag(cursor_event(11, hit_centre("Team1")))
 assert(label("Team2/Name") == "棉尾兔" and nodes["Team1/DropTarget"].active)
 click("Team1", 11)
-assert(label("Team2/Name") == "空位 2" and not nodes["Team2/Selected"].active)
+assert(not nodes["Team2/Name"].active and not nodes["Team2/Selected"].active)
 assert(label("Team1/XP") == "L1  经验 1/2" and not nodes["Team1/DropTarget"].active)
 finish(nil)
 drag_to("Shop/Pet1", "Team1", 4)
@@ -671,12 +676,12 @@ assert(label("Team2/Name") == reward_name and label("Money/Value") == "4")
 local stale_drag = start_drag("Shop/Pet2", 4)
 click("Shop/Reroll")
 stale_drag.CursorEndDrag(cursor_event(4, hit_centre("Team3")))
-assert(label("Team3/Name") == "空位 3" and label("Money/Value") == "3")
+assert(not nodes["Team3/Name"].active and label("Money/Value") == "3")
 
 restart_script()
 opening(interaction_seed)
 for _ = 1, 8 do click("Shop/Reroll") end
-assert(label("Money/Value") == "2" and label("Team1/Name") == "空位 1")
+assert(label("Money/Value") == "2" and not nodes["Team1/Name"].active)
 assert(label("Hint"):find("重开本局", 1, true))
 click("Reset")
 assert(nodes.Restart.active and nodes["Restart/Heading"].visible)
@@ -695,7 +700,7 @@ for _ = 1, 6 do click("Shop/Reroll") end
 assert(label("Money/Value") == "1")
 click("Team1")
 click("Shop/Sell")
-assert(label("Money/Value") == "2" and label("Team1/Name") == "空位 1")
+assert(label("Money/Value") == "2" and not nodes["Team1/Name"].active)
 assert(label("Hint"):find("重开本局", 1, true))
 click("Reset")
 click("Restart/Confirm")

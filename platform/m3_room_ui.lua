@@ -9,7 +9,7 @@ local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
 local inspected
-local render_standings, panel, portrait, unified_layout
+local render_standings, panel, portrait, badges, unified_layout
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
 local replay_playing, replay_elapsed = false, 0
@@ -77,10 +77,11 @@ end
 
 local function paint_ability()
     local picked = inspected or {kind = "pet", slot = 1}
-    local code, level
+    local code, level, experience
     if picked.kind == "team" then
         local unit = preview and preview.team[picked.slot]
         code, level = unit and unit.code, unit and unit.level
+        experience = unit and unit.xp
     else
         local shelf = preview and (picked.kind == "reward" and preview.rewards or preview.pets)
         code, level = shelf and shelf[picked.slot], 1
@@ -88,6 +89,7 @@ local function paint_ability()
     local pet = code and native_catalog.pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
     if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
+    if badges and experience then body = body .. " · 经验 " .. experience end
     text("Shop/AbilityTitle", title)
     text("Shop/AbilityBody", body)
 end
@@ -96,6 +98,17 @@ local function paint_shop()
     if not preview or preview.round ~= match.round then return end
     text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5 · 右侧为前排", preview.gold, preview.tier, #preview.team))
     paint_ability()
+    local picked = chosen()
+    if badges then
+        badges.select("shop", object("Shop"), function(slot)
+            local team = slot <= 5
+            local offer = slot - 5
+            local card = object("Shop/" .. (team and ("Team" .. slot) or ("Offer" .. offer)))
+            local x, y = card:GetAnchoredPosition()
+            local tx, ty = card:GetChild("Text"):GetAnchoredPosition()
+            return x + tx, y + ty - (team and 28 or 25), x + (offer <= 3 and 42 or 47), y + 27
+        end)
+    end
     for slot = 1, 5 do
         local is_pet = slot <= 3
         local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
@@ -105,7 +118,12 @@ local function paint_shop()
             portrait.shop(5 + slot, definition and definition.id)
         end
         local offer = "售罄"
-        if item and portrait then
+        if badges then
+            if is_pet then visible("Shop/InspectOffer" .. slot, item ~= nil) end
+            local cost = is_pet and native_catalog.rules.pet_cost or native_catalog.rules.food_cost
+            badges.paint(5 + slot, item and item.attack, item and item.health, item and cost, not is_pet)
+            if item then offer = item.name end
+        elseif item and portrait then
             offer = item.name .. "\n" .. replay_view.combat_values(item.attack, item.health, not is_pet)
         elseif item then
             local detail = is_pet and "%s\n%d 攻 · %d 命" or "%s\n+%d 攻 · +%d 命"
@@ -120,7 +138,13 @@ local function paint_shop()
         end
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
         local stats = ""
-        if unit then
+        if badges then
+            visible("Shop/InspectTeam" .. slot, unit ~= nil)
+            badges.paint(slot, unit and unit.attack, unit and unit.health)
+            object("Shop/Team" .. slot .. "/Surface").imageColor =
+                picked == slot and Color(228, 176, 94, 255) or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
+            name = unit and (name .. " L" .. unit.level) or ""
+        elseif unit then
             local values = portrait and replay_view.combat_values(unit.attack, unit.health)
                 or string.format("%d攻 %d命", unit.attack, unit.health)
             stats = string.format("\n%s\nL%d · 经验%d", values, unit.level, unit.xp)
@@ -129,7 +153,9 @@ local function paint_shop()
     end
     reward = math.min(reward, math.max(#preview.rewards, 1))
     local item = pets[preview.rewards[reward]]
-    text("Shop/Reward/Text", item and string.format("%s %d/%d", item.name, reward, #preview.rewards) or "暂无升级奖励")
+    if badges then visible("Shop/InspectReward", item ~= nil) end
+    text("Shop/Reward/Text", item and string.format("%s %d/%d", item.name, reward, #preview.rewards)
+        or badges and "暂无奖励" or "暂无升级奖励")
     text("Shop/Merge/Text", merge and "取消合并" or "合并队员")
 end
 
@@ -140,10 +166,15 @@ local function paint_battle()
         visible("Replay/" .. name, has_frame)
     end
     visible("Replay/Auto", has_frame and frame.event ~= nil)
+    if badges then
+        visible("Replay/OwnFront", has_frame)
+        visible("Replay/EnemyFront", has_frame)
+    end
     if has_frame and frame.event then
         text("Replay/Auto/Text", replay_playing and "暂停" or frame_index == #frames and "重播" or "继续")
     end
     if not has_frame then
+        if badges then badges.hide() end
         text("Replay/Event", "")
         local opponent = match.opponents[match.seat]
         local result = result_names[match.results[match.seat]]
@@ -165,22 +196,37 @@ local function paint_battle()
         end
         return
     end
+    if badges then
+        badges.select("replay", object("Replay"), function(slot)
+            local label = object("Replay/" .. (slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5))))
+            local x, y = label:GetAnchoredPosition()
+            return x, y - 39, x, y + 35
+        end)
+    end
     local allied_side = frame.left == match.seat and 0 or 1
     local opposing_seat = allied_side == 0 and frame.right or frame.left
+    if badges then
+        local event = frame.event
+        local damage = event and event.type == "damage"
+        local damaged = damage and ((event.side == "player" and 0 or 1) == allied_side and event.slot or 5 + event.slot)
+        badges.feedback(damaged, event)
+    end
     local board = frame.board
     for slot = 1, 5 do
         for side = 0, 1 do
             local name = side == allied_side and "Own" or "Enemy"
-            local display, id, attacking = "空位", nil, false
+            local display, id, attacking = badges and "" or "空位", nil, false
+            local attack, life
             if frame.teams then
                 local key = side == 0 and "player" or "enemy"
                 local unit = frame.teams[key][slot]
                 if unit then
-                    id = unit.id
+                    id, attack, life = unit.id, unit.attack, unit.health
                     local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                     local event = frame.event
                     if portrait then
-                        display = replay_view.stats(def.name, unit.attack, unit.health, unit.shield)
+                        display = badges and def.name .. ((unit.shield or 0) > 0 and ("\n盾 " .. unit.shield) or "")
+                            or replay_view.stats(def.name, unit.attack, unit.health, unit.shield)
                         attacking = event and event.type == "attack" and event.uid == unit.uid and event.side == key
                     else
                         local marker = event and replay_view.mark(event, unit, key) or ""
@@ -192,8 +238,10 @@ local function paint_battle()
                 local offset = (side * 5 + (head + slot - 1) % 5) * 6 + 1
                 local item = fighters[board[offset]] or pets[board[offset]]
                 if item then
-                    id = item.id
-                    if portrait then
+                    id, attack, life = item.id, board[offset + 1], board[offset + 2]
+                    if badges then
+                        display = item.name .. (board[offset + 4] > 0 and ("\n盾 " .. board[offset + 4]) or "")
+                    elseif portrait then
                         display = replay_view.stats(item.name, board[offset + 1], board[offset + 2], board[offset + 4])
                     else
                         display = string.format("%s\n%d攻 · %d命\n盾 %d", item.name, board[offset + 1],
@@ -202,7 +250,8 @@ local function paint_battle()
                 end
             end
             text("Replay/" .. name .. slot, display)
-            if portrait then portrait.replay(name .. slot, id, name == "Enemy", attacking) end
+            if badges then badges.paint(name == "Own" and slot or 5 + slot, attack, life) end
+            if portrait then portrait.replay(name .. slot, id, name == "Enemy", attacking, true) end
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
@@ -420,8 +469,9 @@ local function scrub(offset)
     frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
 end
 
-function OnStart(view_root, painter)
+function OnStart(view_root, painter, badge_pool)
     portrait = painter
+    badges = bind_online_badges(badge_pool)
     unified_layout = view_root ~= nil
     local root = view_root or script.object
     local function child(name) return assert(root:GetChild(name), name) end
@@ -523,5 +573,6 @@ function OnDestroy()
         for _, item in ipairs(keys) do panel:RemoveKeyEventListener(item[1], item[2]) end
     end
     controls, bindings, keys, content, visibility, frames = {}, {}, {}, {}, {}, {}
-    render_standings, panel, portrait = nil, nil, nil
+    if badges then badges.restore() end
+    render_standings, panel, portrait, badges = nil, nil, nil, nil
 end

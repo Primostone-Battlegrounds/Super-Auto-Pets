@@ -111,6 +111,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
     assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
       'Practice primary action must use its sliced native plate');
+    requireText('Practice/Shop/Pet1/Price', /^3金$/u);
+    requireText('Practice/Shop/Pet1/Detail', /^\d+攻$/u);
+    requireText('Practice/Shop/Pet1/LifeValue', /^\d+命$/u);
+    assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
+    assert.ok(shopFrame.paint.some(item => item.id === control('Practice/Team1/Front').Id));
     for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
       requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
     }
@@ -130,7 +135,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
       if(roundIndex===10)await capture('practice-tier-six');
       press('Primary');
       if (roundIndex === 0) {
-        await capture('practice-battle');
+        const battle = await capture('practice-battle');
+        assert.ok(battle.paint.some(item => item.id === control('Practice/Enemy1/Portrait/Layer1').Id));
         let strike = false;
         for (let frame = 0; frame < 75 && !strike; frame++) {
           api.stepPlay(session, 0.1);
@@ -176,10 +182,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const outside = box('Practice/TeamCaption');
     function requireLiftedClearance(trail) {
       const lifted = box(trail);
-      assert.equal(lifted.centerX, slot.centerX);
+      assert.ok(Math.abs(lifted.centerX - slot.centerX) <= slot.width, 'Dragged portrait should stay near the active slot');
       for (const target of ['Portrait', 'DropLabel']) {
         const obstacle = box(`${team}/${target}`);
-        assert.ok(lifted.centerY - lifted.height / 2 > obstacle.centerY + obstacle.height / 2,
+        assert.ok(Math.abs(lifted.centerX - obstacle.centerX) >= (lifted.width + obstacle.width) / 2
+          || Math.abs(lifted.centerY - obstacle.centerY) >= (lifted.height + obstacle.height) / 2,
           `Dragged portrait obscures the destination ${target}`);
       }
     }
@@ -190,23 +197,25 @@ for(const {canvasId,playerCount,mode} of configurations) {
     pointer('move', slot);
     await capture('practice-drag-pet-target');
     requireText(`${team}/DropLabel`, /^购买$/u);
+    requireText(`${pet}/Name`, /^拖动中$/u);
     assert.notEqual(picture.parent, petHome, 'Dragged portrait must lift out of the source card');
     requireLiftedClearance('Practice/Portrait');
     pointer('move', outside);
     pointer('up', outside);
-    await capture('practice-drag-cancel');
+    const cancelled = await capture('practice-drag-cancel');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText(`${team}/Name`, /^空位/u);
+    assert.ok(!visibleText(`${team}/Name`));
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     assert.equal(picture.parent, petHome);
     assert.ok(!visibleText(`${team}/DropLabel`));
+    assert.ok(!cancelled.paint.some(item => item.name === 'DropTarget'), 'Cancelling must clear all drop marks');
 
     pointer('down', box(`${pet}/Hit`));
     pointer('move', slot);
     pointer('cancel', slot);
     await capture('practice-drag-interrupted');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText(`${team}/Name`, /^空位/u);
+    assert.ok(!visibleText(`${team}/Name`));
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     assert.equal(picture.parent, petHome);
     press('Shop/Reroll');
@@ -220,7 +229,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     pointer('up', slot);
     await capture('practice-drag-purchase-preview');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText(`${team}/Name`, /^空位/u);
+    assert.ok(!visibleText(`${team}/Name`));
     requireText('Practice/Hint', /购买需 3 金.*点击标记站位确认/u);
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     press('Team1');
@@ -231,32 +240,34 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.equal(picture.parent, petHome);
     assert.ok(!visibleText(`${team}/DropLabel`));
 
-    const statsBefore = visibleText(`${team}/Detail`).text;
+    const stats = () => ['Detail', 'LifeValue'].map(name => visibleText(`${team}/${name}`).text);
+    const statsBefore = stats();
     const nearBottom = { centerX: slot.centerX, centerY: slot.centerY - slot.height / 2 + 2 };
     pointer('down', box(`${food}/Hit`));
     pointer('move', nearBottom);
     await capture('practice-drag-food-target');
     requireText(`${team}/DropLabel`, /^喂食$/u);
     requireLiftedClearance('Practice/Portrait');
-    assert.ok(!visibleText(`${team}/XP`), 'Drop feedback replaces the experience label');
+    assert.ok(!visibleText(`${team}/Name`), 'Drop feedback occupies the destination caption');
     assert.ok(!visibleText('Practice/OpponentCaption'), 'The lifted portrait must not cover the board caption');
     pointer('up', nearBottom);
     await capture('practice-drag-feed-preview');
     requireText('Practice/Money/Value', /^6$/u);
-    assert.equal(visibleText(`${team}/Detail`).text, statsBefore);
+    assert.deepEqual(stats(), statsBefore);
     requireText('Practice/Hint', /喂食需 3 金.*点击标记站位确认/u);
     press('Team1');
     await capture('practice-drag-feed');
     requireText('Practice/Money/Value', /^3$/u);
     requireText(`${food}/Name`, /^空商品$/u);
-    assert.notEqual(visibleText(`${team}/Detail`).text, statsBefore);
+    assert.notDeepEqual(stats(), statsBefore);
     requireText(`${team}/XP`, /^L1/u);
     requireText('Practice/OpponentCaption', /下一位电脑对手/u);
     assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {
-    const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
-    const foodPortrait = control('Practice/Enemy4/Portrait/Layer1').Id;
+    const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
+    const foodPortrait = control('Practice/Shop/Food1/Portrait/Layer1').Id;
+    const priceId = control('Duel/ReplayBoard/BadgePool/Price1').Id;
     const shopPortraits = [...portraits, foodPortrait];
     function requireShopPortraits(frame) {
       assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),
@@ -280,6 +291,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.setPlayView(session,1);
     const duel = mode === 2;
     const shop = duel ? 'Duel' : 'Room/Match/Shop';
+    const shopBadges = duel ? 'Duel/MarketOffers/BadgePool' : `${shop}/BadgePool`;
+    const replayBadges = duel ? 'Duel/ReplayBoard/BadgePool' : 'Room/Match/Replay/BadgePool';
     const rerollButton = duel ? 'Duel/Reroll' : `${shop}/Reroll/Hit`;
     const readyButton = duel ? 'Duel/Ready' : 'Room/Match/Ready/Hit';
     const between = duel ? 'Duel/InspectReward' : 'Room/Match/Hint';
@@ -288,10 +301,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
-    if (duel) {
-      const offer = visibleText('Duel/MarketOffers/OfferLabel1').textLayout;
-      assert.ok(offer.fits && offer.lines.at(-1) === '3金', 'Offer price should stay on one visible line');
-    }
+    requireText(`${shopBadges}/Price1`, /^3 金$/u);
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
     requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);
@@ -300,11 +310,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('client-1-inspect-team');
     requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/su);
     requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
-    const teamStats = visibleText(duel ? `${shop}/TeamLabel1` : `${shop}/Team1/Text`).textLayout;
-    assert.ok(teamStats.fits && teamStats.lines.slice(1).join('\n') === '3攻 2命\nL2 · 经验1');
-    const [attack, health] = teamStats.richLines[1].runs.filter(run => run.bold);
-    assert.ok(attack?.fontSize > 20 && health?.fontSize > 20 && attack.color !== health.color,
-      'Combat numerals must stand out as two readable values');
+    requireText(`${shop}/AbilityBody`, /经验 1/u);
+    requireText(`${shopBadges}/Attack1`, /^攻3$/u);
+    requireText(`${shopBadges}/Life1`, /^命2$/u);
+    if (!duel) {
+      requireText(`${shop}/Team1/Text`, /^芦纹龟 L2$/u);
+      assert.equal(visibleText(`${shop}/Team1/Text`).textLayout.visibleLineCount, 1);
+    }
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
     await capture('client-1-buy-request');
@@ -344,14 +356,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
       if (eventText && pattern.test(eventText)) {
         const replayFrame = await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
+        if (name === 'damage') requireText(`${replayBadges}/Price1`, /^-5$/u);
+        else assert.ok(!replayFrame.paint.some(item => item.id === priceId), 'The impact badge must clear after damage');
         if (duel && name === 'attack') requireText('Duel/Status', /正在播放本轮战斗/u);
         if (duel && name === 'result') requireText('Duel/Status', /回放结束 · 等待结算/u);
         if (name === 'attack') {
           const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
           assert.ok(own && enemy && own.left + own.width < enemy.left,
             'The original portraits must appear on opposing lanes');
-          assert.ok(!replayFrame.paint.some(item => item.id === foodPortrait),
-            'A food offer must not appear in battle');
+          const emptySeat = replayFrame.paint.find(item => item.id === foodPortrait);
+          assert.equal(emptySeat?.imageId, 106053, 'The borrowed food control must render only an empty seat in battle');
+          assert.ok(!replayFrame.paint.some(item => item.id === priceId), 'A shop price must not appear in battle');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
@@ -385,7 +400,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     const returned = await capture('client-1-return');
-    assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id)), 'Pooled portraits must be hidden in the lobby');
+    assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id) || item.id === priceId),
+      'Pooled portraits and prices must be hidden in the lobby');
     requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
@@ -433,10 +449,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         api.stepPlay(session, 0.05);
       }
       await capture('client-1-replay-long-stats');
-      const { textLayout } = visibleText(stats) ?? {};
-      assert.ok(textLayout?.fits && textLayout.visibleLineCount === 3, 'Long combat values must leave the shield visible');
-      assert.match(textLayout.lines[1], /^999攻 99[89]命$/u);
-      assert.match(textLayout.lines[2], /^盾 \d+$/u);
+      requireText(stats, /盾 \d+/u);
+      for (const [name, expected] of [['Attack1', /^攻999$/u], ['Life1', /^命99[89]$/u]]) {
+        const measurement = visibleText(`${replayBadges}/${name}`)?.textLayout;
+        assert.ok(measurement?.fits && measurement.visibleLineCount === 1);
+        assert.match(measurement.lines[0], expected);
+      }
     }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}

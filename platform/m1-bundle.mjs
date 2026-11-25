@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { nativeRun, portraitLayers } from './m1-ui.mjs';
+import { nativeRun, portraitLayers, sharedPortraitHomes } from './m1-ui.mjs';
 
 // The GIL authoring service accepts the sprite ID on a control. Set its
 // nine-slice mode through the native widget API after the tree is mounted.
 function plateInitializer(controls) {
-  const sliceImages = new Set([107011, 107012, 107013, 107015, 107102]);
+  const sliceImages = new Set([106046, 107011, 107012, 107013, 107015, 107102]);
   const paths = [];
   function visit(nodes, prefix) {
     for (const node of nodes) {
@@ -68,7 +68,11 @@ function bundleModules(parse, names, entry, release, prefix = []) {
 export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout = nativeRun) {
   const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'native_portrait',
     'shop_wire', 'animal_ability', 'replay_view'];
-  return bundleModules(parse, names, entry, release, [`local portrait_layers = ${portraitLayers}`, plateInitializer(layout.controls)]);
+  return bundleModules(parse, names, entry, release, [
+    `local portrait_layers = ${portraitLayers}`,
+    `local shared_portrait_homes = {${sharedPortraitHomes.map(name => JSON.stringify(name)).join(',')}}`,
+    plateInitializer(layout.controls),
+  ]);
 }
 
 export function bundleBattleReplay(parse, entry, release = false) {

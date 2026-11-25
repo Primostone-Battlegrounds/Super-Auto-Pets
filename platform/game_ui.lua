@@ -69,7 +69,8 @@ local function online_portraits(duel)
     for slot = 1, 5 do
         for _, side in ipairs({"Own", "Enemy"}) do
             local own = side == "Own"
-            local source = practice_board:GetChild((own and "Team" or "Enemy") .. slot)
+            local source = own and practice_board:GetChild("Team" .. slot)
+                or practice_board:FindChild(shared_portrait_homes[slot])
             local picture = source:GetChild("Portrait")
             local label = replay:GetChild(side .. slot)
             local px, py = picture:GetAnchoredPosition()
@@ -96,7 +97,7 @@ local function online_portraits(duel)
             pictures[slot_id] = {
                 control = picture, shown = false, lunge = 0,
                 replay = {parent = replay, x = lx, y = ly + (duel and 42 or 39)},
-                shop = {parent = shop, x = sx, y = sy + (duel and 22 or own and 30 or 25)},
+                shop = {parent = shop, x = sx - (own and 0 or 4), y = sy + (duel and 22 or own and 30 or 25)},
             }
             set_visible(picture, false)
         end
@@ -109,10 +110,10 @@ local function online_portraits(duel)
         draw = bind_portrait(function(path)
             local slot, layer = path:match("^([^/]+)/([^/]+)$")
             return pictures[tonumber(slot)].control:GetChild(layer)
-        end, view == "shop" and (duel and 1.32 or 1.25) or 1.78)
+        end, view == "shop" and (duel and 1.50 or 1.47) or 1.78)
         for _, picture in ipairs(pictures) do
             set_visible(picture.control, false)
-            picture.shown, picture.lunge = false, 0
+            picture.shown, picture.recess, picture.lunge = false, false, 0
             local target = picture[view]
             if target then
                 picture.control.parent = target.parent
@@ -122,19 +123,32 @@ local function online_portraits(duel)
         end
     end
 
-    local function paint(slot, id, mirrored, attacking)
+    local function paint(slot, id, mirrored, attacking, show_empty)
         local picture = pictures[slot]
-        local shown = id ~= nil
+        local recess = id == nil and show_empty == true
+        local shown = id ~= nil or recess
         if picture.shown ~= shown then
             picture.shown = shown
             set_visible(picture.control, shown)
         end
-        if shown then draw(tostring(slot), id, mirrored) end
-        local lunge = attacking and (mirrored and -9 or 9) or 0
+        if recess and not picture.recess then
+            draw(tostring(slot), nil, mirrored)
+            local plate = picture.control:GetChild("Layer1")
+            plate:SetImage(Enum.ImageSource.StaticReference, 106053)
+            plate.imageType = Enum.ImageType.Basic
+            plate:SetAnchoredPosition(0, duel and -32 or -30)
+            plate:SetSizeDelta(duel and 68 or 58, 18)
+            plate.imageColor = mirrored and Color(118, 80, 59, 255) or Color(75, 98, 59, 255)
+            set_visible(plate, true)
+        elseif id ~= nil then
+            draw(tostring(slot), id, mirrored)
+        end
+        picture.recess = recess
+        local lunge = attacking and (mirrored and -15 or 15) or 0
         if picture.lunge ~= lunge then
             picture.lunge = lunge
             local target = picture[view]
-            picture.control:SetAnchoredPosition(target.x + lunge, target.y)
+            picture.control:SetAnchoredPosition(target.x + lunge, target.y + (lunge == 0 and 0 or 4))
         end
     end
 
@@ -142,8 +156,8 @@ local function online_portraits(duel)
     return {
         view = select,
         shop = function(slot, id) if view == "shop" then paint(slot, id, false, false) end end,
-        replay = function(slot, id, mirrored, attacking)
-            if view == "replay" then paint(replay_slots[slot], id, mirrored, attacking) end
+        replay = function(slot, id, mirrored, attacking, show_empty)
+            if view == "replay" then paint(replay_slots[slot], id, mirrored, attacking, show_empty) end
         end,
     }
 end
@@ -154,7 +168,8 @@ local function show_online()
     show_section(board)
     if online then online.refresh(); return end
     online = (duel and duel_view or room_view)(root:GetChild(board))
-    online.start(root:GetChild(board), online_portraits(duel))
+    local badges = root:FindChild("Duel/ReplayBoard/BadgePool")
+    online.start(root:GetChild(board), online_portraits(duel), badges)
 end
 
 local function receive_lobby(_, values)

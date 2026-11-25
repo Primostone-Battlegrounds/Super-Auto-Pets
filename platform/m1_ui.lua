@@ -30,7 +30,8 @@ local difficulty
 local confirming_restart
 local reward_index, event_index = 1, 1
 local listeners, controls = {}, {}
-local portrait
+local portrait, shared_portraits
+local parked_portraits = {}
 local visibility, displayed_text, displayed_colour = {}, {}, {}
 local playing, elapsed, replay_speed = false, 0, 1
 local replay_complete, reviewing = false, false
@@ -53,6 +54,39 @@ local effects = {
 local function control(path)
     if not controls[path] then controls[path] = assert(root:FindChild(path), "missing control: " .. path) end
     return controls[path]
+end
+
+local function portrait_control(path)
+    local enemy, suffix = path:match("^Enemy(%d+)(/Portrait.*)$")
+    if shared_portraits and enemy then return control(shared_portrait_homes[tonumber(enemy)] .. suffix) end
+    return control(path)
+end
+
+local function restore_portraits()
+    for _, entry in ipairs(parked_portraits) do
+        if entry.picture.alive and entry.parent.alive then
+            entry.picture.parent = entry.parent
+            entry.picture:SetSiblingIndex(entry.sibling)
+            entry.picture:SetAnchoredPosition(entry.x, entry.y)
+        end
+    end
+    parked_portraits = {}
+end
+
+local function arrange_portraits(preparing)
+    if not shared_portraits then return end
+    restore_portraits()
+    if not preparing then
+        for index, path in ipairs(shared_portrait_homes) do
+            local picture = control(path .. "/Portrait")
+            local x, y = picture:GetAnchoredPosition()
+            parked_portraits[index] = {picture = picture, parent = control(path), sibling = picture:GetSiblingIndex(), x = x, y = y}
+            picture.parent = control("Enemy" .. index)
+            picture:SetAsLastSibling()
+        end
+    end
+    portrait = bind_portrait(portrait_control, 1.68)
+    lunging = nil
 end
 
 local function clear_drag()
@@ -106,26 +140,37 @@ local function play_sound(sound)
     if ok and math.type(instance) == "integer" then sound_instance = instance end
 end
 
-local function card(path, title, detail, selected, id, face, rim, mirrored)
+local function card(path, title, selected, id, face, rim, mirrored)
     show(path, true)
     show(path .. "/Rim", true)
     show(path .. "/Face", true)
     control(path .. "/Face").imageColor = colour(face)
     control(path .. "/Rim").imageColor = colour(rim)
-    text(path .. "/Name", title)
-    show(path .. "/StatsPaper", detail ~= "")
-    text(path .. "/Detail", detail)
+    if drag and drag.parent == control(path) then title = "拖动中" end
+    if title then text(path .. "/Name", title) else show(path .. "/Name", false) end
     portrait(path .. "/Portrait", id, mirrored)
     if selected ~= nil then show(path .. "/Selected", selected) end
 end
 
-local function team_card(path, unit, index, selected, effect)
+local function card_stats(path, attack, health, boosted)
+    local occupied = attack ~= nil
+    for _, child in ipairs({"StatsPaper", "LifePaper", "Detail", "LifeValue"}) do
+        show(path .. "/" .. child, occupied)
+    end
+    if occupied then
+        local format = boosted and "%+d" or "%d"
+        text(path .. "/Detail", string.format(format, attack) .. "攻")
+        text(path .. "/LifeValue", string.format(format, health) .. "命")
+    end
+end
+
+local function team_card(path, unit, selected, effect)
     local mirrored = selected == nil
-    local background = mirrored and 0xcf9b72 or 0x9cc28e
-    local rim = selected and 0xa86214 or 0x52785d
+    local preparing = state.phase == "preparation"
+    local background = unit and (mirrored and 0xf0c49e or 0xd6dcac) or (preparing and 0xe8d5ab or 0xdac297)
+    local rim = selected and 0xa86214 or not unit and 0xa28654 or mirrored and 0x976b43 or 0x819254
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
-    local preparing = state.phase == "preparation"
     show(path .. "/HealthTrack", unit ~= nil and not preparing)
     show(health_path, unit ~= nil and unit.health > 0 and not preparing)
     if not mirrored then
@@ -139,13 +184,14 @@ local function team_card(path, unit, index, selected, effect)
         end
     end
     if not unit then
-        card(path, "空位 " .. index, "", selected, nil, background, rim)
-        text(path .. "/Tag", "")
+        card(path, nil, selected, nil, background, rim, mirrored)
+        card_stats(path)
+        show(path .. "/Tag", false)
         return
     end
     local pet = rules_data.pet_by_id[unit.id] or rules_data.token_by_id[unit.id]
-    card(path, pet.name, string.format("%d攻  %d命", unit.attack, unit.health),
-        selected, unit.id, background, rim, mirrored)
+    card(path, pet.name, selected, unit.id, background, rim, mirrored)
+    card_stats(path, unit.attack, unit.health)
     local tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield
         or (not preparing and "L" .. unit.level or ""))
     text(path .. "/Tag", tag, effect and effect.ink or 0x315a6d)
@@ -214,20 +260,25 @@ end
 local function offer_card(path, kind, index)
     local item = offer(kind, index)
     local selected = matches(drag or selection, kind, index)
-    local face = selected and 0xfff4ce or 0xeec786
+    local face = selected and 0xfff4ce or 0xead19a
     local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
-    text(path .. "/Tag", item and item.frozen and "已冻结" or "")
+    show(path .. "/Price", item ~= nil)
+    local frozen = item and item.frozen == true
+    show(path .. "/Tag", frozen or (item ~= nil and kind == "reward"))
+    if frozen then text(path .. "/Tag", "已冻结") end
     if not item then
-        card(path, kind == "reward" and "升级奖励" or "空商品", "", selected, nil, face, rim)
+        card(path, kind == "reward" and "升级奖励" or "空商品", selected, nil, face, rim)
+        card_stats(path)
         return
     end
     local is_food = kind == "food"
     local definition = (is_food and rules_data.food_by_id or rules_data.pet_by_id)[item.id]
     local cost = is_food and rules.food_cost or rules.pet_cost
-    local detail = string.format("%d金  %d攻 %d命", cost, definition.attack, definition.health)
     if kind == "reward" then text(path .. "/Tag", string.format("%d/%d", index, #state.shop.rewards)) end
-    card(path, definition.name, detail, selected, item.id, face, rim)
+    card(path, definition.name, selected, item.id, face, rim)
+    text(path .. "/Price", string.format("%d金", cost))
+    card_stats(path, definition.attack, definition.health, is_food)
 end
 
 local function selected_info(picked)
@@ -261,11 +312,14 @@ local function draw_tooltip(preparing)
     end
     local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
     local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
-    local card_x = control(path):GetAnchoredPosition()
+    local card_x, card_y = control(path):GetAnchoredPosition()
     local x = math.max(-370, math.min(370, card_x))
     caption:SetAnchoredPosition(x < -150 and 452 or -465, 106)
     local beside_team = picked.kind == "team"
-    control("Tooltip"):SetAnchoredPosition(x, beside_team and -18 or -2)
+    local tooltip = control("Tooltip")
+    local _, tooltip_height = tooltip:GetSizeDelta()
+    local _, hit_height = control(path .. "/Hit"):GetSizeDelta()
+    tooltip:SetAnchoredPosition(x, beside_team and card_y - (tooltip_height + hit_height) / 2 - 6 or -2)
     control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, beside_team and 40 or -40)
     local heading, body = selected_info(picked)
     text("Tooltip/Heading", heading)
@@ -294,17 +348,19 @@ end
 local function arrange(preparing)
     if preparing_layout == preparing then return end
     preparing_layout = preparing
-    show("Field/PrepRail", preparing)
-    show("Field/AllyRail", not preparing)
-    show("Field/RivalRail", not preparing)
+    arrange_portraits(preparing)
+    local track_y = preparing and 17 or -15
+    control("Field/PrepRail"):SetAnchoredPosition(0, track_y)
+    control("Field/TrackShadow"):SetAnchoredPosition(0, track_y - 7)
+    show("Field/RivalTrack", not preparing)
     control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
     control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
     control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
     control("Hint"):SetSizeDelta(preparing and 590 or 824, 53)
     for index = 1, rules.team_size do
-        local x, y = 91 + (index - 1) * 112, 67 - (index - 1) * 9
+        local x, y = 82 + (index - 1) * 112, 54
         local team_path = "Team" .. index
-        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 104 or y)
+        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 82 or y)
         show(team_path .. "/Hit", preparing)
         if preparing then show("Enemy" .. index, false) end
     end
@@ -318,7 +374,7 @@ local function draw_battle_cue(event, passed)
     local strike = event and event.type == "attack"
     local impact = event and event.type == "damage"
     local actor = strike and unit_path(event.side, event.slot)
-    if lunging and lunging ~= actor then control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
+    if lunging and lunging ~= actor then portrait_control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
     lunging = actor
     local intensity = math.max(0, 1 - (passed or 0) / 0.28)
     show("BattleFX", impact == true or (strike == true and intensity > 0))
@@ -327,7 +383,7 @@ local function draw_battle_cue(event, passed)
     if strike then
         local direction = event.side == "player" and 1 or -1
         local lunge = direction * 10 * intensity
-        control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
+        portrait_control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
         local x, y = control(actor):GetAnchoredPosition()
         local target_x, target_y = control(unit_path(event.target_side, event.target_slot)):GetAnchoredPosition()
         control("BattleFX/Strike"):SetAnchoredPosition((x + lunge + target_x) / 2, (y + target_y) / 2 + 27 - 118)
@@ -393,7 +449,7 @@ local function draw(refresh)
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
     text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x9c3328 or 0x733b31)
-    text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
+    text("TeamCaption", preparing and "我的阵容 · 右侧前排" or "我方")
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
     text("OpponentCaption", style and (opponent .. " · " .. style) or opponent)
@@ -404,18 +460,20 @@ local function draw(refresh)
     for index = 1, rules.team_size do
         local hit = effect and event.slot == index
         if not preparing then
-            team_card("Enemy" .. index, enemy[index], index, nil, hit and event.side == "enemy" and effect)
+            team_card("Enemy" .. index, enemy[index], nil, hit and event.side == "enemy" and effect)
         end
-        team_card("Team" .. index, player[index], index, matches(drag or selection, "team", index),
+        local path = "Team" .. index
+        team_card(path, player[index], matches(drag or selection, "team", index),
             hit and event.side == "player" and effect)
         local drop = drop_label and drop_source.target == index
-        show("Team" .. index .. "/DropTarget", drop == true)
+        local _, _, legal = drag_feedback(drag and {kind = drag.kind, index = drag.index, merge = drag.merge, target = index})
+        show(path .. "/DropTarget", drop == true or legal ~= nil)
+        if drop or legal then control(path .. "/DropTarget").imageColor = colour(drop and 0x20655e or 0x508774) end
         if drop then
-            show("Team" .. index .. "/XP", false)
-            show("Team" .. index .. "/XPPaper", false)
-            text("Team" .. index .. "/DropLabel", drop_label)
+            show(path .. "/Name", false)
+            text(path .. "/DropLabel", drop_label)
         else
-            show("Team" .. index .. "/DropLabel", false)
+            show(path .. "/DropLabel", false)
         end
     end
     show("Shop", preparing)
@@ -463,6 +521,7 @@ local function draw(refresh)
         show("Battle/Fast", replaying)
         show("Battle/Rewatch", replay_complete and not reviewing)
         show("Battle/NewSeed", state.phase == "ended" and not reviewing)
+        control("Battle/Rewatch"):SetAnchoredPosition(state.phase == "ended" and -111 or 0, -33)
         if replaying then
             title = "跳过回放"
             hint = "可暂停、调整速度或跳到本轮结果"
@@ -534,16 +593,14 @@ local function move_drag_picture(event, target)
     -- Keep the dragged portrait clear of the target portrait and the drop label.
     local picture_width, picture_height = drag.picture:GetSizeDelta()
     local half_width, half_height = picture_width / 2, picture_height / 2
-    local center_x = math.max(half_width, math.min(width - half_width, x))
-    local lift = y + 40
+    local lift = y + 42
     if target then
         local path = "Team" .. target
-        local _, slot_y = control(path):GetAnchoredPosition()
-        local label = control(path .. "/DropLabel")
-        local _, label_y = label:GetAnchoredPosition()
-        local _, label_height = label:GetSizeDelta()
-        lift = math.max(lift, height / 2 + slot_y + label_y + label_height / 2 + half_height + 4)
+        local slot_x, slot_y = control(path):GetAnchoredPosition()
+        x = width / 2 + slot_x + (slot_x > 0 and -88 or 88)
+        lift = height / 2 + slot_y + 72
     end
+    local center_x = math.max(half_width, math.min(width - half_width, x))
     local center_y = math.max(half_height, math.min(height - half_height, lift))
     drag.picture:SetAnchoredPosition(center_x - width / 2, center_y - height / 2)
 end
@@ -910,6 +967,7 @@ end
 local function release_view()
     view_enabled = false
     clear_drag()
+    restore_portraits()
     set_playing(false)
     stop_sound()
     for hit, bound in pairs(listeners) do
@@ -930,7 +988,8 @@ function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
     if not view_root then set_visual_plates(root) end
-    portrait = bind_portrait(control, 1.68)
+    shared_portraits = view_root ~= nil
+    portrait = bind_portrait(portrait_control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1
@@ -968,14 +1027,16 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
     for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/Ground",
-        "Shop/Paper", "Shop/Rail", "Shop/FoodDivider", "Shop/RewardDivider", "TeamCaption",
+        "Field/PrepRail", "Field/TrackShadow", "Field/LeftBrush", "Field/RightBrush", "Field/Foreground", "Field/Pine",
+        "Team1/Front", "Enemy1/Front",
+        "Shop/Paper", "Shop/Rail", "TeamCaption",
         "Battle/Surface", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
         "Menu/Heading"}) do
         show(path, true)
     end
     for _, name in ipairs({"Shade", "Paper", "Heading", "Body"}) do show("Restart/" .. name, true) end
     for _, path in ipairs({"Tooltip/Border", "Tooltip/Paper", "Tooltip/Pointer",
-        "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper", "BattleFX/Strike/Lower",
+        "BattleFX/Strike/Wake", "BattleFX/Strike/Glint", "BattleFX/Strike/Upper",
         "BattleFX/Impact/Burst", "BattleFX/Impact/Flash", "BattleFX/Impact/Spark"}) do show(path, true) end
     for _, path in ipairs({"Round", "Money", "Wins", "Lives"}) do
         show(path, true)
@@ -997,6 +1058,8 @@ end
 function OnDisable()
     view_enabled = false
     clear_drag()
+    restore_portraits()
+    preparing_layout = nil
     press, pending_drop = nil, nil
     sync_updates()
     stop_sound()
