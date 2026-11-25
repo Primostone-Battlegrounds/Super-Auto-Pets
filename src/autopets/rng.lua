@@ -42,8 +42,9 @@ end
 function rng:int(low, high)
     assert(math.type(low) == "integer" and math.type(high) == "integer" and low <= high
         and low >= -range and high <= range, "invalid random integer bounds")
-    local span = high - low + 1
+    local span = high - (low + 0.0) + 1
     assert(span <= range, "random integer span exceeds generator range")
+    span = assert(math.tointeger(span))
 
     local limit = range - range % span
     local value

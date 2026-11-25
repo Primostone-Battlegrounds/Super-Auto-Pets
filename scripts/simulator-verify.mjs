@@ -41,16 +41,27 @@ for(const {canvasId,playerCount} of configurations) {
   const click=trail=>{let c=session.runtime.roots[0];for(const name of trail.split('/')) c=c?.children.find(n=>n.name===name);assert.ok(c,'Missing input '+trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
   const frames=[],runtimeExceptions=[];
   const capture=async name=>{const paths=new Map();const visit=(node,trail)=>{paths.set(node.Id,trail);for(const child of node.children)visit(child,trail?trail+'/'+child.name:child.name);};visit(session.runtime.roots[0],'');const s=api.playSnapshot(session,{inspect:true,paint:true});fs.writeFileSync(path.join(output,prefix+'-'+name+'.json'),JSON.stringify(s));const prepared=await imageAssets.prepare(s.paint);const png=renderPaintPng(s.paint,s.canvasWidth,s.canvasHeight,prepared).data;fs.writeFileSync(path.join(output,prefix+'-'+name+'.png'),png);frames.push({name,assetWarnings:prepared.warnings,sha256:sha256(png),mountError:s.mountError,logs:s.logs.filter(l=>/error/.test(l.level)),visibleTexts:s.paint.filter(p=>p.kind==='textbox').map(p=>({path:paths.get(p.id),name:p.name,text:p.text,textLayout:p.textLayout,left:p.left,bottom:p.bottom,width:p.width,height:p.height}))});return s;};
+  const requireText = (trail, expected) => {
+    const item = frames.at(-1).visibleTexts.find(entry => entry.path === trail);
+    assert.ok(item?.textLayout?.fits && item.textLayout.visibleLineCount > 0, `Missing or clipped text: ${trail}`);
+    assert.match(item.text, expected, trail);
+  };
   try {
   await capture('startup');
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
   if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&playerCount===1) {
+    requireText('Lobby/Title', /小动物自走棋/u);
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);await capture('lobby-fixture');
+    requireText('Lobby/Status', /已进入 1 人/u);
     click('Lobby/Choices/Duel/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,2,1]);await capture('duel-wait-fixture');
+    requireText('Lobby/Feedback', /等待好友/u);
     click('Lobby/Choices/Room/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,1,8,3]);await capture('room-wait-fixture');
+    requireText('Lobby/Feedback', /仍在加载/u);
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');await capture('practice-shop');
+    requireText('Practice/Money/Value', /^10$/u);
+    requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
     for(const [roundIndex,round] of practiceRounds.entries()) {
       for(const [action,from,to] of round.slice(1)) {
@@ -62,12 +73,26 @@ for(const {canvasId,playerCount} of configurations) {
       }
       if(roundIndex===10)await capture('practice-tier-six');
       press('Primary');
-      if(roundIndex===0){await capture('practice-battle');for(let frame=0;frame<120;frame++)api.stepPlay(session,1/60);await capture('practice-replay');}
+      if (roundIndex === 0) {
+        await capture('practice-battle');
+        let strike = false;
+        for (let frame = 0; frame < 75 && !strike; frame++) {
+          api.stepPlay(session, 0.1);
+          strike = api.playSnapshot(session, { paint: true }).paint.some(control => control.name === 'Wake');
+        }
+        assert.ok(strike, 'Authoritative attack did not present its strike animation');
+        await capture('practice-strike');
+        requireText('Practice/Battle/Event', /攻击/u);
+        for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
+        await capture('practice-replay');
+      }
       press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
     }
     const final=await capture('practice-complete');
     assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
+    requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
+    requireText('Practice/Round/Value', /第 1 轮/u);
   }
   if(playerCount>1) {
     // Client-only fixture from the native wire schema. No graph output claimed.
@@ -81,6 +106,7 @@ for(const {canvasId,playerCount} of configurations) {
       if(mode===2){api.sendPlaySignal(session,'AP_DuelSnapshot',[2,player,1,0,false,false,0,1,1,0,0,30,0,5,5,0],target);api.sendPlaySignal(session,'AP_DuelMarket',[1,1,personalMarket],target);}
       else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
       api.setPlayView(session,player);await capture('client-'+player+'-preparation-fixture');
+      requireText(mode === 2 ? 'Duel/MarketGold' : 'Room/Match/Shop/Money', new RegExp('金币 ' + (11 - player) + '(?: |$)', 'u'));
     }
     api.setPlayView(session,1);
     click(mode===2?'Duel/MarketOffers/Buy1':'Room/Match/Shop/Offer1/Hit');
@@ -94,7 +120,10 @@ for(const {canvasId,playerCount} of configurations) {
 const buildPath=path.join(path.dirname(gil),'BUILD.json');
 const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
 if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
-const textDefects=results.flatMap(r=>r.frames.flatMap(f=>f.visibleTexts.filter(t=>t.text.trim()&&(!t.textLayout||t.textLayout.visibleLineCount===0)).map(t=>({canvasId:r.canvasId,frame:f.name,path:t.path,name:t.name,text:t.text,height:t.height,requiredHeight:t.textLayout?.requiredHeight}))));
+const textDefects = results.flatMap(result => result.frames.flatMap(frame => frame.visibleTexts
+  .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))
+  .map(text => ({ canvasId: result.canvasId, frame: frame.name, path: text.path, text: text.text,
+    height: text.height, requiredHeight: text.textLayout?.requiredHeight }))));
 const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status:results.some(r=>r.runtimeExceptions.length||r.frames.some(f=>f.mountError||f.logs.length))?'runtime-failed':textDefects.length?'observed-text-defects':'executed',mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
 fs.writeFileSync(path.join(output,'receipt.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify({status:report.status,output,controls:receipt.controls,results:results.map(r=>({canvasId:r.canvasId,playerCount:r.playerCount,runtimeExceptions:r.runtimeExceptions,frames:r.frames.map(f=>({name:f.name,mountError:f.mountError,errors:f.logs}))}))},null,2));

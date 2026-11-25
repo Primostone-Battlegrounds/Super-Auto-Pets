@@ -2,11 +2,13 @@
 
 面向千星奇域的轻量 2D 多人自走棋。八人吃鸡支持至少一名真人与机器人补位。好友 1v1、单人 AI 练习与好友房间同属首发范围。真人与机器人使用同一套商店、队伍和战斗规则。[产品范围](docs/PRODUCT.md)
 
-## 游戏下载
+## 隔离候选下载
 
 在 [Game delivery](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop) 打开最新成功的 `develop` 运行，从 Summary 下载 `super-auto-pets-<short-sha>.zip`。解压后导入同一个 `super-auto-pets.gil`，可从主菜单进入八人吃鸡、好友 1v1 或单人 AI 练习。下载需要登录 GitHub，产物保留 30 天。校验、构建版本与官方双端操作见包内说明。[导入与验收](platform/GAME.md)
 
 有 Actions 写权限的维护者可在运行页面选择「Re-run all jobs」，按该次运行的原始提交手动重新交付。
+
+候选包用 `BUILD.json` 识别精确版本，用 `ACCEPTANCE.json` 核对各层状态。官方 PC、手机与多人联机按同一个 GIL 分别验收。尚未满足成品门禁的候选供隔离试玩。 [导入与验收](platform/GAME.md)
 
 ## 开发入口
 
@@ -23,4 +25,4 @@
 
 隔离 GIL 从对应 PR 提交的 `Project checks` 产物下载，设备实测按包内步骤记录。[CI 构建和候选包](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/project-checks.yml)
 
-项目版本、研究覆盖和验收参见 [REASONS v1](docs/design/REASONS-v1.md)、[Turtle 覆盖表](docs/design/TURTLE-COVERAGE-v1.md) 和 [QA](docs/QA.md)。[项目权威表](https://docs.google.com/spreadsheets/d/15V7Qj105fAavPajRsUhblu4KC3Zw72T9Q3iad2D6-M4/edit)
+设计版本从唯一清单查询。构建、测试和验收证据均关联对应设计及精确构建。 [设计清单](docs/design/manifest.json) · [QA](docs/QA.md) · [整改复盘](docs/evidence/no-go-retrospective.md)

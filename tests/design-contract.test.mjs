@@ -22,7 +22,7 @@ function fixture(t) {
     fs.writeFileSync(destination, content);
   };
   const manifest = {
-    schema: 1, scope: 'miliastra-game',
+    schema: 1, scope: 'miliastra-game', implementation: 'v2.0.0',
     revisions: {
       'v1.0.0': { status: 'Active', gameVersion: '0.4.0', original: { version: 'older-scope', verification: 'partial' },
         references: [], importedFrom: 'ab73443adee5a2b5b37268779356c2fe67220886' },
@@ -49,6 +49,7 @@ function fixture(t) {
 test('only a matching PR and Backlog can select a proposed candidate', t => {
   const { root, write, base } = fixture(t);
   assert.equal(readDesign(root).designVersion, 'v1.0.0');
+  assert.throws(() => readDesign(root, { selected: 'v1.0.0', forBuild: true }), /does not describe/);
   assert.equal(checkPullRequest(root, pr, base).designStatus, 'Proposed');
   assert.throws(() => readDesign(root, { selected: 'v2.0.0', delivery: true }), /unavailable/);
   assert.throws(() => checkPullRequest(root, 'Work-Item: TASK-1', base), /Design-Version/);
@@ -78,7 +79,7 @@ test('activation requires an independent review that binds the reviewed Git cont
   write('docs/evidence/design-review.md', 'Independent review');
   candidate.approval = {
     reviewer: 'reviewer', author: 'implementer', reviewedRevision: base, designFingerprint: proposed.designFingerprint,
-    evidence: 'docs/evidence/design-review.md',
+    evidence: 'docs/evidence/design-review.md', evidenceSha256: createHash('sha256').update('Independent review').digest('hex'),
   };
   save();
   assert.equal(readDesign(root, { base, delivery: true }).designVersion, 'v2.0.0');
@@ -90,8 +91,9 @@ test('activation requires an independent review that binds the reviewed Git cont
 test('an exact GIL receipt leaves remaining layers pending and disallows stale evidence', t => {
   const { root, base, write } = fixture(t);
   const gil = Buffer.from('example');
-  const build = { ...readDesign(root), sourceRevision: base, sha256: createHash('sha256').update(gil).digest('hex') };
-  assert.deepEqual(checkBuild(root, build, gil), readDesign(root));
+  const design = readDesign(root, { forBuild: true });
+  const build = { ...design, sourceRevision: base, sha256: createHash('sha256').update(gil).digest('hex') };
+  assert.deepEqual(checkBuild(root, build, gil), design);
   assert.throws(() => checkBuild(root, build, Buffer.from('stale')), /GIL SHA-256 mismatch/);
   const content = JSON.stringify(build);
   write('BUILD.json', content);

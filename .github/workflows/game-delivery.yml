@@ -34,6 +34,8 @@ jobs:
           sudo apt-get install -y lua5.4 lua5.3
       - name: Prepare pinned Miliastra MCP
         run: sh platform/setup-tools.sh "$RUNNER_TEMP/miliastra-mcp"
+      - name: Verify Active implementation before delivery
+        run: node scripts/check-design.mjs active-implementation
       - name: Build and verify the game package
         id: build
         env:

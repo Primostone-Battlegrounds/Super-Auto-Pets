@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "scope": "miliastra-game",
+  "implementation": "v2.0.0",
   "revisions": {
     "v1.0.0": {
       "status": "Active",

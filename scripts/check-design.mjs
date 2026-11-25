@@ -11,6 +11,8 @@ if (mode === 'pr') {
 } else if (mode === 'delivery') {
   const build = JSON.parse(fs.readFileSync(path.join(argument, 'BUILD.json')));
   design = checkBuild(root, build, fs.readFileSync(path.join(argument, 'super-auto-pets.gil')), { delivery: true });
+} else if (mode === 'active-implementation') {
+  design = readDesign(root, { delivery: true });
 } else {
   design = readDesign(root, { selected: argument });
 }

@@ -89,6 +89,8 @@ local function receive_lobby(_, values)
         feedback("")
     elseif refusal[reason] then
         feedback(refusal[reason])
+    elseif present == 2 and waiting == 0 and lobby:GetChild("Feedback").text == refusal[1] then
+        feedback("两位玩家已到齐，点好友 1v1 开局。")
     end
     if entering and section == "Lobby" then show_online() end
 end

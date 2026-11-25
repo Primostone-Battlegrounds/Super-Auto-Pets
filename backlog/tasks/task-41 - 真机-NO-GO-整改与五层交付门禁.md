@@ -4,6 +4,7 @@ title: 真机 NO-GO 整改与五层交付门禁
 status: In Progress
 assignee: []
 created_date: '2026-11-25 15:40'
+updated_date: '2026-11-25 15:55'
 labels:
   - device-qa
   - design-v2.0.0
@@ -36,3 +37,9 @@ Design-Version: v2.0.0
 <!-- SECTION:PLAN:BEGIN -->
 并行固定原版及千星参照、制作完整 HTML 原型、修复多人和原生文本、执行 Simulator 与隔离正式构建；统一验证、独立评审候选和画面，再根据门禁集成。
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+开发基线 ab73443adee5a2b5b37268779356c2fe67220886。固定版本 Simulator 复现 989 次零行文字与 Practice 第二轮 string.pack 失败。集成切片已跑通五尺寸各 15 轮练习，处理多人文字后重跑整包。原版 WebGL、官方 PC/手机/多人缺证保持待验。
+<!-- SECTION:NOTES:END -->

@@ -81,13 +81,15 @@ function withoutStatus(entry) {
   return immutable;
 }
 
-export function readDesign(root, { selected, base, delivery = false } = {}) {
+export function readDesign(root, { selected, base, delivery = false, forBuild = false } = {}) {
   const tree = fileTree(root);
   const manifest = readManifest(tree);
   assert.equal(manifest.schema, 1);
   assert.equal(manifest.scope, 'miliastra-game');
   const active = Object.entries(manifest.revisions).filter(([, entry]) => entry.status === 'Active');
   assert.equal(active.length, 1, 'The product scope must have exactly one Active design');
+  assert.ok(['Active', 'Proposed'].includes(manifest.revisions[manifest.implementation]?.status),
+    'The implementation must bind an Active or Proposed design');
 
   const fingerprints = new Map();
   for (const [version, entry] of Object.entries(manifest.revisions)) {
@@ -110,13 +112,17 @@ export function readDesign(root, { selected, base, delivery = false } = {}) {
       continue;
     }
     if (['Active', 'Superseded'].includes(entry.status)) {
-      const { reviewer, author, reviewedRevision, designFingerprint, evidence } = entry.approval ?? {};
+      const { reviewer, author, reviewedRevision, designFingerprint, evidence, evidenceSha256 } = entry.approval ?? {};
       assert.ok(reviewer && author && reviewer !== author, `An independent design reviewer is required: ${version}`);
       assert.match(reviewedRevision ?? '', gitSha);
+      git(root, ['merge-base', '--is-ancestor', reviewedRevision, 'HEAD']);
       assert.equal(designFingerprint, digest, `Approval must cover the exact design assets: ${version}`);
-      assert.equal(fingerprint(fileTree(root, reviewedRevision), version, entry), digest,
+      const reviewed = fileTree(root, reviewedRevision);
+      assert.equal(readManifest(reviewed).revisions[version]?.status, 'Proposed', `Review must cover the proposed design: ${version}`);
+      assert.equal(fingerprint(reviewed, version, entry), digest,
         `Reviewed Git revision contains different design assets: ${version}`);
-      assert.ok(tree.read(checkedPath(evidence)).length > 0, `Missing review record: ${version}`);
+      assert.equal(createHash('sha256').update(tree.read(checkedPath(evidence))).digest('hex'), evidenceSha256,
+        `Independent review record changed: ${version}`);
     }
   }
 
@@ -138,13 +144,14 @@ export function readDesign(root, { selected, base, delivery = false } = {}) {
       }
       for (const [version, entry] of Object.entries(manifest.revisions)) {
         if (entry.status !== 'Active' || previous.revisions[version]?.status === 'Active') continue;
-        assert.ok(!entry.importedFrom && previous.revisions[version]?.status === 'Proposed',
+        assert.ok(!entry.importedFrom && [undefined, 'Proposed'].includes(previous.revisions[version]?.status),
           `Activate a previously proposed design after its independent review: ${version}`);
       }
     }
   }
 
-  const version = selected ?? active[0][0];
+  const version = selected ?? ((forBuild || delivery) ? manifest.implementation : active[0][0]);
+  if (forBuild || delivery) assert.equal(version, manifest.implementation, 'The selected design does not describe this implementation');
   const entry = manifest.revisions[version];
   assert.ok(entry && (entry.status === 'Active' || (!delivery && entry.status === 'Proposed')),
     `Design is unavailable for this execution: ${version}`);
@@ -161,15 +168,20 @@ export function readDesign(root, { selected, base, delivery = false } = {}) {
 export function checkPullRequest(root, body, base) {
   const designLines = [...body.matchAll(/^Design-Version:[ \t]*(v\d+\.\d+\.\d+)[ \t]*\r?$/gm)];
   assert.equal(designLines.length, 1, 'Include exactly one Design-Version field in the PR body');
-  const design = readDesign(root, { selected: designLines[0][1], base });
+  const design = readDesign(root, { selected: designLines[0][1], base, forBuild: true });
   const ids = [...body.matchAll(/^Work-Item:[ \t]*(TASK-\d+)[ \t]*\r?$/gm)].map(match => match[1]);
   assert.ok(ids.length && new Set(ids).size === ids.length, 'Include a Work-Item field for each distinct Backlog task');
-  const tasks = fs.readdirSync(path.join(root, 'backlog/tasks'));
+  const directories = ['backlog/tasks', 'backlog/completed'];
+  const tasks = directories.flatMap(directory => {
+    const folder = path.join(root, directory);
+    return fs.existsSync(folder) ? fs.readdirSync(folder).map(file => ({ directory, file })) : [];
+  });
   for (const id of ids) {
     const prefix = id.toLowerCase();
-    const task = tasks.find(file => file.startsWith(`${prefix} - `) || file === `${prefix}.md`);
-    assert.ok(task, `PR work item is absent from backlog/tasks: ${id}`);
-    const document = fs.readFileSync(path.join(root, 'backlog/tasks', task), 'utf8');
+    const matching = tasks.filter(({ file }) => file.startsWith(`${prefix} - `) || file === `${prefix}.md`);
+    assert.equal(matching.length, 1, `PR work item must resolve exactly once in Backlog: ${id}`);
+    const [task] = matching;
+    const document = fs.readFileSync(path.join(root, task.directory, task.file), 'utf8');
     const labels = [...document.matchAll(/^Design-Version:[ \t]*(v\d+\.\d+\.\d+)[ \t]*\r?$/gm)];
     assert.equal(labels.length, 1, `Include exactly one Design-Version field in ${id}`);
     assert.equal(labels[0][1], design.designVersion, `PR and ${id} use different designs`);
@@ -178,7 +190,7 @@ export function checkPullRequest(root, body, base) {
 }
 
 export function checkBuild(root, build, gil, options) {
-  const design = readDesign(root, options);
+  const design = readDesign(root, { ...options, forBuild: true });
   for (const [key, value] of Object.entries(design)) assert.equal(build[key], value, `Build ${key} mismatch`);
   assert.equal(build.sourceRevision, git(root, ['rev-parse', 'HEAD']).toString().trim(), 'Build Git SHA mismatch');
   assert.match(build.sha256, sha256);

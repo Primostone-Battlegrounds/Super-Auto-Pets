@@ -21,7 +21,7 @@ const project = fileURLToPath(new URL('../../', import.meta.url));
 const git = (directory, args) => execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8' }).trim();
 const sourceRevision = git(project, ['rev-parse', 'HEAD']);
 assert.equal(git(project, ['status', '--porcelain', '--untracked-files=all']), '', 'Build from a clean checkout');
-const design = readDesign(project, { selected: process.env.SAP_DESIGN_VERSION });
+const design = readDesign(project, { selected: process.env.SAP_DESIGN_VERSION, forBuild: true });
 const checkout = fs.realpathSync(checkoutArg);
 const toolRevision = git(checkout, ['rev-parse', 'HEAD']);
 assert.equal(toolRevision, '59c576e41632a6bf6781bbca83a676d0da0374ec');

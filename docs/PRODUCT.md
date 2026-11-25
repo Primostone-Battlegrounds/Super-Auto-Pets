@@ -1,5 +1,7 @@
 # 产品
 
+本页介绍产品范围。当前设计与候选由唯一设计清单标识。 [设计清单](design/manifest.json)
+
 《小动物自走棋》是千星奇域的轻量 2D 多人自走棋。玩家各自经营商店、培养五格阵容，每轮配对进行自动战斗。正式版主打 8 人淘汰赛，同时提供好友 1v1 和独立的单人 AI 练习。好友房间使用千星现有的邀请与入房能力。三种玩法从同一关卡的主菜单进入，里程碑用于研发验收。
 
 | 正式版入口 | 优先级 | 首发范围 |
@@ -20,6 +22,6 @@
 
 首发沿用统一动物池。原神生物志用于内容研究，Standard 用于核对经济、技能触发和战斗结算。美术沿用项目原生控件与原创或已获授权的素材。历史兼容目录和覆盖记录见 [REASONS v1](design/REASONS-v1.md) 与 [Turtle 覆盖表](design/TURTLE-COVERAGE-v1.md)。
 
-Arena 历史阵容、Daily、天梯、赛季和自定义动物包暂缓。里程碑版本由项目总表维护。验收证据按 [QA](QA.md) 记录。[项目总表](https://docs.google.com/spreadsheets/d/15V7Qj105fAavPajRsUhblu4KC3Zw72T9Q3iad2D6-M4/edit)
+Arena 历史阵容、Daily、天梯、赛季和自定义动物包暂缓。Backlog 维护里程碑，验收证据按层记录。 [QA](QA.md)
 
-Draft PR #5 保留早期单人方案、名册样板及制作过程。正式版范围和首发池按本页及当前六阶目录执行。[历史设计稿](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [六阶目录](design/RELEASE-POOL.md)
+Draft PR #5 保留早期单人方案、名册样板及制作过程。首发池对应当前六阶目录。 [历史设计稿](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [六阶目录](design/RELEASE-POOL.md)

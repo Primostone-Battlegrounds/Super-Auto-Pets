@@ -67,6 +67,7 @@ export function checkAcceptance(packageDir, build, report, { requireGo = false }
       unsatisfied.push(layer);
     } else {
       for (const kind of requiredKinds) assert.ok(artifacts.some(artifact => artifact.kind === kind), `Missing ${kind}: ${layer}`);
+      if (layer === 'reference') assert.equal(candidate.originalVersionVerification, 'verified', 'Original version needs independent verification');
       if (layer.startsWith('official')) {
         assert.ok(device?.clientVersion && device?.hardware && device?.observedAt && device?.runId,
           `Missing official device identity: ${layer}`);
@@ -79,6 +80,16 @@ export function checkAcceptance(packageDir, build, report, { requireGo = false }
       assert.ok(!seen.has(file), `Evidence reused across layers: ${artifact.path}`);
       seen.add(file);
       assert.equal(artifact.sha256, sha256(fs.readFileSync(file)), `Evidence checksum mismatch: ${artifact.path}`);
+      if (artifact.kind === 'runtime-receipt') {
+        const runtime = JSON.parse(fs.readFileSync(file));
+        assert.equal(runtime.mapSha256, candidate.sha256);
+        assert.equal(runtime.sourceRevision, candidate.sourceRevision);
+        assert.equal(runtime.designVersion, candidate.designVersion);
+        if (status === 'passed') {
+          assert.equal(runtime.status, 'executed');
+          assert.deepEqual(runtime.textDefects, []);
+        }
+      }
     }
   }
 
