@@ -36,9 +36,11 @@ function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') 
   return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle', autoSize: true, minFontSize: 16 } };
 }
 function card(action, label, position, size, content, { fill, ink, sprite }, fontSize = 18) {
+  const caption = text(label, position, size, content, fontSize, ink);
+  if (sprite) caption.text.outline = false;
   return [
     image(`${action}Face`, position, size, fill, sprite && { image: sprite }),
-    text(label, position, size, content, fontSize, ink),
+    caption,
     { name: action, kind: 'cursorArea', position, size },
   ];
 }
