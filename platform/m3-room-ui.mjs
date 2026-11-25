@@ -22,9 +22,9 @@ function roomLayout(unified) {
     const visualSize = [...size];
     if (unified && art) {
       const team = art === 'team';
-      captionSize[1] = team ? 64 : 46;
-      captionPosition[1] = team ? -25 : -20;
-      visualSize[1] = team ? 114 : 86;
+      captionSize[1] = team ? 64 : 48;
+      captionPosition[1] = team ? -15 : -17;
+      visualSize[1] = team ? 94 : 82;
       fontSize = team ? 15 : 16;
     }
     return group(name, [x, y], visualSize, [

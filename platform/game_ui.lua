@@ -96,7 +96,7 @@ local function online_portraits(duel)
             pictures[slot_id] = {
                 control = picture, shown = false, lunge = 0,
                 replay = {parent = replay, x = lx, y = ly + (duel and 42 or 39)},
-                shop = {parent = shop, x = sx, y = sy + (duel and 22 or 25)},
+                shop = {parent = shop, x = sx, y = sy + (duel and 22 or own and 30 or 25)},
             }
             set_visible(picture, false)
         end

@@ -39,7 +39,7 @@ function card(action, label, position, size, content, { fill, ink, sprite, portr
   const caption = text(label, position, size, content, fontSize, ink);
   if (sprite) caption.text.outline = false;
   if (portrait) {
-    caption.position = [position[0], position[1] - 20];
+    caption.position = [position[0], position[1] - 13];
     caption.size = [size[0], 42];
     caption.text.fontSize = 16;
     caption.text.minFontSize = 14;
