@@ -153,6 +153,18 @@ end
 local function render_market()
     local view = current_market()
     render_ability(view)
+    if badges then
+        for slot = 1, rules.team_size do
+            local name = "InspectTeam" .. slot
+            show_action(name, name .. "Label", preparing and view ~= nil and view.team[slot] ~= nil)
+        end
+        for slot = 1, rules.pet_slots do
+            local name = "InspectPet" .. slot
+            local available = preparing and view ~= nil and view.pets[slot] ~= 0
+            for _, suffix in ipairs({"", "Face", "Label"}) do show(offers:GetChild(name .. suffix), available) end
+        end
+        show_action("InspectReward", "InspectRewardLabel", preparing and view ~= nil and #view.rewards > 0)
+    end
     local shop_badges = badges and preparing
     if shop_badges then
         badges.select("shop", offers, function(slot)
@@ -245,7 +257,9 @@ local function render_market()
         if portrait then
             local animal = unit and native_catalog.pets[unit.code]
             portrait.shop(slot, animal and animal.id)
-            child("Team" .. slot .. "Face").imageColor = slot == picked and Color(228, 176, 94, 255) or Color(117, 140, 93, 255)
+            local face = slot == picked and Color(228, 176, 94, 255)
+                or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
+            child("Team" .. slot .. "Face").imageColor = face
             if shop_badges then badges.paint(slot, unit and unit.attack, unit and unit.health) end
         end
         if unit then
@@ -407,7 +421,7 @@ local function show_replay()
             if replay_badges then badges.paint((side - 1) * rules.team_size + slot, unit and unit.attack, unit and unit.health) end
             if portrait then
                 local attacking = unit and event.type == "attack" and event.uid == unit.uid and event.side == key
-                portrait.replay(path, unit and unit.id, side == 2, attacking)
+                portrait.replay(path, unit and unit.id, side == 2, attacking, true)
             end
         end
     end

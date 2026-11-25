@@ -134,9 +134,9 @@ export function duelLayout(rule, includeProbeButtons = false) {
         '等待服务端响应', 27, statusInk),
       ...(includeProbeButtons ? [marketGold, ...stock] : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: [
-          image('ShopSky', [0, 130], [1064, 228], '#c4dcc0'),
-          image('GroveLeft', [-288, 135], [486, 174], '#e4eee0', { image: 105135 }),
-          image('GroveRight', [298, 128], [458, 170], '#fff3da', { image: 105136 }),
+          image('ShopSky', [0, 130], [1064, 228], clearing.sky),
+          image('GroveLeft', [-419, 113], [214, 91], '#f6fbec', { image: 105135 }),
+          image('GroveRight', [440, 114], [175, 105], '#fff9e5', { image: 105136 }),
           image('ShopGround', [0, -29], [1064, 182], clearing.ground),
           labelFront('TeamFront', [252, 189], '前排 ›'),
           ...stock,
@@ -166,15 +166,15 @@ export function duelLayout(rule, includeProbeButtons = false) {
       { name: 'ReplayBoard', kind: 'container', position: [0, includeProbeButtons ? 90 : 83],
         size: includeProbeButtons ? [900, 210] : [1064, 300], visible: false, children: [
         ...(!includeProbeButtons ? [
-          image('Meadow', [0, 0], [1064, 300], clearing.sky),
-          image('Canopy', [284, 58], [480, 170], '#fff3da', { image: 105136 }),
+          image('Meadow', [0, 0], [1064, 300], clearing.grass),
+          image('Canopy', [-377, 94], [236, 100], '#f6fbec', { image: 105135 }),
         ] : []),
         ...(includeProbeButtons ? [
           image('Ally', [-225, 0], [440, 200], '#335b44'),
           image('Enemy', [225, 0], [440, 200], '#605432'),
         ] : [
-          image('Ally', [-265, 57], [504, 173], '#e4eee0', { image: 105135 }),
-          image('Enemy', [0, -51], [1064, 198], clearing.grass),
+          terrain('Enemy', [197, 4], [660, 156], clearing.enemyLane),
+          terrain('Ally', [-197, 10], [660, 156], clearing.ownLane),
           labelFront('OwnFront', [-68, 88], '席1前排 ›'),
           labelFront('EnemyFront', [68, 88], '‹ 席2前排'),
           onlineBadgePool(),

@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import { group, image, label, pigment } from './m1-ui.mjs';
 
 export const clearingColours = {
-  sky: '#8fbdad', grove: '#648e63', groveLight: '#799e68', grass: '#9db871', ground: '#d3a969',
-  farTrack: '#caad72', nearTrack: '#b68b53', recess: '#758c5d', teal: '#2d6260', ink: '#233936',
+  sky: '#c4ddc9', grass: '#9cb778', ground: '#d3a969', ownLane: '#8ca76a', enemyLane: '#b2b379',
+  farTrack: '#caad72', nearTrack: '#b68b53', recess: '#506b4c', teal: '#2d6260', ink: '#233936',
 };
 
 export function labelFront(name, position, content) {
@@ -71,11 +71,20 @@ local function bind_online_badges(pool)
         pool:SetVisible(true)
         state = phase
     end
+    local function stat_text(prefix, value, sign)
+        if value == nil then return nil end
+        if state == "replay" and math.abs(value) >= 100 then
+            local digits = tostring(value)
+            local size = math.floor(42 / #digits)
+            return "<size=10>" .. prefix .. "</size><size=" .. size .. ">" .. digits .. "</size>"
+        end
+        return prefix .. sign .. value
+    end
     local function paint(slot, attack, life, price, bonus)
         local field = fields[slot]
         local sign = bonus and "+" or ""
-        set(field[1], attack ~= nil and ("攻" .. sign .. attack) or nil)
-        set(field[2], life ~= nil and ("命" .. sign .. life) or nil)
+        set(field[1], stat_text("攻", attack, sign))
+        set(field[2], stat_text("命", life, sign))
         if field[3] then set(field[3], price ~= nil and (price .. " 金") or nil) end
     end
     return {select = select, hide = hide, paint = paint, restore = function()

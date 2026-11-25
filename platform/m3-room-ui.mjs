@@ -78,8 +78,8 @@ function roomLayout(unified) {
         group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
           ...(unified ? [
             image('Sky', [0, 31], [828, 326], clearing.sky),
-            image('GroveLeft', [-208, 113], [410, 168], '#e4eee0', { image: 105135 }),
-            image('GroveRight', [206, 109], [407, 156], '#fff3da', { image: 105136 }),
+            image('GroveLeft', [-300, 100], [214, 91], '#f6fbec', { image: 105135 }),
+            image('GroveRight', [322, 97], [171, 104], '#fff9e5', { image: 105136 }),
             image('Turf', [0, -53], [828, 158], clearing.ground),
             labelFront('TeamFront', [334, 171], '前排 ›'),
           ] : []),
@@ -102,16 +102,16 @@ function roomLayout(unified) {
           label('AbilityBody', [0, unified ? -155 : -215], [810, 38], '', unified ? 20 : 17, pigment.ink, 'left'),
         ], false),
         group('Replay', [0, 10], [832, unified ? 426 : 370], [
-          label('RoundText', [0, unified ? 164 : 144], [800, 66], '', unified ? 25 : 23, pigment.ink, 'left'),
           ...(unified ? [
-            image('Meadow', [0, 44], [820, 216], clearing.sky),
-            image('Canopy', [202, 77], [416, 147], '#fff3da', { image: 105136 }),
+            image('Meadow', [0, 28], [820, 216], clearing.grass),
+            image('Canopy', [-296, 90], [218, 91], '#f6fbec', { image: 105135 }),
           ] : []),
+          label('RoundText', [0, unified ? 173 : 144], [800, unified ? 58 : 66], '', 23, pigment.ink, 'left'),
           ...(unified ? [
-            image('Ally', [-193, 71], [436, 152], '#e4eee0', { image: 105135 }),
-            image('Enemy', [0, -4], [820, 122], clearing.grass),
-            labelFront('OwnFront', [-65, 123], '己方前排 ›'),
-            labelFront('EnemyFront', [65, 123], '‹ 对方前排'),
+            terrain('Enemy', [130, 27], [560, 114], clearing.enemyLane),
+            terrain('Ally', [-130, 32], [560, 114], clearing.ownLane),
+            labelFront('OwnFront', [-65, 113], '己方前排 ›'),
+            labelFront('EnemyFront', [65, 113], '‹ 对方前排'),
           ] : [
             image('Ally', [-207, 24], [403, 143], pigment.rail),
             image('Enemy', [207, 24], [403, 143], pigment.opposingRail),

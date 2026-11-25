@@ -119,6 +119,7 @@ local function paint_shop()
         end
         local offer = "售罄"
         if badges then
+            if is_pet then visible("Shop/InspectOffer" .. slot, item ~= nil) end
             local cost = is_pet and native_catalog.rules.pet_cost or native_catalog.rules.food_cost
             badges.paint(5 + slot, item and item.attack, item and item.health, item and cost, not is_pet)
             if item then offer = item.name end
@@ -138,9 +139,10 @@ local function paint_shop()
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
         local stats = ""
         if badges then
+            visible("Shop/InspectTeam" .. slot, unit ~= nil)
             badges.paint(slot, unit and unit.attack, unit and unit.health)
             object("Shop/Team" .. slot .. "/Surface").imageColor =
-                picked == slot and Color(228, 176, 94, 255) or Color(117, 140, 93, 255)
+                picked == slot and Color(228, 176, 94, 255) or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
             name = unit and (name .. " · L" .. unit.level) or ""
         elseif unit then
             local values = portrait and replay_view.combat_values(unit.attack, unit.health)
@@ -151,6 +153,7 @@ local function paint_shop()
     end
     reward = math.min(reward, math.max(#preview.rewards, 1))
     local item = pets[preview.rewards[reward]]
+    if badges then visible("Shop/InspectReward", item ~= nil) end
     text("Shop/Reward/Text", item and string.format("%s %d/%d", item.name, reward, #preview.rewards) or "暂无升级奖励")
     text("Shop/Merge/Text", merge and "取消合并" or "合并队员")
 end
@@ -162,6 +165,10 @@ local function paint_battle()
         visible("Replay/" .. name, has_frame)
     end
     visible("Replay/Auto", has_frame and frame.event ~= nil)
+    if badges then
+        visible("Replay/OwnFront", has_frame)
+        visible("Replay/EnemyFront", has_frame)
+    end
     if has_frame and frame.event then
         text("Replay/Auto/Text", replay_playing and "暂停" or frame_index == #frames and "重播" or "继续")
     end
@@ -237,7 +244,7 @@ local function paint_battle()
             end
             text("Replay/" .. name .. slot, display)
             if badges then badges.paint(name == "Own" and slot or 5 + slot, attack, life) end
-            if portrait then portrait.replay(name .. slot, id, name == "Enemy", attacking) end
+            if portrait then portrait.replay(name .. slot, id, name == "Enemy", attacking, true) end
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
