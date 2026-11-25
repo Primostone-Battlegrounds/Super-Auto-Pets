@@ -358,7 +358,7 @@ local function arrange(preparing)
     for index = 1, rules.team_size do
         local x, y = 82 + (index - 1) * 112, 54
         local team_path = "Team" .. index
-        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 104 or y)
+        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 82 or y)
         show(team_path .. "/Hit", preparing)
         if preparing then show("Enemy" .. index, false) end
     end
