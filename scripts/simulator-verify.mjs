@@ -35,13 +35,15 @@ const canvases=['pc-16-9','pc-21-9','mobile-16-9','mobile-19.5-9','mobile-4-3'];
 const configurations=canvases.map(canvasId=>({canvasId,playerCount:1}));
 if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
   configurations.push(
+    { canvasId: 'pc-16-9', playerCount: 2, mode: 2 },
+    { canvasId: 'pc-16-9', playerCount: 2, mode: 8 },
     { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
     { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
   );
 }
 for(const {canvasId,playerCount,mode} of configurations) {
-  const prefix = mode ? `${canvasId}-${playerCount}clients` : canvasId;
+  const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
   const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,canvasId,playerCount,language:'zh-CN'});
   const inputs=[];
   const control = trail => {
@@ -149,9 +151,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     // Round-one deterministic receipt for Player1 against seat 2. The simulator
     // supplies wire values while the GIL client verifies and resolves them.
     const replaySignal = duel ? 'AP_DuelReplay' : 'AP_RoomReplay';
-    const sendReplay = outcome => api.sendPlaySignal(session, replaySignal, duel
+    const sendReplay = (outcome, target = 'Player1') => api.sendPlaySignal(session, replaySignal, duel
       ? [1, 42, outcome, [1, 1, 5, 8, 1], [2, 2, 1, 4, 1]]
-      : [1, 1, 2, outcome, 42, [1, 1, 1, 5, 8, 1, 0], [1, 2, 2, 1, 4, 1, 0]], 'Player1');
+      : [1, 1, 2, outcome, 42, [1, 1, 1, 5, 8, 1, 0], [1, 2, 2, 1, 4, 1, 0]], target);
     if (duel) {
       api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 3, true, false, 0, 2, 2, 0, 0, 0, 0, 5, 5, 0], 'Player1');
     } else {
@@ -166,6 +168,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
 
     const eventTrail = duel ? 'Duel/ReplayStatus' : 'Room/Match/Replay/Event';
     const eventId = control(eventTrail).Id;
+    const renderedEvent = () => api.playSnapshot(session, { paint: true }).paint.find(item => item.id === eventId)?.text;
     const expectEvents = [
       ['attack', /芦纹龟.*出击.*烟尾雨燕/u],
       ['damage', /烟尾雨燕.*-5命.*余0命/u],
@@ -174,15 +177,33 @@ for(const {canvasId,playerCount,mode} of configurations) {
     ];
     for (let frame = 0; frame < 200 && expectEvents.length; frame++) {
       const [name, pattern] = expectEvents[0];
-      const eventText = api.playSnapshot(session, { paint: true }).paint.find(item => item.id === eventId)?.text;
+      const eventText = renderedEvent();
       if (eventText && pattern.test(eventText)) {
         await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
+        if (name === 'attack') {
+          const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
+          click(playback);
+          for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
+          assert.equal(renderedEvent(), eventText, 'Paused playback changed the rendered event');
+          click(playback);
+        }
         expectEvents.shift();
       }
       api.stepPlay(session, 0.05);
     }
     assert.deepEqual(expectEvents.map(([name]) => name), [], 'Replay must visibly progress through authority-derived phases');
+    if (!duel && playerCount > 1) {
+      api.sendPlaySignal(session, 'AP_RoomView', [2, 3, 1, 2, 2, playerCount, 0, true,
+        Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player2');
+      sendReplay(1, 'Player2');
+      api.setPlayView(session, 2);
+      click('Room/Match/Replay/Follow/Hit');
+      await capture('client-2-replay-loss');
+      requireText('Room/Match/Replay/RoundText', /本轮落败/u);
+      requireText(eventTrail, /对方胜利/u);
+      api.setPlayView(session, 1);
+    }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     await capture('client-1-return');
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
