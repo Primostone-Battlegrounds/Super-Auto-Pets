@@ -146,7 +146,8 @@ export function duelLayout(rule, includeProbeButtons = false) {
           return card(name, `${name}Label`, positions[index], index < 2 ? [161, 45] : [116, 44], content, secondaryStyle);
         }),
       ...card('InspectReward', 'InspectRewardLabel', includeProbeButtons ? [-414, -326] : [431, 23],
-        includeProbeButtons ? [136, 44] : [186, 46], '查看奖励技能', includeProbeButtons ? inspectStyle : navy, 18),
+        includeProbeButtons ? [136, 44] : [186, 46], '查看奖励技能', includeProbeButtons ? inspectStyle : navy,
+        includeProbeButtons ? 17 : 18),
       text('AbilityTitle', includeProbeButtons ? [75, -309] : [431, 184],
         includeProbeButtons ? [800, 30] : [188, 62], '点动物旁的「技能」查看，购买操作保持不变',
         includeProbeButtons ? 19 : 21, includeProbeButtons ? statusInk : accentInk),
