@@ -35,43 +35,57 @@ export const duelProbeButtons = [
 function text(name, position, size, content, fontSize = 23, colour = '#fff3d7') {
   return { name, kind: 'text', position, size, text: { content, fontSize, colour, align: 'centre', valign: 'middle', autoSize: true, minFontSize: 16 } };
 }
-function card(action, label, position, size, content, colour, fontSize = 18) {
+function card(action, label, position, size, content, { fill, ink, sprite }, fontSize = 18) {
   return [
-    { name: `${action}Face`, kind: 'image', position, size, image: 100001, colour },
-    text(label, position, size, content, fontSize),
+    image(`${action}Face`, position, size, fill, sprite && { image: sprite }),
+    text(label, position, size, content, fontSize, ink),
     { name: action, kind: 'cursorArea', position, size },
   ];
 }
-function inspectable(action, label, position, size, content, colour, inspect, fontSize = 18) {
-  const controls = card(action, label, position, size, content, colour, fontSize);
+function inspectable(action, label, position, size, style, inspect, inspectStyle, fontSize = 18) {
+  const controls = card(action, label, position, size, '', style, fontSize);
   controls[1].position = [position[0] - 22, position[1]];
   controls[1].size = [size[0] - 44, size[1]];
   controls[2].position = [position[0] - 22, position[1]];
   controls[2].size = [size[0] - 44, size[1]];
   return [...controls, ...card(inspect, `${inspect}Label`, [position[0] + size[0] / 2 - 22, position[1]],
-    [44, size[1]], '技能', '#416c59', 16)];
+    [44, size[1]], '技能', inspectStyle, 16)];
 }
+
+const plain = fill => ({ fill });
+const parchment = fill => ({ fill, ink: '#243c3b', sprite: 107102 });
+const gold = { fill: '#ffffff', ink: '#372917', sprite: 107015 };
+
 export function duelLayout(rule, includeProbeButtons = false) {
   const script = 'm2_probe';
+  const teamStyle = includeProbeButtons ? plain('#335b44') : parchment('#dcecd7');
+  const petStyle = includeProbeButtons ? plain('#335b44') : parchment('#fff4d9');
+  const foodStyle = includeProbeButtons ? plain('#605432') : parchment('#f8dbb3');
+  const secondaryStyle = includeProbeButtons ? plain('#286452') : parchment('#e8f2e4');
+  const inspectStyle = includeProbeButtons ? plain('#416c59') : parchment('#b8d9c8');
+  const statusInk = includeProbeButtons ? '#fff3d7' : '#fff7de';
+  const accentInk = includeProbeButtons ? '#ffd887' : '#ffda98';
   const stock = Array.from({ length: rule.PET_SLOTS + rule.FOOD_SLOTS }, (_, index) => {
     const x = (index - 2) * 190;
     const pet = index < rule.PET_SLOTS;
     const slot = index + 1 - (pet ? 0 : rule.PET_SLOTS);
     const name = pet ? 'Pet' : 'Food';
+    const position = [x, 42];
+    const size = [174, 66];
     return [
-      ...(pet ? inspectable : card)(`${pet ? 'Buy' : 'Food'}${slot}`, `${pet ? 'Offer' : 'Food'}Label${slot}`, [x, 42], [174, 66], '',
-        pet ? '#335b44' : '#605432', ...(pet ? [`InspectPet${slot}`] : [])),
-      ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, -13], [174, 44], '冻结', '#286452', 19),
+      ...(pet ? inspectable(`Buy${slot}`, `OfferLabel${slot}`, position, size, petStyle, `InspectPet${slot}`, inspectStyle)
+        : card(`Food${slot}`, `FoodLabel${slot}`, position, size, '', foodStyle)),
+      ...card(`Freeze${name}${slot}`, `Freeze${name}Label${slot}`, [x, -13], [174, 44], '冻结', secondaryStyle, 19),
     ];
   }).flat();
   const teamCards = Array.from({ length: rule.TEAM_SIZE }, (_, index) => inspectable(`Team${index + 1}`, `TeamLabel${index + 1}`,
-    [(2 - index) * 190, 120], [174, 56], '', '#335b44', `InspectTeam${index + 1}`, 20));
+    [(2 - index) * 190, 120], [174, 56], teamStyle, `InspectTeam${index + 1}`, inspectStyle, 20));
   const shopActions = [['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']];
   const shopButtons = shopActions.flatMap(([name, content], index) => {
     if (!includeProbeButtons && (name === 'Reroll' || name === 'Ready')) {
-      return card(name, `${name}Label`, [name === 'Reroll' ? -315 : 315, -201], [206, 82], content, pigment.primary, 23);
+      return card(name, `${name}Label`, [name === 'Reroll' ? -315 : 315, -201], [206, 82], content, gold, 24);
     }
-    return card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452');
+    return card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, secondaryStyle);
   });
   return {
     name: 'AP_DuelProbe',
@@ -79,23 +93,24 @@ export function duelLayout(rule, includeProbeButtons = false) {
     showCursor: true,
     blockCursor: false,
     controls: [
-      { name: 'Background', kind: 'image', position: [0, 0], size: [1000, includeProbeButtons ? 710 : 640], image: 100001, colour: '#193931' },
-      text('Status', [0, 257], [900, 66], '等待服务端响应', 27),
-      text('MarketGold', [0, 204], [900, 42], '', 25, '#ffd887'),
+      image('Background', [0, 0], [1000, includeProbeButtons ? 710 : 640], includeProbeButtons ? '#193931' : '#214943'),
+      text('Status', [0, 257], [900, 66], '等待服务端响应', 27, statusInk),
+      text('MarketGold', [0, 204], [900, 42], '', includeProbeButtons ? 25 : 27, accentInk),
       ...(includeProbeButtons ? stock : [
         { name: 'MarketOffers', kind: 'container', size: [1200, 690], children: stock },
       ]),
-      text('Team', [0, 165], [900, 32], '', 21),
+      text('Team', [0, 165], [900, 32], '', 21, statusInk),
       ...teamCards.flatMap(cards => cards.slice(0, 3)),
       { name: 'TeamInspection', kind: 'container', position: [0, 0], size: [1200, 690], children: teamCards.flatMap(cards => cards.slice(3)) },
       ...shopButtons,
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
-        .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -118], [208, 52], content, '#286452')),
+        .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -118], [208, 52], content, secondaryStyle)),
       ...card('InspectReward', 'InspectRewardLabel', includeProbeButtons ? [-414, -326] : [0, -218],
-        includeProbeButtons ? [136, 44] : [176, 44], '查看奖励技能', '#416c59', 17),
+        includeProbeButtons ? [136, 44] : [176, 44], '查看奖励技能', inspectStyle, 17),
       text('AbilityTitle', includeProbeButtons ? [75, -309] : [0, -258],
-        [includeProbeButtons ? 800 : 940, 30], '点动物旁的「技能」查看，购买操作保持不变', 19),
-      text('AbilityBody', includeProbeButtons ? [75, -339] : [0, -292], [includeProbeButtons ? 800 : 940, 40], '', 18),
+        [includeProbeButtons ? 800 : 940, 30], '点动物旁的「技能」查看，购买操作保持不变', 19,
+        includeProbeButtons ? statusInk : accentInk),
+      text('AbilityBody', includeProbeButtons ? [75, -339] : [0, -292], [includeProbeButtons ? 800 : 940, 40], '', 18, statusInk),
       { name: 'ReplayBoard', kind: 'container', position: [0, 90], size: [900, 210], visible: false, children: [
         image('Ally', [-225, 0], [440, 200], includeProbeButtons ? '#335b44' : pigment.rail),
         image('Enemy', [225, 0], [440, 200], includeProbeButtons ? '#605432' : pigment.opposingRail),
@@ -104,8 +119,8 @@ export function duelLayout(rule, includeProbeButtons = false) {
           text(`Enemy${index + 1}`, [45 + index * 87, 0], [82, 178], '', 16, includeProbeButtons ? '#fff3d7' : pigment.ink),
         ]).flat(),
       ] },
-      text('ReplayStatus', [-75, -170], [774, 50], '', 18),
-      ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', '#335b44'),
+      text('ReplayStatus', [-75, -170], [774, 50], '', 18, statusInk),
+      ...card('Replay', 'ReplayLabel', [405, -170], [116, 44], '回放', teamStyle),
       ...(includeProbeButtons ? duelProbeButtons : []).map(({ label, position }, index) => text(`NativeLegend${index + 1}`,
         [position[0], position[1] - 50], [140, 30], label, 18)),
     ],

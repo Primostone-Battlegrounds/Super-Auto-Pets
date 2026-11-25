@@ -4,23 +4,6 @@ import { group, image, label, pigment } from './m1-ui.mjs';
 import { bundleBattleReplay } from './m1-bundle.mjs';
 import { standingsLayout } from './multiplayer-standings.mjs';
 
-function button(name, x, y, width, height, text, primary = false, fontSize = 17) {
-  return group(name, [x, y], [width, height], [
-    image('Surface', [0, 0], [width, height], primary ? pigment.primary : pigment.chip),
-    label('Text', [0, 0], [width - 10, height], text, fontSize, primary ? pigment.cream : pigment.ink),
-    { name: 'Hit', kind: 'cursorArea', size: [width, height] },
-  ]);
-}
-
-function inspectable(name, inspect, x, y, width, height) {
-  const inspectWidth = 48;
-  const main = button(name, x, y, width, height, '');
-  main.children.find(c => c.name === 'Text').position = [-inspectWidth / 2, 0];
-  main.children.find(c => c.name === 'Text').size = [width - inspectWidth - 10, height];
-  main.children.find(c => c.name === 'Hit').position = [-inspectWidth / 2, 0];
-  main.children.find(c => c.name === 'Hit').size = [width - inspectWidth, height];
-  return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height, '技能')];
-}
 const slots = [1, 2, 3, 4, 5];
 const slotX = slot => (slot - 3) * 162;
 const shopActionsY = -276;
@@ -29,57 +12,83 @@ const browse = [
   ['RewardNext', '下个奖励'],
 ];
 
-const roomLayout = unified => ({
-  name: 'AP_Room',
-  script: 'm3_room_ui',
-  showCursor: true,
-  blockCursor: true,
-  blockKeys: true,
-  controls: [
-    group('Match', [-139, 0], [866, 642], [
-      image('Border', [0, 0], [866, 642], pigment.edge),
-      image('Paper', [0, 0], [860, 636], pigment.canvas),
-      label('Heading', [-207, 276], [412, 54], '八席淘汰赛', 33, pigment.ink, 'left'),
-      label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
-      group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
-        label('Money', [0, 160], [810, 36], '', 22, pigment.ink, 'left'),
-        ...slots.flatMap(slot => [
-          ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80)
-            : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '')]),
-          button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
-          ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), 94, 154, 76),
-        ]),
-        ...browse.flatMap(([name, text], index) => {
-          if (unified && name === 'Reroll') return [button(name, -310, shopActionsY, 206, 82, text, true, 23)];
-          const x = unified ? (index - 2.5) * 192 : slotX(index + 1);
-          return name === 'Reward' ? inspectable(name, 'InspectReward', x, -135, 154, 52)
-            : [button(name, x, -135, 154, 52, text)];
-        }),
-        label('AbilityTitle', [0, -182], [810, 28], '点动物旁的「技能」查看', 18, pigment.ink, 'left'),
-        label('AbilityBody', [0, -215], [810, 38], '', 17, pigment.ink, 'left'),
-      ], false),
-      group('Replay', [0, 10], [832, 370], [
-        label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
-        image('Ally', [-207, 24], [403, 143], pigment.rail),
-        image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
-        ...slots.flatMap(slot => [
-          label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
-          label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
-        ]),
-        label('Event', [0, -72], [800, 50], '', 18, pigment.ink),
-        ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
-          .map(([name, text], index) => button(name, (index - 1.5) * 202, -133, 188, 52, text)),
-      ], false),
-      unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),
-      unified ? button('Ready', 310, shopActionsY, 206, 82, '准备 · F', true, 23)
-        : button('Ready', -131, -254, 182, 48, '准备 · F', true),
-      unified ? button('Forfeit', 327, 276, 164, 48, '认输') : button('Forfeit', 327, -254, 164, 48, '认输'),
-      label('Hint', [0, unified ? shopActionsY : -302], unified ? [388, 72] : [810, 32], '正在读取房间状态',
-        unified ? 20 : 17, pigment.muted, unified ? 'centre' : 'left'),
-    ]),
-    standingsLayout('room', { position: [452, 0] }),
-  ],
-});
+function roomLayout(unified) {
+  function button(name, x, y, width, height, text, primary = false, fontSize = 17, fill = pigment.chip) {
+    const size = [width, height];
+    const surface = unified ? image('Surface', [0, 0], size, primary ? '#ffffff' : fill, { image: primary ? 107015 : 107102 })
+      : image('Surface', [0, 0], size, primary ? '#206258' : pigment.chip);
+    return group(name, [x, y], size, [
+      surface,
+      label('Text', [0, 0], [width - 10, height], text, fontSize, primary ? (unified ? '#372917' : pigment.cream) : pigment.ink),
+      { name: 'Hit', kind: 'cursorArea', size },
+    ]);
+  }
+
+  function inspectable(name, inspect, x, y, width, height, fill = pigment.chip) {
+    const inspectWidth = 48;
+    const main = button(name, x, y, width, height, '', false, 17, fill);
+    main.children.find(c => c.name === 'Text').position = [-inspectWidth / 2, 0];
+    main.children.find(c => c.name === 'Text').size = [width - inspectWidth - 10, height];
+    main.children.find(c => c.name === 'Hit').position = [-inspectWidth / 2, 0];
+    main.children.find(c => c.name === 'Hit').size = [width - inspectWidth, height];
+    return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height,
+      '技能', false, unified ? 16 : 17, '#b8d9c8')];
+  }
+
+  return {
+    name: 'AP_Room',
+    script: 'm3_room_ui',
+    showCursor: true,
+    blockCursor: true,
+    blockKeys: true,
+    controls: [
+      group('Match', [-139, 0], [866, 642], [
+        image('Border', [0, 0], [866, 642], pigment.edge),
+        image('Paper', [0, 0], [860, 636], pigment.canvas),
+        label('Heading', [-207, 276], [412, 54], '八席淘汰赛', unified ? 35 : 33, pigment.ink, 'left'),
+        label('Status', [0, 225], [820, 42], '连接房间中', 23, pigment.ink, 'left'),
+        group('Shop', [0, unified ? 0 : 10], [832, unified ? 640 : 470], [
+          label('Money', [0, 160], [810, 36], '', unified ? 23 : 22, pigment.ink, 'left'),
+          ...slots.flatMap(slot => [
+            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, 80, '#fff4d9')
+              : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '', false, 17, '#f8dbb3')]),
+            button(`Freeze${slot}`, slotX(slot), -74, 154, 48, '冻结'),
+            ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), 94, 154, 76, pigment.rail),
+          ]),
+          ...browse.flatMap(([name, text], index) => {
+            if (unified && name === 'Reroll') return [button(name, -310, shopActionsY, 206, 82, text, true, 24)];
+            const x = unified ? (index - 2.5) * 192 : slotX(index + 1);
+            return name === 'Reward' ? inspectable(name, 'InspectReward', x, -135, 154, 52)
+              : [button(name, x, -135, 154, 52, text)];
+          }),
+          label('AbilityTitle', [0, -182], [810, 28], '点动物旁的「技能」查看', unified ? 19 : 18,
+            unified ? '#65441d' : pigment.ink, 'left'),
+          label('AbilityBody', [0, -215], [810, 38], '', 17, pigment.ink, 'left'),
+        ], false),
+        group('Replay', [0, 10], [832, 370], [
+          label('RoundText', [0, 144], [800, 66], '', 23, pigment.ink, 'left'),
+          image('Ally', [-207, 24], [403, 143], pigment.rail),
+          image('Enemy', [207, 24], [403, 143], pigment.opposingRail),
+          ...slots.flatMap(slot => [
+            label(`Own${slot}`, [-48 - (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
+            label(`Enemy${slot}`, [48 + (slot - 1) * 80, 24], [78, 112], '', 14, pigment.ink),
+          ]),
+          label('Event', [0, -72], [800, 50], '', unified ? 20 : 18, unified ? '#65441d' : pigment.ink),
+          ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
+            .map(([name, text], index) => button(name, (index - 1.5) * 202, -133, 188, 52, text,
+              unified && name === 'Auto', unified ? 18 : 17)),
+        ], false),
+        unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),
+        unified ? button('Ready', 310, shopActionsY, 206, 82, '准备 · F', true, 24)
+          : button('Ready', -131, -254, 182, 48, '准备 · F', true),
+        unified ? button('Forfeit', 327, 276, 164, 48, '认输') : button('Forfeit', 327, -254, 164, 48, '认输'),
+        label('Hint', [0, unified ? shopActionsY : -302], unified ? [388, 72] : [810, 32], '正在读取房间状态',
+          unified ? 20 : 17, pigment.muted, unified ? 'centre' : 'left'),
+      ]),
+      standingsLayout('room', { position: [452, 0], themed: unified }),
+    ],
+  };
+}
 
 export const m3RoomLayout = roomLayout(false);
 export const unifiedRoomLayout = roomLayout(true);
