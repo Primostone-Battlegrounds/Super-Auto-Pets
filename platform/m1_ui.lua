@@ -1,6 +1,7 @@
 local rules_data = native_catalog
 local run = require("autopets.run")
 local art = require("autopets.art")
+local bind_portrait = require("autopets.native_portrait")
 local animal_ability = require("autopets.animal_ability")
 local root
 local view_enabled = false
@@ -28,7 +29,8 @@ local menu_open, has_started = true, false
 local difficulty
 local confirming_restart
 local reward_index, event_index = 1, 1
-local listeners, controls, portraits = {}, {}, {}
+local listeners, controls = {}, {}
+local portrait
 local visibility, displayed_text, displayed_colour = {}, {}, {}
 local playing, elapsed, replay_speed = false, 0, 1
 local replay_complete, reviewing = false, false
@@ -93,29 +95,6 @@ local function play_sound(sound)
     if ok and math.type(instance) == "integer" then sound_instance = instance end
 end
 
-local function portrait(path, id, mirrored)
-    local key = id and (id .. (mirrored and ":left" or ":right")) or false
-    if portraits[path] == key then return end
-    portraits[path] = key
-    local base = path .. "/Portrait"
-    local layers = id and assert(art[id], id) or {}
-    show(base, true)
-    for index = 1, portrait_layers do
-        local layer_path = base .. "/Layer" .. index
-        local layer = layers[index]
-        show(layer_path, layer ~= nil)
-        if layer then
-            local image, x, y, width, height, r, g, b = table.unpack(layer)
-            local node = control(layer_path)
-            node:SetImage(Enum.ImageSource.StaticReference, image)
-            node.imageType = Enum.ImageType.Stretch
-            node:SetAnchoredPosition((mirrored and -x or x) * 1.56, y * 1.56)
-            node:SetSizeDelta(width * 1.56, height * 1.56)
-            node.imageColor = Color(r, g, b, 255)
-        end
-    end
-end
-
 local function card(path, title, detail, selected, id, face, rim, mirrored)
     show(path, true)
     show(path .. "/Rim", true)
@@ -125,7 +104,7 @@ local function card(path, title, detail, selected, id, face, rim, mirrored)
     text(path .. "/Name", title)
     show(path .. "/StatsPaper", detail ~= "")
     text(path .. "/Detail", detail)
-    portrait(path, id, mirrored)
+    portrait(path .. "/Portrait", id, mirrored)
     if selected ~= nil then show(path .. "/Selected", selected) end
 end
 
@@ -870,7 +849,7 @@ local function release_view()
     if old_portrait and old_portrait.alive then old_portrait:SetAnchoredPosition(0, 27) end
     root, session, state = nil, nil, nil
     press, drag, selection, message = nil, nil, nil, nil
-    listeners, controls, portraits = {}, {}, {}
+    listeners, controls, portrait = {}, {}, nil
     visibility, displayed_text, displayed_colour = {}, {}, {}
     preparing_layout, lunging = nil, nil
 end
@@ -878,6 +857,7 @@ end
 function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
+    portrait = bind_portrait(control, 1.56)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1

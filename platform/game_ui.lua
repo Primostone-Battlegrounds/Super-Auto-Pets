@@ -1,8 +1,10 @@
 local click = Enum.CursorEventType.CursorClick
+local bind_portrait = require("autopets.native_portrait")
 local root, active, section, mode, practice, online, lobby
 local elapsed, loading, confirm_fill = 0, nil, false
 local pending, pending_time
 local bindings = {}
+local borrowed_portraits = {}
 local online_modes = {[2] = "好友 1v1", [8] = "八人吃鸡"}
 local refusal = {
     [1] = "等待好友进入关卡，两人到齐后再开局。",
@@ -55,12 +57,44 @@ local function main_menu()
     request(0)
 end
 
+local function replay_portraits(duel)
+    -- The unified GIL has room for one portrait pool. Practice and online play
+    -- are mutually exclusive once the server has selected an online mode.
+    local practice_board = root:GetChild("Practice")
+    local replay = root:FindChild(duel and "Duel/ReplayBoard" or "Room/Match/Replay")
+    local pictures = {}
+    for slot = 1, 5 do
+        for _, side in ipairs({"Own", "Enemy"}) do
+            local parent = practice_board:GetChild((side == "Own" and "Team" or "Enemy") .. slot)
+            local picture = parent:GetChild("Portrait")
+            local label = replay:GetChild(side .. slot)
+            local px, py = picture:GetAnchoredPosition()
+            local lx, ly = label:GetAnchoredPosition()
+            local width, height = label:GetSizeDelta()
+            borrowed_portraits[#borrowed_portraits + 1] = {
+                picture = picture, parent = parent, index = picture:GetSiblingIndex(), x = px, y = py,
+                label = label, label_x = lx, label_y = ly, width = width, height = height,
+            }
+            picture.parent = replay
+            picture:SetAnchoredPosition(lx, ly + (duel and 40 or 37))
+            label:SetAnchoredPosition(lx, ly - (duel and 40 or 37))
+            label:SetSizeDelta(width, duel and 76 or 68)
+            pictures[side .. slot] = picture
+        end
+    end
+    return bind_portrait(function(path)
+        local key, layer = path:match("^([^/]+)/([^/]+)$")
+        return pictures[key]:GetChild(layer)
+    end, 1.42)
+end
+
 local function show_online()
-    local board = mode == 2 and "Duel" or "Room"
+    local duel = mode == 2
+    local board = duel and "Duel" or "Room"
     show_section(board)
     if online then online.refresh(); return end
-    online = (mode == 2 and duel_view or room_view)(root:GetChild(board))
-    online.start(root:GetChild(board))
+    online = (duel and duel_view or room_view)(root:GetChild(board))
+    online.start(root:GetChild(board), replay_portraits(duel))
 end
 
 local function receive_lobby(_, values)
@@ -179,8 +213,20 @@ end
 
 function OnDestroy()
     script:UnregisterServerSignalHandler("AP_GameLobby")
-    if practice then practice.destroy() end
     if online then online.destroy() end
+    for _, entry in ipairs(borrowed_portraits) do
+        if entry.picture.alive and entry.parent.alive then
+            entry.picture.parent = entry.parent
+            entry.picture:SetSiblingIndex(entry.index)
+            entry.picture:SetAnchoredPosition(entry.x, entry.y)
+        end
+        if entry.label.alive then
+            entry.label:SetAnchoredPosition(entry.label_x, entry.label_y)
+            entry.label:SetSizeDelta(entry.width, entry.height)
+        end
+    end
+    borrowed_portraits = {}
+    if practice then practice.destroy() end
     for _, binding in ipairs(bindings) do
         if binding[1].alive then binding[1]:RemoveCursorEventListener(click, binding[2]) end
     end

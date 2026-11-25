@@ -84,7 +84,9 @@ function catalogLua(items) {
     const attack = value.attack ?? 0;
     const health = value.health ?? 0;
     assert.ok(Number.isSafeInteger(attack) && Number.isSafeInteger(health));
-    return `[${code}]={name="${name}",attack=${attack},health=${health}}`;
+    if (value.id) assert.match(value.id, /^[a-z][a-z0-9_]*$/);
+    const id = value.id ? `,id="${value.id}"` : '';
+    return `[${code}]={name="${name}",attack=${attack},health=${health}${id}}`;
   }).join(',');
 }
 

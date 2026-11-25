@@ -41,6 +41,7 @@ local reward_index = 1
 local market
 local playback, status_header, status_message, seconds, hint
 local awaiting_settlement = false
+local portrait
 local draw_status
 local visible = {}
 local bindings = {}
@@ -321,7 +322,9 @@ local function show_replay()
                 display = seat .. replay_view.mark(event, unit, key) .. definition.name
                     .. string.format("\n%d攻 · %d命\n盾 %d", unit.attack, unit.health, unit.shield or 0)
             end
-            board_root:GetChild((side == 1 and "Own" or "Enemy") .. slot).text = display
+            local path = (side == 1 and "Own" or "Enemy") .. slot
+            board_root:GetChild(path).text = display
+            if portrait then portrait(path, unit and unit.id, side == 2) end
         end
     end
     replay_status.text = string.format("第 %d 轮  %d/%d  %s", playback.round,
@@ -499,7 +502,8 @@ local function receive_snapshot(_, parameters)
     show_replay()
 end
 
-function OnStart()
+function OnStart(_, painter)
+    portrait = painter
     script:RegisterServerSignalHandler("AP_DuelSnapshot", receive_snapshot)
     script:RegisterServerSignalHandler("AP_DuelMarket", receive_market)
     script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
@@ -535,6 +539,7 @@ function OnDestroy()
     pending, market, selected_uid = nil, nil, nil
     playback, status_header, status_message, seconds, hint, visible = nil, nil, nil, nil, nil, {}
     awaiting_settlement = false
+    portrait = nil
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

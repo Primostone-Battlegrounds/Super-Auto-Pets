@@ -77,7 +77,7 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   assert.ok(seeds.length === 8 && new Set(ranks).size === 8 && random?.length === 2);
   assert.ok(weights.length > 0);
   assert.ok(names.size === battle.ids.length && battle.ids.every(id => names.has(id)));
-  const battleCatalog = battle.ids.map(id => ({ name: names.get(id) }));
+  const battleCatalog = battle.ids.map(id => ({ id, name: names.get(id) }));
   let room = replace(read('./m3_room.ts'), 'id: 1073741825,', `id: ${roomId},`);
   for (const [name, value] of Object.entries(settings)) {
     room = replace(room, new RegExp(`[0-9]+n; // AP_ROOM_${name}\\b`).exec(room)[0], `${value}n;`);

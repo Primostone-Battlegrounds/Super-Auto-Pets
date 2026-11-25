@@ -18,6 +18,8 @@ local function simulate()
             SetSizeDelta = function(self, w, h) self.width, self.height = w, h end,
             GetAnchoredPosition = function(self) return tonumber(self.x), tonumber(self.y) end,
             GetSizeDelta = function(self) return tonumber(self.width), tonumber(self.height) end,
+            GetSiblingIndex = function(self) return self.sibling_index or 2 end,
+            SetSiblingIndex = function(self, index) self.sibling_index = index end,
             SetImage = function(self, _, image) self.image = image end,
             AddCursorEventListener = function(self, event, callback) assert(not self.events[event]); self.events[event] = callback end,
             RemoveCursorEventListener = function(self, event, callback)
@@ -173,6 +175,7 @@ duel.view(0, 2)
 assert(duel.get("Lobby/Feedback").text:find("已到齐"))
 duel.press("Lobby/Choices/Duel/Hit")
 duel.view(2, 2)
+assert(duel.get("Practice/Team1/Portrait").parent == duel.get("Duel/ReplayBoard"))
 duel.expect("AP_DuelRequest:0,0,0,0,0,0,0")
 duel.receive("AP_DuelSnapshot", duel_snapshot(1, 0, false))
 duel.receive("AP_DuelMarket", {1, 1, market(1, true)})
@@ -200,6 +203,8 @@ assert(duel.get("Lobby/Continue").active and not duel.get("Lobby/Choices").activ
 duel.press("Lobby/Continue/Hit")
 assert(duel.get("Duel").active)
 duel.destroy()
+assert(duel.get("Practice/Team1/Portrait").parent == duel.get("Practice/Team1"))
+assert(duel.get("Practice/Team1/Portrait").y == 27 and duel.get("Practice/Team1/Portrait").sibling_index == 2)
 
 local leaving_duel = simulate()
 leaving_duel.view(2, 2)
@@ -226,6 +231,7 @@ assert(room.get("Lobby/Feedback").text:find("再点一次"))
 room.press("Lobby/Choices/Room/Hit")
 room.expect("AP_GameChooseMode:8,true")
 room.view(8, 1, 0, 8, 0)
+assert(room.get("Practice/Enemy1/Portrait").parent == room.get("Room/Match/Replay"))
 room.expect("AP_RoomRequest:0,0,0,0,0,0,0")
 local empty_room = room_snapshot(1, 2, 1)
 empty_room[13] = market(1, true)
@@ -254,6 +260,7 @@ room.press("Room/Back/Hit")
 room.expect("AP_GameChooseMode:0,false")
 assert(room.get("Lobby").active and not room.get("Room").active)
 room.destroy()
+assert(room.get("Practice/Enemy1/Portrait").parent == room.get("Practice/Enemy1"))
 
 local leaving_room = simulate()
 leaving_room.view(8, 1)

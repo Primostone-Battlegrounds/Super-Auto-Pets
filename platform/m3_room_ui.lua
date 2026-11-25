@@ -9,7 +9,7 @@ local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
 local inspected
-local render_standings, panel
+local render_standings, panel, portrait
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
 local replay_playing, replay_elapsed = false, 0
@@ -139,6 +139,10 @@ local function paint_battle()
         for slot = 1, 5 do
             text("Replay/Own" .. slot, "")
             text("Replay/Enemy" .. slot, "")
+            if portrait then
+                portrait("Own" .. slot, nil, false)
+                portrait("Enemy" .. slot, nil, true)
+            end
         end
         return
     end
@@ -148,10 +152,11 @@ local function paint_battle()
     for slot = 1, 5 do
         for side = 0, 1 do
             local name = side == allied_side and "Own" or "Enemy"
-            local display = "空位"
+            local display, id = "空位", nil
             if frame.teams then
                 local unit = frame.teams[side == 0 and "player" or "enemy"][slot]
                 if unit then
+                    id = unit.id
                     local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                     local marker = frame.event and replay_view.mark(frame.event, unit, side == 0 and "player" or "enemy") or ""
                     display = string.format("%s%s\n%d攻 · %d命\n盾 %d", marker, def.name, unit.attack, unit.health, unit.shield)
@@ -161,11 +166,13 @@ local function paint_battle()
                 local offset = (side * 5 + (head + slot - 1) % 5) * 6 + 1
                 local item = fighters[board[offset]] or pets[board[offset]]
                 if item then
+                    id = item.id
                     display = string.format("%s\n%d攻 · %d命\n盾 %d", item.name, board[offset + 1],
                         board[offset + 2], board[offset + 4])
                 end
             end
             text("Replay/" .. name .. slot, display)
+            if portrait then portrait(name .. slot, id, name == "Enemy") end
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
@@ -380,7 +387,8 @@ local function scrub(offset)
     frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
 end
 
-function OnStart(view_root)
+function OnStart(view_root, painter)
+    portrait = painter
     local root = view_root or script.object
     local function child(name) return assert(root:GetChild(name), name) end
     panel = child("Match")
@@ -481,5 +489,5 @@ function OnDestroy()
         for _, item in ipairs(keys) do panel:RemoveKeyEventListener(item[1], item[2]) end
     end
     controls, bindings, keys, content, visibility, frames = {}, {}, {}, {}, {}, {}
-    render_standings, panel = nil, nil
+    render_standings, panel, portrait = nil, nil, nil
 end

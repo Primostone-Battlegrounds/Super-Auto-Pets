@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { image, pigment } from './m1-ui.mjs';
 import { bindFaintColumns, faintArguments } from './m3-battle-opening.mjs';
 
 export const duelSignals = {
@@ -90,11 +91,11 @@ export function duelLayout(rule, includeProbeButtons = false) {
         [includeProbeButtons ? 800 : 940, 30], '点动物旁的「技能」查看，购买操作保持不变', 19),
       text('AbilityBody', includeProbeButtons ? [75, -339] : [0, -292], [includeProbeButtons ? 800 : 940, 40], '', 18),
       { name: 'ReplayBoard', kind: 'container', position: [0, 90], size: [900, 210], visible: false, children: [
-        { name: 'Ally', kind: 'image', position: [-225, 0], size: [440, 200], image: 100001, colour: '#335b44' },
-        { name: 'Enemy', kind: 'image', position: [225, 0], size: [440, 200], image: 100001, colour: '#605432' },
+        image('Ally', [-225, 0], [440, 200], includeProbeButtons ? '#335b44' : pigment.rail),
+        image('Enemy', [225, 0], [440, 200], includeProbeButtons ? '#605432' : pigment.opposingRail),
         ...Array.from({ length: rule.TEAM_SIZE }, (_, index) => [
-          text(`Own${index + 1}`, [-45 - index * 87, 0], [82, 178], '', 16),
-          text(`Enemy${index + 1}`, [45 + index * 87, 0], [82, 178], '', 16),
+          text(`Own${index + 1}`, [-45 - index * 87, 0], [82, 178], '', 16, includeProbeButtons ? '#fff3d7' : pigment.ink),
+          text(`Enemy${index + 1}`, [45 + index * 87, 0], [82, 178], '', 16, includeProbeButtons ? '#fff3d7' : pigment.ink),
         ]).flat(),
       ] },
       text('ReplayStatus', [-75, -170], [774, 50], '', 18),
