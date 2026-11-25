@@ -25,6 +25,7 @@ export const gameInterface = 'AutoPetsGame';
 export const practiceSeed = 8;
 
 const back = (x, y) => button('Back', [x, y], [156, 48], '返回主菜单');
+const modeButton = (name, y, title, primary = false) => button(name, [0, y], [386, 82], title, primary, 24);
 const view = (name, controls) => ({ ...group(name, [0, 0], [1280, 720], controls, false), active: false });
 
 function layout(duelRules) {
@@ -40,18 +41,18 @@ function layout(duelRules) {
     controls: [
       { ...image('GameBackdrop', [0, 0], [1, 1], pigment.field), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        image('Border', [0, 0], [652, 506], pigment.edge),
-        image('Paper', [0, 0], [642, 496], pigment.cream),
-        label('Title', [0, 186], [560, 76], '小动物自走棋', 44),
-        label('Status', [0, 117], [560, 43], '正在连接千星关卡', 23),
-        group('Choices', [0, -15], [396, 202], [
-          button('Room', [0, 67], [386, 56], '八人吃鸡', true),
-          button('Duel', [0, 0], [386, 56], '好友 1v1'),
-          button('Practice', [0, -67], [386, 56], '单人 AI 练习'),
+        image('Border', [0, 0], [652, 596], pigment.edge),
+        image('Paper', [0, 0], [642, 586], pigment.cream),
+        label('Title', [0, 221], [560, 76], '小动物自走棋', 44),
+        label('Status', [0, 158], [560, 43], '正在连接千星关卡', 23),
+        group('Choices', [0, -5], [396, 270], [
+          modeButton('Room', 92, '八人吃鸡', true),
+          modeButton('Duel', 0, '好友 1v1'),
+          modeButton('Practice', -92, '单人 AI 练习'),
         ]),
-        { ...button('Continue', [0, 0], [386, 56], '', true), visible: false, active: false },
-        label('Help', [0, -176], [586, 66], '好友 1v1 请先在千星好友房间邀请好友。', 20, pigment.muted),
-        label('Feedback', [0, -131], [586, 36], '', 19, pigment.gold),
+        { ...modeButton('Continue', -5, '', true), visible: false, active: false },
+        label('Help', [0, -228], [586, 66], '好友 1v1 请先在千星好友房间邀请好友。', 20, pigment.muted),
+        label('Feedback', [0, -165], [586, 44], '', 19, pigment.gold),
       ]),
       view('Practice', practice),
       view('Duel', [...duelLayout(duelRules).controls, back(500, 331)]),

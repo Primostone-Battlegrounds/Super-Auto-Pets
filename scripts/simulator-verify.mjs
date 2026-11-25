@@ -53,8 +53,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     return node;
   };
   const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
-  function requirePlayButton(name, neighbors = []) {
-    const trail = `Practice/${name}/Hit`;
+  function requirePlayButton(trail, neighbors = []) {
     const { Id } = control(trail);
     const boxes = api.runtimeLayout(session);
     const { centerX, centerY, width, height } = boxes.get(Id);
@@ -66,7 +65,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(centerX - width / 2 >= 0 && centerX + width / 2 <= canvasWidth &&
       centerY - height / 2 >= 0 && centerY + height / 2 <= canvasHeight, `Offscreen play button: ${trail}`);
     for (const neighbor of neighbors) {
-      const box = boxes.get(control(`Practice/${neighbor}`).Id);
+      const box = boxes.get(control(neighbor).Id);
       const separated = Math.abs(centerX - box.centerX) >= (width + box.width) / 2 ||
         Math.abs(centerY - box.centerY) >= (height + box.height) / 2;
       assert.ok(separated, `${trail} overlaps ${neighbor}`);
@@ -89,6 +88,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
   if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
     requireText('Lobby/Title', /小动物自走棋/u);
+    for (const name of ['Room', 'Duel', 'Practice']) {
+      requirePlayButton(`Lobby/Choices/${name}/Hit`, ['Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
+    }
     click('Lobby/Choices/Room/Hit');
     await capture('first-request-before-sync');
     requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
@@ -104,8 +106,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');await capture('practice-shop');
-    requirePlayButton('Primary', ['Shop/Reroll/Hit', 'Shop/RewardNext/Hit', 'Hint']);
-    requirePlayButton('Shop/Reroll', ['Shop/Buy/Hit', 'Shop/Freeze/Hit', 'Hint']);
+    requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Shop/RewardNext/Hit', 'Practice/Hint']);
+    requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Shop/Buy/Hit', 'Practice/Shop/Freeze/Hit', 'Practice/Hint']);
     requireText('Practice/Money/Value', /^10$/u);
     requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
@@ -131,12 +133,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         requireText('Practice/Battle/Event', /攻击/u);
         for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
         await capture('practice-replay');
-        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Battle/${name}`, ['Battle/Event']);
+        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
       }
       press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
     }
     const final=await capture('practice-complete');
-    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Battle/${name}`, ['Battle/Event']);
+    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
     assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
     requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
@@ -264,6 +266,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     const returned = await capture('client-1-return');
     assert.ok(!returned.paint.some(item => portraits.includes(item.id)), 'Replay portraits must be hidden in the lobby');
+    requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
     await capture('client-1-reenter');

@@ -70,11 +70,11 @@ function card(name, position, width, type, interactive = true, visible = true) {
   return group(name, position, size, children, visible);
 }
 
-export function button(name, position, size, title, primary = false) {
+export function button(name, position, size, title, primary = false, fontSize = primary ? 23 : 17) {
   return group(name, position, size, [
     image('Rim', [0, 0], size, primary ? '#1e4f43' : pigment.edge),
     image('Face', [0, 0], [size[0] - 4, size[1] - 4], primary ? pigment.primary : pigment.chip),
-    label('Title', [0, 0], [size[0] - 20, size[1] - 12], title, primary ? 23 : 17, primary ? pigment.cream : pigment.ink),
+    label('Title', [0, 0], [size[0] - 20, size[1] - 12], title, fontSize, primary ? pigment.cream : pigment.ink),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
 }
@@ -133,7 +133,7 @@ export const nativeRun = {
       image('RewardDivider', [372, 0], [2, 146], pigment.shelfRule),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
-      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -100], [172, 52], title)),
+      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
       button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
     ]),
     group('Tooltip', [0, -10], [360, 72], [
