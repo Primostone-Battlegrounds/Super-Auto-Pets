@@ -142,7 +142,8 @@ local function team_card(path, unit, index, selected, effect)
         show(path .. "/XPPaper", preparing and unit ~= nil)
         if preparing and unit then
             local threshold = rules.level_xp[unit.level + 1]
-            text(path .. "/XP", index .. (index == 1 and "前 " or "后 ") .. "L" .. unit.level .. " " .. (threshold and (unit.xp .. "/" .. threshold) or "满"))
+            local progress = threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满"
+            text(path .. "/XP", "L" .. unit.level .. "  " .. progress)
         else
             show(path .. "/XP", false)
         end
