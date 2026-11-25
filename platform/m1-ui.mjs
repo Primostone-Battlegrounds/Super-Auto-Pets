@@ -169,7 +169,7 @@ export const nativeRun = {
       button('NewSeed', [426, -36], [202, playButtonHeight], '新一局'),
     ], false),
     image('FooterLine', [0, -262], [1152, 2], pigment.edge),
-    button('Primary', [411, -293], [329, playButtonHeight], '开战', true),
+    button('Primary', [411, -296], [329, playButtonHeight], '开战', true),
     label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
     { ...group('Menu', [0, 0], [1202, 684], [
       image('Backdrop', [0, 0], [1202, 684], '#dce9e4'),

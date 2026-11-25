@@ -53,7 +53,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     return node;
   };
   const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
-  function requirePlayButton(name) {
+  function requirePlayButton(name, above = []) {
     const trail = `Practice/${name}/Hit`;
     const { Id } = control(trail);
     const boxes = api.runtimeLayout(session);
@@ -65,9 +65,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     assert.ok(centerX - width / 2 >= 0 && centerX + width / 2 <= canvasWidth &&
       centerY - height / 2 >= 0 && centerY + height / 2 <= canvasHeight, `Offscreen play button: ${trail}`);
-    if (name.startsWith('Battle/')) {
-      const event = boxes.get(control('Practice/Battle/Event').Id);
-      assert.ok(centerY + height / 2 <= event.centerY - event.height / 2, `Button overlaps replay text: ${trail}`);
+    for (const neighbor of above) {
+      const box = boxes.get(control(`Practice/${neighbor}`).Id);
+      assert.ok(centerY + height / 2 <= box.centerY - box.height / 2, `${trail} overlaps ${neighbor}`);
     }
     for (const [dx, dy] of [[0, 0], [2 - width / 2, 0], [width / 2 - 2, 0], [0, 2 - height / 2], [0, height / 2 - 2]]) {
       assert.equal(api.hitPlayControl(session, centerX + dx, centerY + dy)?.Id, Id, `Button edge is occluded: ${trail}`);
@@ -101,7 +101,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');await capture('practice-shop');
-    requirePlayButton('Primary');
+    requirePlayButton('Primary', ['Shop/Reroll/Hit', 'Shop/RewardNext/Hit']);
     requireText('Practice/Money/Value', /^10$/u);
     requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
@@ -127,12 +127,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         requireText('Practice/Battle/Event', /攻击/u);
         for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
         await capture('practice-replay');
-        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Battle/${name}`);
+        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Battle/${name}`, ['Battle/Event']);
       }
       press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
     }
     const final=await capture('practice-complete');
-    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Battle/${name}`);
+    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Battle/${name}`, ['Battle/Event']);
     assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
     requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
