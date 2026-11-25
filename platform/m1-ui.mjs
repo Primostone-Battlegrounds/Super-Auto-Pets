@@ -92,7 +92,7 @@ const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
 const playButtonHeight = 82;
 const actions = [
   ['Buy', '购买'], ['Freeze', '冻结 / 解冻'], ['Sell', '出售'], ['Merge', '合并队员'],
-  ['Reroll', '刷新'], ['RewardNext', '下个奖励'],
+  ['RewardNext', '下个奖励'],
 ];
 
 export const nativeRun = {
@@ -124,7 +124,7 @@ export const nativeRun = {
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
     ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 104], 106, 'player')),
     ...slots.map(slot => card(`Enemy${slot}`, [91 + (slot - 1) * 112, 115 - (slot - 1) * 9], 106, 'enemy', false, false)),
-    group('Shop', [0, -124], [1164, 268], [
+    group('Shop', [0, -124], [1164, 428], [
       image('Paper', [0, 0], [1164, 268], pigment.cream),
       image('Rail', [0, 0], [1128, 164], pigment.shelf),
       image('Rule', [0, 83], [1128, 2], pigment.shelfRule),
@@ -132,7 +132,8 @@ export const nativeRun = {
       image('RewardDivider', [372, 0], [2, 146], pigment.shelfRule),
       label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
       ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
-      ...actions.map(([name, title], index) => button(name, [-465 + index * 186, -104], [172, 52], title)),
+      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
+      button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
     ]),
     group('Tooltip', [0, -10], [360, 72], [
       image('Border', [0, 0], [360, 72], '#78a090'),

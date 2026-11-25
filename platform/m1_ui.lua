@@ -286,6 +286,8 @@ local function arrange(preparing)
     show("Field/AllyRail", not preparing)
     show("Field/RivalRail", not preparing)
     show("Field/Clash", not preparing)
+    control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
+    control("Hint"):SetSizeDelta(preparing and 590 or 824, 53)
     for index = 1, rules.team_size do
         local x, y = 91 + (index - 1) * 112, 115 - (index - 1) * 9
         local team_path = "Team" .. index

@@ -53,7 +53,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     return node;
   };
   const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
-  function requirePlayButton(name, above = []) {
+  function requirePlayButton(name, neighbors = []) {
     const trail = `Practice/${name}/Hit`;
     const { Id } = control(trail);
     const boxes = api.runtimeLayout(session);
@@ -65,9 +65,11 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     assert.ok(centerX - width / 2 >= 0 && centerX + width / 2 <= canvasWidth &&
       centerY - height / 2 >= 0 && centerY + height / 2 <= canvasHeight, `Offscreen play button: ${trail}`);
-    for (const neighbor of above) {
+    for (const neighbor of neighbors) {
       const box = boxes.get(control(`Practice/${neighbor}`).Id);
-      assert.ok(centerY + height / 2 <= box.centerY - box.height / 2, `${trail} overlaps ${neighbor}`);
+      const separated = Math.abs(centerX - box.centerX) >= (width + box.width) / 2 ||
+        Math.abs(centerY - box.centerY) >= (height + box.height) / 2;
+      assert.ok(separated, `${trail} overlaps ${neighbor}`);
     }
     for (const [dx, dy] of [[0, 0], [2 - width / 2, 0], [width / 2 - 2, 0], [0, 2 - height / 2], [0, height / 2 - 2]]) {
       assert.equal(api.hitPlayControl(session, centerX + dx, centerY + dy)?.Id, Id, `Button edge is occluded: ${trail}`);
@@ -101,7 +103,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');await capture('practice-shop');
-    requirePlayButton('Primary', ['Shop/Reroll/Hit', 'Shop/RewardNext/Hit']);
+    requirePlayButton('Primary', ['Shop/Reroll/Hit', 'Shop/RewardNext/Hit', 'Hint']);
+    requirePlayButton('Shop/Reroll', ['Shop/Buy/Hit', 'Shop/Freeze/Hit', 'Hint']);
     requireText('Practice/Money/Value', /^10$/u);
     requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
@@ -137,8 +140,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Practice/Wins/Value', /^10 \/ 10$/u);
     press('Primary');await capture('practice-restart');
     requireText('Practice/Round/Value', /第 1 轮/u);
+    const offerNames = [1, 2, 3].map(slot => control(`Practice/Shop/Pet${slot}/Name`).text);
+    press('Shop/Pet1');press('Shop/Freeze');press('Shop/Reroll');
+    await capture('practice-frozen-reroll');
+    requireText('Practice/Money/Value', /^9$/u);
+    requireText('Practice/Shop/Pet1/Tag', /^已冻结$/u);
+    assert.equal(control('Practice/Shop/Pet1/Name').text, offerNames[0]);
+    assert.ok([2, 3].some(slot => control(`Practice/Shop/Pet${slot}/Name`).text !== offerNames[slot - 1]),
+      'At least one unfrozen offer must change for the fixed restart seed');
   }
   if(mode) {
+    const portraits = ['Team1', 'Enemy1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
     // Client-only fixture from the native wire schema. No graph output claimed.
     const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
     api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
@@ -205,11 +217,14 @@ for(const {canvasId,playerCount,mode} of configurations) {
       const [name, pattern] = expectEvents[0];
       const eventText = renderedEvent();
       if (eventText && pattern.test(eventText)) {
-        await capture(`client-1-replay-${name}`);
+        const replayFrame = await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
         if (duel && name === 'attack') requireText('Duel/Status', /正在播放本轮战斗/u);
         if (duel && name === 'result') requireText('Duel/Status', /回放结束 · 等待结算/u);
         if (name === 'attack') {
+          const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
+          assert.ok(own && enemy && own.left + own.width < enemy.left,
+            'The original portraits must appear on opposing lanes');
           const playback = duel ? 'Duel/Replay' : 'Room/Match/Replay/Auto/Hit';
           click(playback);
           for (let step = 0; step < 12; step++) api.stepPlay(session, 0.05);
@@ -242,7 +257,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
       api.setPlayView(session, 1);
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
-    await capture('client-1-return');
+    const returned = await capture('client-1-return');
+    assert.ok(!returned.paint.some(item => portraits.includes(item.id)), 'Replay portraits must be hidden in the lobby');
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
     await capture('client-1-reenter');
