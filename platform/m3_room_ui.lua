@@ -96,7 +96,6 @@ local function paint_shop()
     if not preview or preview.round ~= match.round then return end
     text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5 · 右侧为前排", preview.gold, preview.tier, #preview.team))
     paint_ability()
-    local picked = chosen()
     for slot = 1, 5 do
         local is_pet = slot <= 3
         local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
@@ -105,10 +104,9 @@ local function paint_shop()
         text("Shop/Offer" .. slot .. "/Text", item and detail:format(item.name, item.attack, item.health) or "售罄")
         text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
         local unit = preview.team[slot]
-        local prefix = slot == picked and "已选 · " or ""
         local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
-        local stats = unit and string.format("\n%d攻 %d命 · L%d\n经验 %d", unit.attack, unit.health, unit.level, unit.xp) or ""
-        text("Shop/Team" .. slot .. "/Text", prefix .. name .. stats)
+        local stats = unit and string.format("\n%d攻 %d命\nL%d · 经验%d", unit.attack, unit.health, unit.level, unit.xp) or ""
+        text("Shop/Team" .. slot .. "/Text", name .. stats)
     end
     reward = math.min(reward, math.max(#preview.rewards, 1))
     local item = pets[preview.rewards[reward]]
@@ -207,7 +205,11 @@ local function redraw()
     if pending then
         message = "等待服务端响应，可用「同步」查看当前状态"
     elseif not hint and shop_open then
-        message = match.ready and "已准备，等待其他席位" or "点选队员后可喂食、出售、换位或合并"
+        local _, unit = chosen()
+        local animal = unit and pets[unit.code]
+        if match.ready then message = "已准备，等待其他席位"
+        elseif animal then message = "已选 " .. animal.name .. " · 可喂食、出售、换位或合并"
+        else message = "点选队员后可喂食、出售、换位或合并" end
     elseif not hint and match.phase == 5 then
         local place = match.places[match.seat]
         message = place and place > 0 and ("我的名次 · 第 " .. place .. " 名") or "本局已结束"

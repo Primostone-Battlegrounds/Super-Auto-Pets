@@ -143,6 +143,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('client-1-inspect-team');
     requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/u);
     requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
+    if (!duel) requireText(`${shop}/Team1/Text`, /3攻 2命\nL2 · 经验1/u);
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
     await capture('client-1-buy-request');
