@@ -9,7 +9,7 @@ local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
 local inspected
-local render_standings, panel, portrait
+local render_standings, panel, portrait, unified_layout
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
 local replay_playing, replay_elapsed = false, 0
@@ -214,7 +214,9 @@ local function redraw()
     local replay_open = match.phase >= 3 and match.seat > 0
     visible("Shop", shop_open)
     visible("Replay", replay_open)
-    visible("Ready", shop_open and not match.ready)
+    local can_prepare = shop_open and not match.ready
+    visible("Ready", can_prepare)
+    if unified_layout then visible("Shop/Reroll", can_prepare) end
     visible("Forfeit", alive() and match.phase > 0 and match.phase < 5)
     text("Forfeit/Text", forfeiting and "确认认输" or "认输")
     if shop_open then paint_shop() end
@@ -400,6 +402,7 @@ end
 
 function OnStart(view_root, painter)
     portrait = painter
+    unified_layout = view_root ~= nil
     local root = view_root or script.object
     local function child(name) return assert(root:GetChild(name), name) end
     panel = child("Match")

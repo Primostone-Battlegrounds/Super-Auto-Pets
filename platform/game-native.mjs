@@ -5,7 +5,7 @@ import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
-import { m3RoomLayout, roomClientSource } from './m3-room-ui.mjs';
+import { roomClientSource, unifiedRoomLayout } from './m3-room-ui.mjs';
 import { nativeShop } from './versus-shop.mjs';
 
 const read = name => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
@@ -56,7 +56,7 @@ function layout(duelRules) {
       ]),
       view('Practice', practice),
       view('Duel', [...duelLayout(duelRules).controls, back(500, 331)]),
-      view('Room', [...m3RoomLayout.controls, back(0, 333)]),
+      view('Room', [...unifiedRoomLayout.controls, back(0, 333)]),
     ],
   };
 }

@@ -287,7 +287,9 @@ end
 
 local function show_replay()
     draw_status()
-    show_action("Replay", "ReplayLabel", playback ~= nil)
+    local replay_available = not preparing or offers == root
+    show(replay_status, replay_available)
+    show_action("Replay", "ReplayLabel", replay_available and playback ~= nil)
     local board_root = child("ReplayBoard")
     show(board_root, playback ~= nil and not preparing)
     for slot = 1, rules.team_size do

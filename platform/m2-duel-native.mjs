@@ -66,6 +66,13 @@ export function duelLayout(rule, includeProbeButtons = false) {
   }).flat();
   const teamCards = Array.from({ length: rule.TEAM_SIZE }, (_, index) => inspectable(`Team${index + 1}`, `TeamLabel${index + 1}`,
     [(2 - index) * 190, 120], [174, 56], '', '#335b44', `InspectTeam${index + 1}`, 20));
+  const shopActions = [['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']];
+  const shopButtons = shopActions.flatMap(([name, content], index) => {
+    if (!includeProbeButtons && (name === 'Reroll' || name === 'Ready')) {
+      return card(name, `${name}Label`, [name === 'Reroll' ? -315 : 315, -201], [206, 82], content, pigment.primary, 23);
+    }
+    return card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452');
+  });
   return {
     name: 'AP_DuelProbe',
     script,
@@ -81,8 +88,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
       text('Team', [0, 165], [900, 32], '', 21),
       ...teamCards.flatMap(cards => cards.slice(0, 3)),
       { name: 'TeamInspection', kind: 'container', position: [0, 0], size: [1200, 690], children: teamCards.flatMap(cards => cards.slice(3)) },
-      ...[['Reroll', '刷新货架'], ['Sell', '出售选中'], ['Merge', '合并模式'], ['Ready', '准备'], ['Advance', '下一轮']]
-        .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 2) * 190, -65], [174, 52], content, '#286452')),
+      ...shopButtons,
       ...[['Reward', '升级奖励'], ['RewardNext', '下个奖励'], ['Refresh', '刷新状态'], ['Leave', '认输']]
         .flatMap(([name, content], index) => card(name, `${name}Label`, [(index - 1.5) * 224, -118], [208, 52], content, '#286452')),
       ...card('InspectReward', 'InspectRewardLabel', includeProbeButtons ? [-414, -326] : [0, -218],
