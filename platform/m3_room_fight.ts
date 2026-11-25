@@ -26,7 +26,7 @@ g.server({
   id: 1073741826,
   name: '_GSTS_AP_EightFight',
   variables: {
-    petEffects: list('int', [0n]), // AP_ROOM_EFFECTS
+    // AP_FAINT_DEFAULTS
     startEffects: list('int', [0n]), // AP_ROOM_START_EFFECTS
     fights: dict('int', 'int_list', 0),
     openers: dict('int', 'int_list', 0),
@@ -65,14 +65,16 @@ g.server({
   else if (flags === 1n) outcome = 2n;
   else if (flags === 2n) outcome = 1n;
   else {
+    // AP_FAINT_READS
+    const metadata = f.get('startEffects');
     const openingState = f.copyList(f.queryDictionaryValueByKey(openers, pair));
     if (f.getCorrespondingValueFromList(openingState, openingCursorAt) < 2n * battleSlots) {
-      if (gstsServerOpeningStep(f, board, f.get('petEffects'), f.get('startEffects'), openingState, false)) {
+      if (gstsServerOpeningStep(f, board, faintEffect, faintPower, faintTarget, faintAttack, faintHealth, metadata, openingState, false)) {
         f.modifyValueInList(openingState, openingCursorAt, 2n * battleSlots);
       }
     } else {
       outcome = gstsServerBattleOutcome(f, board);
-      if (outcome === 0n) outcome = gstsServerCollisionStep(f, board, f.get('petEffects'), false); // AP_ROOM_COLLISION
+      // AP_ROOM_COLLISION
     }
     f.setOrAddKeyValuePairsToDictionary(openers, pair, openingState);
   }

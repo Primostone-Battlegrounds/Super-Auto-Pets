@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
+import { bindFaintColumns, faintColumns } from '../../platform/m3-battle-opening.mjs';
 import { lowerCombatMath } from '../../platform/m3_collision_lower.mjs';
 
 const [checkoutArg, scratch, lua, outputArg] = process.argv.slice(2);
@@ -116,9 +117,8 @@ function parityFixture(mode) {
 
 function graphSource(graphId, { catalog, pairs }) {
   let code = kernel + '\n' + template.replace('id: 1073741825,', `id: ${graphId},`);
-  const seeds = {
-    catalog: catalog.flatMap(definition => definition.record),
-  };
+  code = bindFaintColumns(code, faintColumns(catalog.map(definition => definition.record)));
+  const seeds = {};
   for (const [index, pair] of pairs.entries()) {
     seeds['board' + index] = pair.opening.flatMap(side => {
       const cells = side.flat();

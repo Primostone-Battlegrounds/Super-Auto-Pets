@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { nativeBattle } from './m3-battle-opening.mjs';
+import { bindFaintColumns, faintArguments, nativeBattle } from './m3-battle-opening.mjs';
 import { nativeShop } from './versus-shop.mjs';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
@@ -92,14 +92,14 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   room = replace(room, "[0n], 'int'); // AP_ROOM_BOT_WEIGHTS", `[${literals(weights)}], 'int');`);
   room = initialize(room, 'EMPTY_STOCK', 6 + shop.rules.PET_SLOTS + shop.rules.FOOD_SLOTS + 6 * shop.rules.TEAM_SIZE);
   let fight = replace(read('./m3_room_fight.ts'), 'id: 1073741826,', `id: ${fightId},`);
-  fight = setList(fight, 'EFFECTS', battle.faintMetadata);
+  fight = bindFaintColumns(fight, battle.faintMetadata);
   fight = setList(fight, 'START_EFFECTS', battle.openingMetadata);
   fight = initialize(fight, 'BOARD', 12 * shop.rules.TEAM_SIZE + 6);
   const collisionArguments = profile === 'release'
-    ? "f, board, f.get('petEffects'), f.get('startEffects'), openingState, false"
-    : "f, board, f.get('petEffects'), false";
-  fight = replace(fight, 'gstsServerCollisionStep(f, board, f.get(\'petEffects\'), false); // AP_ROOM_COLLISION',
-    `${battle.collisionFunction}(${collisionArguments});`);
+    ? `f, board, ${faintArguments}, metadata, openingState, false`
+    : `f, board, ${faintArguments}, false`;
+  fight = replace(fight, '// AP_ROOM_COLLISION',
+    `if (outcome === 0n) outcome = ${battle.collisionFunction}(${collisionArguments});`);
   assert.doesNotMatch(room + fight, /\/\/ AP_ROOM_/);
   return {
     roomSource: [shop.source, declarations, room].join('\n'),

@@ -7,8 +7,9 @@ import { duelProbeButtons } from '../../platform/m2-duel-native.mjs';
 import { duelFixture, duelReplayOracle } from './duel-verification.mjs';
 import { verifyGraph as verifyDuel } from './m2-probe-graph.mjs';
 import { verifyRoom } from './m3-room-graph.mjs';
+import { assertListCapacity } from './gil-list-limits.mjs';
 
-function verifyLobby(source, ts) {
+function verifyLobby(source, ts, id) {
   let receive;
   let mode = 0n;
   let field = ['A'];
@@ -23,7 +24,10 @@ function verifyLobby(source, ts) {
     defineSignal: name => name, g: { server: () => graph },
   }) });
   const flow = {
-    getListOfPlayerEntitiesOnTheField: () => field,
+    getListOfPlayerEntitiesOnTheField: () => {
+      assertListCapacity(id, 'runtime field players', field.length);
+      return field;
+    },
     equal: (a, b) => a === b,
     getListLength: list => BigInt(list.length),
     queryGameModeAndPlayerNumber: () => ({ playerCount: expected }),
@@ -70,7 +74,22 @@ function verifyLobby(source, ts) {
 
 export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings }) {
   const source = key => game.graphs.find(graph => graph.graphId === ids[key]).code;
-  const lobby = verifyLobby(source('lobby'), ts);
+  const lobby = verifyLobby(source('lobby'), ts, ids.lobby);
+  const { GOLD, PET_COST, SELL_GOLD, TEAM_SIZE, MAX_LEVEL } = game.shopRules;
+  const thresholds = game.shopLevelThresholds.slice(1, MAX_LEVEL + 1);
+  assert.equal(thresholds.length, MAX_LEVEL);
+  assert.ok(thresholds.every((xp, index) => xp >= index));
+  // The starting formation embodies at most TEAM_SIZE * (max XP + 1)
+  // purchased copies. Each paid acquisition adds at most one copy, merging
+  // conserves or discards copies, and selling pays at most SELL_GOLD per copy.
+  const initialCopies = TEAM_SIZE * (thresholds.at(-1) + 1);
+  const acquisitions = PET_COST > SELL_GOLD
+    ? Math.floor((GOLD + initialCopies * SELL_GOLD) / (PET_COST - SELL_GOLD)) : Infinity;
+  // Every distinct unit can produce at most MAX_LEVEL - 1 rewards this round.
+  // Insertion into the formation briefly adds one slot before removing padding.
+  const stockCapacityBound = game.stockBaseLength + (TEAM_SIZE + acquisitions) * (MAX_LEVEL - 1) + 1;
+  assertListCapacity(ids.duel, 'runtime variables shopOne/shopTwo', stockCapacityBound);
+  assertListCapacity(ids.room, 'runtime variable stocks (per seat)', stockCapacityBound);
   const receipts = [];
   const positions = [];
   const room = verifyRoom([source('room'), source('roomFight')], ts, { ...game.roomSettings, gated: true }, receipts, positions);
@@ -101,7 +120,8 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   };
   const gameClient = client(lua53, '53');
   assert.deepEqual(gameClient, client(lua54, '54'));
-  return { frames: gameClient.frames, evidence: { lobby, room, roomReplay: roomReplay.trim(), duel, client: gameClient.trace.trim() } };
+  return { frames: gameClient.frames, evidence: { stockCapacityBound, lobby, room,
+    roomReplay: roomReplay.trim(), duel, client: gameClient.trace.trim() } };
 }
 
 export function readGameFrames(input, controls) {

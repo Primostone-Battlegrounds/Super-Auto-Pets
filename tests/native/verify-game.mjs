@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gameInterface, gameScript, nativeGame, playerVariables, practiceSeed, signals,
   stageVariables } from '../../platform/game-native.mjs';
+import { assertAssemblySourceLimits, gilListAudit } from './gil-list-limits.mjs';
 
 const [checkoutArg, scratch, lua53, output] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua53 && output,
@@ -21,6 +22,9 @@ assert.equal(git(project, ['status', '--porcelain', '--untracked-files=all']), '
 const checkout = fs.realpathSync(checkoutArg);
 const toolRevision = git(checkout, ['rev-parse', 'HEAD']);
 assert.equal(toolRevision, '59c576e41632a6bf6781bbca83a676d0da0374ec');
+execFileSync(process.execPath, ['--test', fileURLToPath(new URL('./gil-list-limits.test.mjs', import.meta.url))], {
+  env: { ...process.env, MILIASTRA_MCP_CHECKOUT: checkout }, stdio: 'inherit',
+});
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const fixtureHash = 'b8aa63c8e6c5c24964784842329a37adeb60d50c2f56272f6cc512907baf3706';
 const fixture = path.join(checkout, 'tests/fixtures/editor-2026-10-26-shapes.gil');
@@ -35,6 +39,8 @@ const [{ Service }, scene, { toolRegistry }] = await Promise.all([
   loadTool('core.mjs'), loadTool('scene-save.mjs'), loadTool('tool-registry.mjs'),
 ]);
 const requireTool = createRequire(path.join(checkout, 'package.json'));
+const ts = requireTool('typescript');
+const readListCapacity = await gilListAudit(requireTool);
 fs.mkdirSync(scratch, { recursive: true });
 const workspace = fs.mkdtempSync(path.join(fs.realpathSync(scratch), 'auto-pets-game-'));
 const input = path.join(workspace, 'input.gil');
@@ -72,6 +78,7 @@ for (const [key, name] of Object.entries({
   ids[key] = (await stage('scene_add_graph', { name, attachTo: 'stage' })).graphId;
 }
 const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids);
+for (const { graphId, code } of game.graphs) assertAssemblySourceLimits(graphId, code, ts);
 await stage('write_graphs', { graphs: game.graphs });
 await stage('scene_set_client_script', {
   name: gameScript, source: game.source,
@@ -87,6 +94,8 @@ assert.deepEqual(players, { min: 1, max: 8 });
 const registered = await call('scene_list_signals');
 for (const [name, fields] of Object.entries(signals)) assert.deepEqual(registered.parameters[name], fields);
 const inspected = service.inspectMap({ mapPath });
+const listCapacity = readListCapacity(fs.readFileSync(mapPath));
+assert.deepEqual(listCapacity.map(graph => graph.id).sort(), Object.values(ids).sort());
 const attached = scene.listComponents({ mapPath, entity: 'stage' }).found.find(component => component.where === 'placed');
 assert.deepEqual([...attached.graphs].sort(), Object.values(ids).sort());
 const graphs = Object.values(ids).map(id => inspected.graphs.find(graph => graph.id === id));
@@ -141,7 +150,7 @@ fs.writeFileSync(bindings, controls.map(control => [control.path, Number(control
   ...(control.position), ...control.size].join('\t')).join('\n') + '\n');
 
 const tests = await import('./game-verification.mjs');
-const simulation = tests.verifyGame(game, ids, requireTool('typescript'), { lua53, lua54, workspace, project, extracted, bindings });
+const simulation = tests.verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings });
 const frames = tests.readGameFrames(simulation.frames, controls);
 assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
 assert.equal(sha256(fs.readFileSync(input)), fixtureHash);
@@ -154,7 +163,7 @@ fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(output, 'MCP-FIXTURE-L
 fs.copyFileSync(new URL('../../platform/GAME.md', import.meta.url), path.join(output, 'README.md'));
 fs.writeFileSync(path.join(output, 'BUILD.json'), JSON.stringify({
   version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
-  node: process.version, sha256: hash, players, controls: controls.length, graphs, ...simulation.evidence,
+  node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,
   officialClient: 'pending',
 }, null, 2) + '\n');
 fs.writeFileSync(path.join(workspace, 'frames.json'), JSON.stringify(frames));

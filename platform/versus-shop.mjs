@@ -16,6 +16,7 @@ export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
   assert.equal(shopExport(lua54, 'catalog', profile), definition);
   let source = fs.readFileSync(new URL('./versus_shop.ts', import.meta.url), 'utf8');
   const start = [];
+  let levelThresholds;
   const catalog = { pet: [], food: [] };
   const rules = {};
   const ints = values => {
@@ -26,12 +27,14 @@ export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
     const [kind, key, ...values] = line.split('\t');
     if (kind === 'const' || kind === 'list') {
       const marker = `AP_SHOP_${key}`;
-      const literals = ints(values).map(value => `${value}n`).join(', ');
+      const numbers = ints(values);
+      const literals = numbers.map(value => `${value}n`).join(', ');
       const placeholder = kind === 'const' ? `0n; // ${marker}` : `[0n], 'int'); // ${marker}`;
       const replacement = kind === 'const' ? `${literals};` : `[${literals}], 'int');`;
       assert.ok(source.includes(placeholder), `missing marker ${marker}`);
       source = source.replace(placeholder, replacement);
       if (kind === 'const') rules[key] = Number(values[0]);
+      if (key === 'LEVEL_THRESHOLDS') levelThresholds = numbers.map(Number);
     } else if (kind === 'start') {
       assert.equal(Number(key), start.length + 1);
       start.push(ints(values));
@@ -48,5 +51,5 @@ export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
   assert.equal(start.length, 2);
   const packedSize = 6 + rules.PET_SLOTS + rules.FOOD_SLOTS + rules.TEAM_SIZE * 6;
   assert.ok(start.every(seat => seat.length === packedSize));
-  return { source, start, catalog, rules, definition };
+  return { source, start, catalog, rules, definition, levelThresholds };
 }
