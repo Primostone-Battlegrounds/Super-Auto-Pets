@@ -281,12 +281,15 @@ local function event_card(pattern)
 end
 
 local function inward_formation()
-    assert(nodes.Team1.x + nodes.Team1.width / 2 < nodes.Enemy1.x - nodes.Enemy1.width / 2)
+    local ally_mark, enemy_mark = nodes["Team1/Front"], nodes["Enemy1/Front"]
+    assert(nodes.Team1.x + ally_mark.x + ally_mark.width / 2 < nodes.Enemy1.x + enemy_mark.x - enemy_mark.width / 2)
     for slot = 2, 5 do
         local ally, front_ally = nodes["Team" .. slot], nodes["Team" .. (slot - 1)]
         local enemy, front_enemy = nodes["Enemy" .. slot], nodes["Enemy" .. (slot - 1)]
-        assert(ally.x + ally.width / 2 < front_ally.x - front_ally.width / 2)
-        assert(enemy.x - enemy.width / 2 > front_enemy.x + front_enemy.width / 2)
+        local left_seat, right_seat = nodes["Team" .. slot .. "/Name"], nodes["Enemy" .. slot .. "/Name"]
+        local left_front, right_front = nodes["Team" .. (slot - 1) .. "/Name"], nodes["Enemy" .. (slot - 1) .. "/Name"]
+        assert(ally.x + left_seat.width / 2 < front_ally.x - left_front.width / 2)
+        assert(enemy.x - right_seat.width / 2 > front_enemy.x + right_front.width / 2)
     end
 end
 
