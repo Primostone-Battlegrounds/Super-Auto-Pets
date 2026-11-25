@@ -9,7 +9,7 @@ import { verifyGraph as verifyDuel } from './m2-probe-graph.mjs';
 import { verifyRoom } from './m3-room-graph.mjs';
 import { assertListCapacity } from './gil-list-limits.mjs';
 
-function verifyLobby(source, ts, id) {
+export function verifyLobby(source, ts, id) {
   let receive;
   let mode = 0n;
   let field = ['A'];
@@ -54,21 +54,30 @@ function verifyLobby(source, ts, id) {
     return replies.splice(0);
   }
   assert.deepEqual(choose('intruder', 8n), []);
-  assert.deepEqual(choose('A', 2n), [['A', 0n, 1n, 0n]]);
+  assert.deepEqual(choose('A', 2n), [['A', 0n, 1n, 0n, 2n, 1n]]);
   expected = 2n;
-  assert.deepEqual(choose('A', 8n), [['A', 0n, 1n, 1n]]);
+  assert.deepEqual(choose('A', 8n), [['A', 0n, 1n, 1n, 8n, 3n]]);
   field.push('B');
-  assert.deepEqual(choose('A', 2n), [['A', 2n, 2n, 0n], ['B', 2n, 2n, 0n]]);
-  assert.deepEqual(choose('B', 8n), [['B', 2n, 2n, 0n]]);
+  assert.deepEqual(choose('A', 2n), [['A', 2n, 2n, 0n, 2n, 0n], ['B', 2n, 2n, 0n, 2n, 0n]]);
+  assert.deepEqual(choose('B', 8n), [['B', 2n, 2n, 0n, 8n, 4n]]);
+  assert.deepEqual(choose('B', 0n), [['B', 2n, 2n, 0n, 0n, 0n]]);
+  assert.equal(mode, 2n, 'returning to lobby never resets active authority');
   mode = 0n;
   field = ['A'];
-  assert.deepEqual(choose('A', 8n, true), [['A', 8n, 1n, 1n]]);
+  assert.deepEqual(choose('A', 8n, true), [['A', 8n, 1n, 1n, 8n, 0n]]);
   for (let count = 1; count <= 8; count += 1) {
     field = Array.from({ length: count }, (_, index) => `P${index + 1}`);
     expected = BigInt(count);
     mode = 0n;
-    assert.deepEqual(choose('P1', 8n), field.map(player => [player, 8n, expected, 0n]));
+    assert.deepEqual(choose('P1', 8n), field.map(player => [player, 8n, expected, 0n, 8n, 0n]));
   }
+  mode = 0n;
+  assert.deepEqual(choose('P1', 2n), [['P1', 0n, 8n, 0n, 2n, 2n]]);
+  assert.deepEqual(choose('P1', 99n), [['P1', 0n, 8n, 0n, 99n, 5n]]);
+  assert.deepEqual(choose('P1', 0n), [['P1', 0n, 8n, 0n, 0n, 0n]]);
+  field = Array.from({ length: 9 }, (_, index) => `P${index + 1}`);
+  expected = 1n;
+  assert.deepEqual(choose('P1', 8n, true), [['P1', 0n, 9n, 0n, 8n, 5n]]);
   return 'mode choice authenticates field membership, waits for loading, and locks one gameplay authority';
 }
 

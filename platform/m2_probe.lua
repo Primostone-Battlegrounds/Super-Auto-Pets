@@ -33,7 +33,8 @@ local selected_uid
 local merge_mode = false
 local reward_index = 1
 local market
-local playback, status_line, seconds
+local playback, status_line, seconds, hint
+local draw_status
 local visible = {}
 local bindings = {}
 local pet_labels, food_labels, team_labels = {}, {}, {}
@@ -82,6 +83,7 @@ end
 
 local function send(action, from, to, flag)
     if pending or sequence == 0 then return end
+    hint = nil
     pending = {action = action, round = round, sequence = sequence, token = next_token,
         from = from or 0, to = to or 0, flag = flag or 0}
     next_token = next_token + 1
@@ -220,7 +222,12 @@ end
 
 local function submit_ready()
     local view = editable_market()
-    if view and #view.team > 0 then send(1) end
+    if not view then return end
+    if #view.team > 0 then send(1)
+    else
+        hint = "请先购买至少一只动物，再准备"
+        draw_status()
+    end
 end
 
 local function request_advance()
@@ -369,19 +376,22 @@ local function receive_market(_, parameters)
     render_market()
 end
 
-local function draw_status()
+draw_status = function()
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
-    local content = status_line .. suffix
+    local content = status_line .. suffix .. (hint and ("\n" .. hint) or "")
     if status.text ~= content then status.text = content end
 end
 
 local function receive_snapshot(_, parameters)
     local players, seat, new_round, phase, is_ready, continued, settlements, version,
         next_sequence, winner, reason, remaining, ack, lives, opponent_lives, outcome = table.unpack(parameters)
-    if pending and pending.token == ack then pending = nil end
+    local acknowledged = pending and pending.token == ack
+    local rejected = acknowledged and new_round == pending.round and next_sequence == pending.sequence
+    if acknowledged then pending = nil end
     if new_round < round or version <= latest_version then return end
     if pending and (new_round > pending.round or next_sequence > pending.sequence or phase == 2) then pending = nil end
     if new_round > round then reward_index = 1 end
+    hint = rejected and "操作未生效，已同步服务端状态" or nil
     latest_version = version
     round = new_round
     sequence = next_sequence
@@ -454,7 +464,7 @@ function OnDestroy()
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
-    playback, status_line, seconds, visible = nil, nil, nil, {}
+    playback, status_line, seconds, hint, visible = nil, nil, nil, nil, {}
     preparing, can_advance, can_leave, confirm_leave, merge_mode = false, false, false, false, false
     reward_index = 1
     if merge_label.alive then merge_label.text = "合并模式" end

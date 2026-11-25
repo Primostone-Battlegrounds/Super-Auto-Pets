@@ -331,7 +331,9 @@ local function reroll()
 end
 
 local function ready_up()
-    if editable() and #preview.team > 0 then send(1) end
+    if not editable() then return end
+    if #preview.team > 0 then send(1)
+    else hint = "请先购买至少一只动物，再准备" end
 end
 
 local function scrub(offset)
