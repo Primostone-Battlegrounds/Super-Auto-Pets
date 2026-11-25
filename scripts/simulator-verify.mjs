@@ -352,6 +352,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
       if (eventText && pattern.test(eventText)) {
         const replayFrame = await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
+        if (name === 'damage') requireText(`${replayBadges}/Price1`, /^-5$/u);
+        else assert.ok(!replayFrame.paint.some(item => item.id === priceId), 'The impact badge must clear after damage');
         if (duel && name === 'attack') requireText('Duel/Status', /正在播放本轮战斗/u);
         if (duel && name === 'result') requireText('Duel/Status', /回放结束 · 等待结算/u);
         if (name === 'attack') {
