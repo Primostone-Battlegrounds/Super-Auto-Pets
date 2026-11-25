@@ -351,7 +351,9 @@ local function arrange(preparing)
     if preparing_layout == preparing then return end
     preparing_layout = preparing
     arrange_portraits(preparing)
-    control("Field/PrepRail"):SetAnchoredPosition(0, preparing and -7 or -26)
+    local track_y = preparing and 17 or -15
+    control("Field/PrepRail"):SetAnchoredPosition(0, track_y)
+    control("Field/TrackShadow"):SetAnchoredPosition(0, track_y - 7)
     control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
     control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
     control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
@@ -448,7 +450,7 @@ local function draw(refresh)
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
     text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x9c3328 or 0x733b31)
-    text("TeamCaption", preparing and "我的阵容 · 右侧为前排" or "我方")
+    text("TeamCaption", preparing and "我的阵容" or "我方")
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
     text("OpponentCaption", style and (opponent .. " · " .. style) or opponent)
@@ -1026,7 +1028,8 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Restart/Cancel", function() show_restart(nil) end)
     bind_button("Restart/Confirm", confirm_restart)
     for _, path in ipairs({"Border", "Panel", "Header", "Heading", "Field", "Field/Surface", "Field/Cloud", "Field/Ridge", "Field/Divider", "Field/Ground",
-        "Field/PrepRail", "Field/LeftBrush", "Field/RightBrush", "Field/Foreground", "Team1/Front", "Enemy1/Front",
+        "Field/PrepRail", "Field/TrackShadow", "Field/LeftBrush", "Field/RightBrush", "Field/Foreground", "Field/Pine",
+        "Team1/Front", "Enemy1/Front",
         "Shop/Paper", "Shop/Rail", "TeamCaption",
         "Battle/Surface", "Menu/Backdrop", "Menu/Rim", "Menu/Paper",
         "Menu/Heading"}) do

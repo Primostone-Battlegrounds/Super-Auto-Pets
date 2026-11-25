@@ -449,7 +449,7 @@ local function opening(expected_seed)
     assert(label("Round/Value") == "第 1 轮 · 准备")
     assert(logs[#logs]:find("seed=" .. expected_seed .. "$"))
     assert(label("Money/Value") == "10")
-    assert(label("TeamCaption"):find("右侧为前排", 1, true))
+    assert(label("TeamCaption") == "我的阵容" and nodes["Team1/Front"].visible)
     assert(label("OpponentCaption"):find("电脑对手", 1, true))
     assert(nodes.Team1.x > nodes.Team5.x and nodes.Team5.y == nodes.Team1.y)
     for index = 1, 5 do assert(nodes["Enemy" .. index].active == false) end
