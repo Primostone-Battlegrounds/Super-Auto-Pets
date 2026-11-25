@@ -16,7 +16,7 @@ function M.combat_values(attack, health, is_boost)
     local attack_text, health_text = prefix .. attack, prefix .. health
     local digits = #attack_text + #health_text
     local size = digits <= 3 and 22 or digits <= 4 and 20 or 18
-    return string.format("<b><color=#714718><size=%d>%s</size></color></b><size=12>攻 </size><b><color=#803D35><size=%d>%s</size></color></b><size=12>命</size>",
+    return string.format("<b><color=#482D0B><size=%d>%s</size></color></b><size=12>攻 </size><b><color=#5F1E22><size=%d>%s</size></color></b><size=12>命</size>",
         size, attack_text, size, health_text)
 end
 function M.stats(name, attack, health, shield)
