@@ -324,7 +324,7 @@ local function draw_battle_cue(event, passed)
     show("BattleFX/Impact", impact == true)
     if strike then
         local direction = event.side == "player" and 1 or -1
-        local lunge = direction * 12 * intensity
+        local lunge = direction * 10 * intensity
         control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
         local x, y = control(actor):GetAnchoredPosition()
         local target_x, target_y = control(unit_path(event.target_side, event.target_slot)):GetAnchoredPosition()
@@ -930,7 +930,7 @@ function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
     if not view_root then set_visual_plates(root) end
-    portrait = bind_portrait(control, 1.56)
+    portrait = bind_portrait(control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1
