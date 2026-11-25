@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { checkRuntimeListCall } from './gil-list-limits.mjs';
 import { shopFlow } from './versus-shop-parity.mjs';
 
 export function verifyGraph(graphSource, buttonSource, combatSource, registeredButtons, ts, marketFixture, checkReplay) {
@@ -15,6 +16,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   const playerIds = { A: 1n, B: 2n, C: 3n };
   const logs = [];
   let variables, handler, onPress;
+  let controllerId, combatId;
   let events, updates, now, lastVersion, combatVariables, combatEvents, combatSignals, randomCount;
   let advancedSkills;
   let droppedWork, droppedReceipts, droppedWorkRemaining, droppedReceiptsRemaining, combatStarts, submittedWork;
@@ -75,12 +77,12 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
       }
     },
   };
-  const tracked = calls => Object.fromEntries(Object.entries(calls).map(([name, call]) => [name, (...args) => {
+  const tracked = (graphId, calls) => Object.fromEntries(Object.entries(calls).map(([name, call]) => [name, (...args) => {
     apiCalls += 1;
-    return call(...args);
+    return checkRuntimeListCall(graphId(), name, call, args);
   }]));
-  const flow = tracked(api);
-  const combatFlow = tracked({
+  const flow = tracked(() => controllerId, api);
+  const combatFlow = tracked(() => combatId, {
     ...api,
     get: name => combatVariables[name],
     set: (name, value) => { combatVariables[name] = value; },
@@ -117,6 +119,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
     now = 0n;
     lastVersion = 0n;
     load(graphSource, { server(options) {
+      controllerId = options.id;
       variables = { ...options.variables };
       return {
         on(name, callback) { events.set(name, callback); return this; },
@@ -135,6 +138,7 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
       state.set('stage', { AP_GameMode: 2n });
     }
     load(combatSource, { server(options) {
+      combatId = options.id;
       combatVariables = { ...options.variables };
       return {
         on(name, callback) { combatEvents.set(name, callback); return this; },

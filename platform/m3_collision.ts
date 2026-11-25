@@ -12,7 +12,7 @@ g.server({
     board1: list('int', [0n]), // AP_PROBE_BOARD1
     board2: list('int', [0n]), // AP_PROBE_BOARD2
     board3: list('int', [0n]), // AP_PROBE_BOARD3
-    catalog: list('int', [0n]), // AP_PROBE_CATALOG
+    // AP_FAINT_DEFAULTS
     status: list('int', [0n, 0n, 0n, 0n]),
     active: 4n, cursor: 0n, lastTick: -1n,
   },
@@ -39,7 +39,8 @@ g.server({
   f.printString('AUTO_PETS_COLLISION_PROBE strike');
   f.printString(f.dataTypeConversion(pair + 1n, 'str'));
   f.printString(f.dataTypeConversion(f.getCorrespondingValueFromList(board, battleStrikeAt) + 1n, 'str'));
-  const outcome = gstsServerCollisionStep(f, board, f.get('catalog'), true);
+  // AP_FAINT_READS
+  const outcome = gstsServerCollisionStep(f, board, faintEffect, faintPower, faintTarget, faintAttack, faintHealth, true);
   if (pair === 0n) f.set('board0', board);
   else if (pair === 1n) f.set('board1', board);
   else if (pair === 2n) f.set('board2', board);

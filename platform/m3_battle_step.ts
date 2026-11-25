@@ -33,7 +33,8 @@ function gstsServerBattleShieldFront(f: BattleFlow, board: bigint[], side: bigin
   return count;
 }
 
-function gstsServerCollisionStep(f: BattleFlow, board: bigint[], catalog: bigint[], trace: boolean): bigint {
+function gstsServerCollisionStep(f: BattleFlow, board: bigint[], faintEffect: bigint[], faintPower: bigint[],
+  faintTarget: bigint[], faintAttack: bigint[], faintHealth: bigint[], trace: boolean): bigint {
   const strike = f.getCorrespondingValueFromList(board, battleStrikeAt) + 1n;
   f.modifyValueInList(board, battleStrikeAt, strike);
   const firstSide = f.getCorrespondingValueFromList(board, battleFirstAt);
@@ -86,10 +87,10 @@ function gstsServerCollisionStep(f: BattleFlow, board: bigint[], catalog: bigint
     const side = (firstSide + offset) % 2n;
     const code = f.getCorrespondingValueFromList(defeated, side);
     if (code === 0n) continue;
-    const meta = (code - 1n) * 5n;
-    const effect = f.getCorrespondingValueFromList(catalog, meta);
+    const meta = code - 1n;
+    const effect = f.getCorrespondingValueFromList(faintEffect, meta);
     if (effect === 0n) continue;
-    const power = f.getCorrespondingValueFromList(catalog, meta + 1n);
+    const power = f.getCorrespondingValueFromList(faintPower, meta);
     const level = f.getCorrespondingValueFromList(levels, side);
     const countAt = battleCountAt + side;
     const headAt = battleHeadAt + side;
@@ -108,9 +109,9 @@ function gstsServerCollisionStep(f: BattleFlow, board: bigint[], catalog: bigint
         f.printString(f.dataTypeConversion(amount, 'str'));
       }
     } else if (effect === 2n) {
-      const tokenCode = f.getCorrespondingValueFromList(catalog, meta + 2n);
-      const tokenAttack = f.getCorrespondingValueFromList(catalog, meta + 3n);
-      const tokenHealth = f.getCorrespondingValueFromList(catalog, meta + 4n);
+      const tokenCode = f.getCorrespondingValueFromList(faintTarget, meta);
+      const tokenAttack = f.getCorrespondingValueFromList(faintAttack, meta);
+      const tokenHealth = f.getCorrespondingValueFromList(faintHealth, meta);
       // AP_LOWERED_SUMMON
       const newHead = (head + battleSlots - count) % battleSlots;
       f.modifyValueInList(board, headAt, newHead);
@@ -132,7 +133,7 @@ function gstsServerCollisionStep(f: BattleFlow, board: bigint[], catalog: bigint
         }
       }
     } else if (effect === 3n) {
-      const targets = f.getCorrespondingValueFromList(catalog, meta + 2n);
+      const targets = f.getCorrespondingValueFromList(faintTarget, meta);
       const amount = power * level;
       const count = gstsServerBattleShieldFront(f, board, side, head, size, targets, amount);
       if (trace) {

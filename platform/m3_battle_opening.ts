@@ -104,7 +104,7 @@ function gstsServerBattleDamage(f: BattleFlow, board: bigint[], openingCatalog: 
   return false /* AP_OPENING_HURT_CHECK */;
 }
 
-function gstsServerBattleCollectFaints(f: BattleFlow, board: bigint[], opening: bigint[], catalog: bigint[],
+function gstsServerBattleCollectFaints(f: BattleFlow, board: bigint[], opening: bigint[], faintEffect: bigint[],
   side: bigint, trace: boolean): bigint[] {
   const offset = side * battleSlots;
   const countAt = battleCountAt + side;
@@ -117,7 +117,7 @@ function gstsServerBattleCollectFaints(f: BattleFlow, board: bigint[], opening: 
     const code = f.getCorrespondingValueFromList(board, target);
     if (f.getCorrespondingValueFromList(board, target + 2n) === 0n) {
       gstsServerOpeningLog(f, trace, 'faint', side, slot, code, 0n);
-      if (f.getCorrespondingValueFromList(catalog, (code - 1n) * 5n) !== 0n) {
+      if (f.getCorrespondingValueFromList(faintEffect, code - 1n) !== 0n) {
         const at = f.getListLength(fallen);
         f.insertValueIntoList(fallen, at, code);
         f.insertValueIntoList(fallen, at + 1n, f.getCorrespondingValueFromList(board, target + 5n));
@@ -133,8 +133,9 @@ function gstsServerBattleCollectFaints(f: BattleFlow, board: bigint[], opening: 
   return fallen;
 }
 
-function gstsServerBattleApplyFaints(f: BattleFlow, board: bigint[], opening: bigint[], catalog: bigint[],
-  openingCatalog: bigint[], side: bigint, fallen: bigint[], trace: boolean): void {
+function gstsServerBattleApplyFaints(f: BattleFlow, board: bigint[], opening: bigint[],
+  faintEffect: bigint[], faintPower: bigint[],
+  faintTarget: bigint[], faintAttack: bigint[], faintHealth: bigint[], openingCatalog: bigint[], side: bigint, fallen: bigint[], trace: boolean): void {
   const offset = side * battleSlots;
   const countAt = battleCountAt + side;
   const queued = (f.getListLength(fallen) - 1n) / 4n;
@@ -144,9 +145,9 @@ function gstsServerBattleApplyFaints(f: BattleFlow, board: bigint[], opening: bi
     const entry = 1n + index * 4n;
     const code = f.getCorrespondingValueFromList(fallen, entry);
     const level = f.getCorrespondingValueFromList(fallen, entry + 1n);
-    const metadata = (code - 1n) * 5n;
-    const effect = f.getCorrespondingValueFromList(catalog, metadata);
-    const power = f.getCorrespondingValueFromList(catalog, metadata + 1n);
+    const metadata = code - 1n;
+    const effect = f.getCorrespondingValueFromList(faintEffect, metadata);
+    const power = f.getCorrespondingValueFromList(faintPower, metadata);
     const position = f.getCorrespondingValueFromList(fallen, entry + 2n) + inserted;
     // AP_REACTIVE_BEGIN
     gstsServerOpeningLog(f, trace, 'skill', side, f.getCorrespondingValueFromList(fallen, entry + 3n), code, 7n + effect);
@@ -160,9 +161,9 @@ function gstsServerBattleApplyFaints(f: BattleFlow, board: bigint[], opening: bi
       f.modifyValueInList(board, target + 3n, targetMaxHealth);
       gstsServerOpeningLog(f, trace, 'buff', side, 0n, f.getCorrespondingValueFromList(board, target), amount);
     } else if (effect === 2n) {
-      const tokenCode = f.getCorrespondingValueFromList(catalog, metadata + 2n);
-      const tokenAttack = f.getCorrespondingValueFromList(catalog, metadata + 3n);
-      const tokenHealth = f.getCorrespondingValueFromList(catalog, metadata + 4n);
+      const tokenCode = f.getCorrespondingValueFromList(faintTarget, metadata);
+      const tokenAttack = f.getCorrespondingValueFromList(faintAttack, metadata);
+      const tokenHealth = f.getCorrespondingValueFromList(faintHealth, metadata);
       // AP_OPENING_SUMMON
       if (count > 0n) {
         for (let moved = 0n; moved < size - position; moved += 1n) {
@@ -191,7 +192,7 @@ function gstsServerBattleApplyFaints(f: BattleFlow, board: bigint[], opening: bi
     } else if (effect === 3n) {
       const amount = power * level;
       const count = gstsServerBattleShieldFront(f, board, side, 0n, size,
-        f.getCorrespondingValueFromList(catalog, metadata + 2n), amount);
+        f.getCorrespondingValueFromList(faintTarget, metadata), amount);
       for (let slot = 0n; slot < count; slot += 1n) {
         const target = (offset + slot) * battleUnitSize;
         gstsServerOpeningLog(f, trace, 'shield', side, slot, f.getCorrespondingValueFromList(board, target), amount);
@@ -204,8 +205,9 @@ function gstsServerBattleApplyFaints(f: BattleFlow, board: bigint[], opening: bi
 // Each call inspects at most one original slot. Tokens inserted by a previous
 // faint never join the start queue, and a retired original actor is skipped.
 // openingCatalog rows are [effect, power, targets], indexed by the shop's code.
-function gstsServerOpeningStep(f: BattleFlow, board: bigint[], catalog: bigint[],
-  openingCatalog: bigint[], opening: bigint[], trace: boolean): boolean {
+function gstsServerOpeningStep(f: BattleFlow, board: bigint[],
+  faintEffect: bigint[], faintPower: bigint[],
+  faintTarget: bigint[], faintAttack: bigint[], faintHealth: bigint[], openingCatalog: bigint[], opening: bigint[], trace: boolean): boolean {
   const cursor = f.getCorrespondingValueFromList(opening, openingCursorAt);
   let done = cursor >= 2n * battleSlots || gstsServerBattleOutcome(f, board) !== 0n;
   if (!done) {
@@ -265,8 +267,8 @@ function gstsServerOpeningStep(f: BattleFlow, board: bigint[], catalog: bigint[]
           gstsServerBattleHurt(f, board, opening, openingCatalog, enemy, f.getCorrespondingValueFromList(hit, index), trace);
         }
         // AP_REACTIVE_END
-        const fallen = gstsServerBattleCollectFaints(f, board, opening, catalog, enemy, trace);
-        gstsServerBattleApplyFaints(f, board, opening, catalog, openingCatalog, enemy, fallen, trace);
+        const fallen = gstsServerBattleCollectFaints(f, board, opening, faintEffect, enemy, trace);
+        gstsServerBattleApplyFaints(f, board, opening, faintEffect, faintPower, faintTarget, faintAttack, faintHealth, openingCatalog, enemy, fallen, trace);
       }
     }
     done = cursor + 1n >= 2n * battleSlots || gstsServerBattleOutcome(f, board) !== 0n;

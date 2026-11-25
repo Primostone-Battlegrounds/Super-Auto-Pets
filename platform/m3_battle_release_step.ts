@@ -1,7 +1,8 @@
 // The release board stays dense. A splash can retire slot two independently
 // of the front, so both sides compact before either queued faint effect runs.
-function gstsServerReleaseCollisionStep(f: BattleFlow, board: bigint[], catalog: bigint[],
-  metadata: bigint[], opening: bigint[], trace: boolean): bigint {
+function gstsServerReleaseCollisionStep(f: BattleFlow, board: bigint[],
+  faintEffect: bigint[], faintPower: bigint[],
+  faintTarget: bigint[], faintAttack: bigint[], faintHealth: bigint[], metadata: bigint[], opening: bigint[], trace: boolean): bigint {
   f.modifyValueInList(board, battleStrikeAt, f.getCorrespondingValueFromList(board, battleStrikeAt) + 1n);
   const first = f.getCorrespondingValueFromList(board, battleFirstAt);
   const hurt = f.assemblyList([0n, 0n, 0n, 0n], 'int');
@@ -44,9 +45,9 @@ function gstsServerReleaseCollisionStep(f: BattleFlow, board: bigint[], catalog:
     const target = f.getCorrespondingValueFromList(hurt, index);
     gstsServerBattleHurt(f, board, opening, metadata, target / battleSlots, target % battleSlots, trace);
   }
-  const firstFaints = gstsServerBattleCollectFaints(f, board, opening, catalog, first, trace);
-  const secondFaints = gstsServerBattleCollectFaints(f, board, opening, catalog, 1n - first, trace);
-  gstsServerBattleApplyFaints(f, board, opening, catalog, metadata, first, firstFaints, trace);
-  gstsServerBattleApplyFaints(f, board, opening, catalog, metadata, 1n - first, secondFaints, trace);
+  const firstFaints = gstsServerBattleCollectFaints(f, board, opening, faintEffect, first, trace);
+  const secondFaints = gstsServerBattleCollectFaints(f, board, opening, faintEffect, 1n - first, trace);
+  gstsServerBattleApplyFaints(f, board, opening, faintEffect, faintPower, faintTarget, faintAttack, faintHealth, metadata, first, firstFaints, trace);
+  gstsServerBattleApplyFaints(f, board, opening, faintEffect, faintPower, faintTarget, faintAttack, faintHealth, metadata, 1n - first, secondFaints, trace);
   return gstsServerBattleOutcome(f, board);
 }
