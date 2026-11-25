@@ -12,6 +12,7 @@ const revision=directory=>execFileSync('git',['-C',directory,'rev-parse','HEAD']
 const lock=JSON.parse(fs.readFileSync(new URL('../platform/toolchain-lock.json',import.meta.url)));
 assert.equal(revision(mcp),lock.mcp.commit,'MCP revision differs from toolchain lock');
 assert.equal(revision(sim),lock.simulator.commit,'Simulator revision differs from toolchain lock');
+for(const directory of [mcp,sim]){const changed=execFileSync('git',['-C',directory,'diff','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(Boolean);assert.ok(changed.every(file=>file==='npm-shrinkwrap.json'),'Tracked tool source changed: '+changed.join(','));}
 const {save,receipt}=await nativeSimulatorSave(mcp,gil,process.env.SIMULATOR_UI??'AutoPetsGame');
 fs.writeFileSync(path.join(output,'native.save.json'),JSON.stringify(save));
 const api=await import(pathToFileURL(path.join(sim,'studio/play/session.js')));
@@ -94,7 +95,7 @@ const buildPath=path.join(path.dirname(gil),'BUILD.json');
 const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
 if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
 const textDefects=results.flatMap(r=>r.frames.flatMap(f=>f.visibleTexts.filter(t=>t.text.trim()&&(!t.textLayout||t.textLayout.visibleLineCount===0)).map(t=>({canvasId:r.canvasId,frame:f.name,path:t.path,name:t.name,text:t.text,height:t.height,requiredHeight:t.textLayout?.requiredHeight}))));
-const report={schemaVersion:1,sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status:results.some(r=>r.runtimeExceptions.length||r.frames.some(f=>f.mountError||f.logs.length))?'runtime-failed':textDefects.length?'observed-text-defects':'executed',mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
+const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status:results.some(r=>r.runtimeExceptions.length||r.frames.some(f=>f.mountError||f.logs.length))?'runtime-failed':textDefects.length?'observed-text-defects':'executed',mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
 fs.writeFileSync(path.join(output,'receipt.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify({status:report.status,output,controls:receipt.controls,results:results.map(r=>({canvasId:r.canvasId,playerCount:r.playerCount,runtimeExceptions:r.runtimeExceptions,frames:r.frames.map(f=>({name:f.name,mountError:f.mountError,errors:f.logs}))}))},null,2));
 
