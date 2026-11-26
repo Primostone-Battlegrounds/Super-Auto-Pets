@@ -11,7 +11,10 @@ else
     assert(file:close())
     -- Retain every byte of the extracted client. This test-only suffix exposes
     -- the private loader without invoking a UI callback or changing the GIL.
-    local env = setmetatable({script = {object = {}}}, {__index = _G})
+    local env = setmetatable({
+        script = {object = {}},
+        Enum = {CursorEventType = {CursorClick = 1}},
+    }, {__index = _G})
     load_module = assert(load(source .. "\nreturn loadAutoPetsModule", "@" .. extracted, "t", env))()
 end
 

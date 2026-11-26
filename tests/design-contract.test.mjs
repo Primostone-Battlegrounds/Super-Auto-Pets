@@ -134,5 +134,7 @@ test('launch requires ten purchasable pets in each of six tiers', t => {
     const result = checkAcceptance(root, build, report);
     assert.equal(result.unsatisfied.includes('launchPetPool'), !complete, JSON.stringify(petTierCounts));
     assert.equal(result.verdict, 'NO-GO', 'Roster size does not replace the existing acceptance layers');
+    const altered = { ...build, petTierCounts: [0, 0, 0, 0, 0, 0] };
+    assert.throws(() => checkAcceptance(root, altered, report), /different build/);
   }
 });

@@ -29,10 +29,12 @@ const pending = {
 };
 
 function identity(build) {
-  return Object.fromEntries(identityKeys.map(key => {
+  const candidate = Object.fromEntries(identityKeys.map(key => {
     assert.ok(Object.hasOwn(build, key), `Missing acceptance identity: ${key}`);
     return [key, build[key]];
   }));
+  if (Object.hasOwn(build, 'petTierCounts')) candidate.petTierCounts = build.petTierCounts;
+  return candidate;
 }
 
 function sha256(bytes) {
