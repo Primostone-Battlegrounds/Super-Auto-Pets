@@ -6,8 +6,9 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { bindFaintColumns, faintArguments, nativeBattle } from '../../platform/m3-battle-opening.mjs';
+import { bindFaintColumns, bindOpeningColumns, faintArguments, nativeBattle, openingArguments } from '../../platform/m3-battle-opening.mjs';
 import { nativeShop } from '../../platform/versus-shop.mjs';
+import { gilListAudit, listLimit } from './gil-list-limits.mjs';
 
 const [checkoutArg, scratch, lua53, lua54, outputArg, profile = 'compatibility'] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua53 && lua54,
@@ -54,9 +55,9 @@ for (const row of expected.trimEnd().split('\n')) {
   else assert.fail(kind);
 }
 const columns = Object.values(battle.faintMetadata);
+const openingColumns = Object.values(battle.openingMetadata);
 assert.deepEqual(faintCatalog, faintCatalog.map((_, index) => columns.map(column => column[index])));
-assert.ok(columns.every(column => column.length === faintCatalog.length));
-assert.equal(faintCatalog.length, battle.openingMetadata.length / 3);
+assert.ok([...columns, ...openingColumns].every(column => column.length === faintCatalog.length));
 assert.equal(fixtures.length, profile === 'release' ? 339 : 329);
 
 const ts = load('typescript');
@@ -126,7 +127,7 @@ for (const fixture of fixtures) {
   let done = false;
   for (let step = 0; !done && step < 10; step += 1) {
     calls = 0;
-    done = exports.step(tracked, board, ...columns, battle.openingMetadata, state, true);
+    done = exports.step(tracked, board, ...columns, ...openingColumns, state, true);
     peakCalls = Math.max(peakCalls, calls);
   }
   assert.ok(done);
@@ -144,7 +145,7 @@ for (const fixture of fixtures) {
       assert.equal(outcome, 0n);
       printed.length = 0;
       calls = 0;
-      outcome = exports.collide(tracked, board, ...columns, battle.openingMetadata, state, true);
+      outcome = exports.collide(tracked, board, ...columns, ...openingColumns.slice(0, 2), state, true);
       peakCollisionCalls = Math.max(peakCollisionCalls, calls);
       assert.deepEqual(active(board), active(strike.board), `strike board, seed ${fixture.seed}`);
       const events = eventsFromLog(printed);
@@ -177,9 +178,33 @@ const graph = addGraph({ mapPath: config.mapPath, name: 'AP_OpeningProbe', attac
 const literal = values => '[' + values.map(value => value + 'n').join(', ') + ']';
 const release = profile === 'release';
 const probe = release ? fixtures.find(({ seed }) => seed === 31n) : fixtures[0];
-const probeBoard = probe.input.slice();
+// Exercise the same independently checked battle at high codes. The release
+// probe reserves at least 60 purchase codes and five token codes without adding
+// any game content. The former interleaved list would exceed the GIL limit.
+const codeOffset = release ? Math.max(0, 65 - battle.ids.length) : 0;
+const shiftCode = code => code === 0n ? 0n : code + BigInt(codeOffset);
+function shiftBoard(source) {
+  const board = source.slice();
+  for (let index = 0; index < 60; index += 6) board[index] = shiftCode(board[index]);
+  return board;
+}
+function padColumns(metadata) {
+  return Object.fromEntries(Object.entries(metadata).map(([name, values]) => [name,
+    [...Array(codeOffset).fill(0n), ...values],
+  ]));
+}
+const probeFaints = padColumns(battle.faintMetadata);
+probeFaints.faintTarget = probeFaints.faintTarget.map((target, index) =>
+  probeFaints.faintEffect[index] === 2n ? shiftCode(target) : target);
+const probeOpening = padColumns(battle.openingMetadata);
+if (release) {
+  assert.ok(Object.values(probeOpening).every(column => column.length >= 65 && column.length <= listLimit));
+  assert.ok(Object.values(probeOpening).flat().length > listLimit);
+}
+const probeBoard = shiftBoard(probe.input);
 probeBoard[64] = -1n;
-const probeEvents = [...probe.events, ...probe.strikes.flatMap(strike => strike.events)];
+const probeEvents = [...probe.events, ...probe.strikes.flatMap(strike => strike.events)]
+  .map(([kind, side, slot, code, amount]) => [kind, side, slot, shiftCode(code), amount]);
 if (release) {
   const effects = probeEvents.filter(([kind]) => kind === 'skill').map(([, , , , effect]) => effect);
   assert.ok([5n, 6n, 7n].every(effect => effects.includes(effect)));
@@ -188,8 +213,7 @@ const settle = release ? `
   if (f.get('colliding')) {
     const board = f.get('board');
     const opening = f.get('opening');
-    const metadata = f.get('metadata');
-    const outcome = ${battle.collisionFunction}(f, board, ${faintArguments}, metadata, opening, true);
+    const outcome = ${battle.collisionFunction}(f, board, ${faintArguments}, openingEffect, openingPower, opening, true);
     f.set('board', board);
     f.set('opening', opening);
     if (outcome !== 0n) {
@@ -205,7 +229,7 @@ const finishOpening = release ? "if (done) f.set('colliding', true);"
     f.set('finished', true);
     f.stopTimer(event.eventSourceEntity, 'AP_OpeningProbe');
   }`;
-const source = bindFaintColumns(`import { g } from 'genshin-ts/runtime/core';
+const template = `import { g } from 'genshin-ts/runtime/core';
 ${kernel}
 g.server({
   id: ${graph.graphId},
@@ -213,7 +237,7 @@ g.server({
   variables: {
     board: ${literal(probeBoard)}, opening: [0n], finished: false,${release ? ' colliding: false,' : ''}
     // AP_FAINT_DEFAULTS
-    metadata: ${literal(battle.openingMetadata)},
+    // AP_OPENING_DEFAULTS
   },
 })
 .on('whenEntityIsCreated', (event, f) => {
@@ -225,16 +249,17 @@ g.server({
 })
 .on('whenTimerIsTriggered', (event, f) => {
   if (event.timerName !== 'AP_OpeningProbe' || f.get('finished')) return;
-  // AP_FAINT_READS${settle}
+  // AP_FAINT_READS
+  // AP_OPENING_READS${settle}
   const board = f.get('board');
   const opening = f.get('opening');
-  const metadata = f.get('metadata');
-  const done = gstsServerOpeningStep(f, board, ${faintArguments}, metadata, opening, true);
+  const done = gstsServerOpeningStep(f, board, ${faintArguments}, ${openingArguments}, opening, true);
   f.set('board', board);
   f.set('opening', opening);
   ${finishOpening}
 });
-`, battle.faintMetadata);
+`;
+const source = bindOpeningColumns(bindFaintColumns(template, probeFaints), probeOpening);
 const handlers = new Map();
 let variables;
 const stage = {
@@ -294,7 +319,7 @@ const expectedLog = probeEvents.flatMap(event => event.map(String));
 if (probe.outcome) expectedLog.push('outcome', String(probe.outcome));
 assert.deepEqual(probeLog, expectedLog);
 const finalBoard = probe.strikes.at(-1)?.board ?? probe.board;
-assert.deepEqual(active(variables.board), active(finalBoard));
+assert.deepEqual(active(variables.board), active(shiftBoard(finalBoard)));
 
 const tool = toolRegistry(service).find(entry => entry.name === 'write_graphs');
 const result = await tool.method(tool.schema.parse({ mapPath: graph.mapPath, graphs: [{ graphId: graph.graphId, code: source }] }));
@@ -305,6 +330,9 @@ const { players } = listRespawnPoints({ mapPath });
 assert.deepEqual(players, { min: 1, max: 1 });
 assert.ok(listComponents({ mapPath, entity: 'stage' }).found.some(entry => entry.graphs.includes(graph.graphId)));
 const inspected = service.inspectMap({ mapPath });
+const nativeLists = (await gilListAudit(load))(fs.readFileSync(mapPath));
+const probeLists = nativeLists.find(entry => entry.id === graph.graphId);
+assert.ok(probeLists && probeLists.defaults.max >= Object.values(probeOpening)[0].length);
 const compiled = inspected.graphs.find(entry => entry.id === graph.graphId);
 assert.ok(compiled.nodeCount > 0 && compiled.editorCount < 3000);
 assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);

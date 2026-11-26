@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { image, pigment, terrain } from './m1-ui.mjs';
-import { bindFaintColumns, faintArguments } from './m3-battle-opening.mjs';
+import { bindFaintColumns, bindOpeningColumns, faintArguments } from './m3-battle-opening.mjs';
 import { clearingColours as clearing, labelFront, onlineBadgePool, onlineBadgeSource } from './multiplayer-standings.mjs';
 
 export const duelSignals = {
@@ -230,10 +230,10 @@ export function duelGraphs(resource, battleGraph, graphId, fightGraphId, startin
     .replace('id: 1073741827,', `id: ${fightGraphId},`)
     .replace("[0n], 'int'); // AP_DUEL_BOARD", `${literals(Array(66).fill(0))}, 'int');`)
     .replace('// AP_DUEL_COLLISION', release ? `const opening = f.get('openingState');
-      outcome = ${battleGraph.collisionFunction}(f, board, ${faintArguments}, metadata, opening, false);
-      f.set('openingState', opening);` : `outcome = gstsServerCollisionStep(f, board, ${faintArguments}, false);`)
-    .replace('[0n], // AP_DUEL_OPENING', `${literals(battleGraph.openingMetadata)},`);
+      outcome = ${battleGraph.collisionFunction}(f, board, ${faintArguments}, openingEffect, openingPower, opening, false);
+      f.set('openingState', opening);` : `outcome = gstsServerCollisionStep(f, board, ${faintArguments}, false);`);
   assert.doesNotMatch(fightSource, /\/\/ AP_DUEL_/);
-  const combatSource = `${resource.source}\n${battleGraph.source}\n${bindFaintColumns(fightSource, battleGraph.faintMetadata)}`;
+  const withFaints = bindFaintColumns(fightSource, battleGraph.faintMetadata);
+  const combatSource = `${resource.source}\n${battleGraph.source}\n${bindOpeningColumns(withFaints, battleGraph.openingMetadata)}`;
   return [graphSource, combatSource];
 }

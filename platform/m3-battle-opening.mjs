@@ -6,23 +6,32 @@ import { lowerCombatMath } from './m3_collision_lower.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-// Column order matches the five faint fields exported by Lua. All columns
-// use the same zero-based index (pet code minus one).
+// Column order matches the fields exported by Lua. Each column is indexed by
+// battle code minus one and occupies its own bounded native list.
+const openingFields = ['openingEffect', 'openingPower', 'openingTargets'];
 const faintFields = ['faintEffect', 'faintPower', 'faintTarget', 'faintAttack', 'faintHealth'];
 
-export function faintColumns(rows) {
-  assert.ok(rows.every(row => row.length === faintFields.length));
-  return Object.fromEntries(faintFields.map((name, index) => [name, rows.map(row => row[index])]));
+function columnize(rows, fields) {
+  assert.ok(rows.every(row => row.length === fields.length));
+  return Object.fromEntries(fields.map((name, index) => [name, rows.map(row => row[index])]));
 }
 
-export function bindFaintColumns(source, columns) {
-  assert.ok(source.includes('// AP_FAINT_DEFAULTS') && source.includes('// AP_FAINT_READS'));
-  return source.replace('// AP_FAINT_DEFAULTS', faintFields.map(name =>
+export const faintColumns = rows => columnize(rows, faintFields);
+export const openingColumns = rows => columnize(rows, openingFields);
+
+function bindColumns(source, columns, marker) {
+  const defaults = `// AP_${marker}_DEFAULTS`;
+  const reads = `// AP_${marker}_READS`;
+  assert.ok(source.includes(defaults) && source.includes(reads));
+  return source.replace(defaults, Object.keys(columns).map(name =>
     `${name}: [${columns[name].map(value => `${value}n`).join(', ')}],`).join('\n    '))
-    .replace('// AP_FAINT_READS', faintFields.map(name => `const ${name} = f.get('${name}');`).join('\n  '));
+    .replace(reads, Object.keys(columns).map(name => `const ${name} = f.get('${name}');`).join('\n  '));
 }
 
+export const bindFaintColumns = (source, columns) => bindColumns(source, columns, 'FAINT');
+export const bindOpeningColumns = (source, columns) => bindColumns(source, columns, 'OPENING');
 export const faintArguments = faintFields.join(', ');
+export const openingArguments = openingFields.join(', ');
 
 function catalog(lua53, lua54, profile) {
   const extract = lua => execFileSync(lua, ['-E', 'platform/m3_battle_opening_data.lua', profile], {
@@ -30,7 +39,7 @@ function catalog(lua53, lua54, profile) {
   });
   const definition = extract(lua53);
   assert.equal(definition, extract(lua54));
-  const openingMetadata = [];
+  const openingRows = [];
   const faintRows = [];
   const ids = [];
   for (const line of definition.trimEnd().split('\n')) {
@@ -38,10 +47,10 @@ function catalog(lua53, lua54, profile) {
     assert.ok(id && numbers.length === 8);
     const values = numbers.map(BigInt);
     ids.push(id);
-    openingMetadata.push(...values.slice(0, 3));
-    faintRows.push(values.slice(3));
+    openingRows.push(values.slice(0, openingFields.length));
+    faintRows.push(values.slice(openingFields.length));
   }
-  return { ids, openingMetadata, faintMetadata: faintColumns(faintRows) };
+  return { ids, openingMetadata: openingColumns(openingRows), faintMetadata: faintColumns(faintRows) };
 }
 
 function combatMath(parse) {
@@ -53,7 +62,7 @@ function openingSource(math, profile) {
   const source = fs.readFileSync(new URL('./m3_battle_opening.ts', import.meta.url), 'utf8')
     .replace(' /* AP_OPENING_HURT */', release ? ', 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n' : '')
     .replace('false /* AP_OPENING_HURT_CHECK */', release
-      ? 'remaining > 0n && f.getCorrespondingValueFromList(openingCatalog, (code - 1n) * 3n) === 5n' : 'false')
+      ? 'remaining > 0n && f.getCorrespondingValueFromList(openingEffect, code - 1n) === 5n' : 'false')
     .replace(/^ *\/\/ AP_REACTIVE_BEGIN\n([\s\S]*?)^ *\/\/ AP_REACTIVE_END\n/gm, (_, body) => release ? body : '')
     .replace('// AP_OPENING_DAMAGE', math.damageCode)
     .replace('// AP_OPENING_BUFF', math.buffCode)

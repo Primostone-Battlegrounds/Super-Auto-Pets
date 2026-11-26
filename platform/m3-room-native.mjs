@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { bindFaintColumns, faintArguments, nativeBattle } from './m3-battle-opening.mjs';
+import { bindFaintColumns, bindOpeningColumns, faintArguments, nativeBattle } from './m3-battle-opening.mjs';
 import { nativeShop } from './versus-shop.mjs';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
@@ -93,10 +93,10 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   room = initialize(room, 'EMPTY_STOCK', 6 + shop.rules.PET_SLOTS + shop.rules.FOOD_SLOTS + 6 * shop.rules.TEAM_SIZE);
   let fight = replace(read('./m3_room_fight.ts'), 'id: 1073741826,', `id: ${fightId},`);
   fight = bindFaintColumns(fight, battle.faintMetadata);
-  fight = setList(fight, 'START_EFFECTS', battle.openingMetadata);
+  fight = bindOpeningColumns(fight, battle.openingMetadata);
   fight = initialize(fight, 'BOARD', 12 * shop.rules.TEAM_SIZE + 6);
   const collisionArguments = profile === 'release'
-    ? `f, board, ${faintArguments}, metadata, openingState, false`
+    ? `f, board, ${faintArguments}, openingEffect, openingPower, openingState, false`
     : `f, board, ${faintArguments}, false`;
   fight = replace(fight, '// AP_ROOM_COLLISION',
     `if (outcome === 0n) outcome = ${battle.collisionFunction}(${collisionArguments});`);
