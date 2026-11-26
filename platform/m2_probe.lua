@@ -182,7 +182,9 @@ local function render_market()
         local function freeze_visibility(kind, index, code)
             local path = "Freeze" .. kind .. index
             local shown = preparing and code ~= 0 and inspected_kind == kind:lower() and inspected.slot == index
-            for _, suffix in ipairs({"", "Face", "Label"}) do show(offers:GetChild(path .. suffix), shown) end
+            show(offers:GetChild(path), shown)
+            show(offers:GetChild(path .. "Face"), shown)
+            show(offers:GetChild("Freeze" .. kind .. "Label" .. index), shown)
         end
         for slot = 1, rules.pet_slots do freeze_visibility("Pet", slot, view and view.pets[slot] or 0) end
         for slot = 1, rules.food_slots do
