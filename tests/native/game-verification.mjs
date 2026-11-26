@@ -120,7 +120,7 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   if (expanded) {
     assert.equal(catalog.length, 60);
     assert.deepEqual(game.expanded.catalog, catalog.map(({ code, ...entry }) => entry));
-    assert.ok(room.combinations.some(room => room.highestTier === 6 && room.releaseBattles > 0));
+    assert.ok(room.combinations.every(room => room.highestTier === 6 && room.releaseBattles > 0));
   }
   const buttons = duelProbeButtons.map(button => ({ ...button, id: Number(button.placeholder) }));
   const fixtureButtons = fs.readFileSync(path.join(project, 'platform/m2_probe_buttons.ts'), 'utf8');
@@ -146,18 +146,25 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   const petTierCounts = counts[1].split(' ').map(Number);
   assert.deepEqual(petTierCounts, game.petTierCounts, 'Practice and multiplayer must share the purchasable tier sizes');
   const evidence = { petTierCounts, stockCapacityBound, lobby, room, roomReplay: roomReplay.trim(), duel };
+  let expandedTrace;
   if (expanded) {
     assert.deepEqual(petTierCounts, [10, 10, 10, 10, 10, 10]);
     const completed = [...bundled.matchAll(/^expanded_complete (\d+) (\d+) (\d+) (\d+)$/gm)].map(([, seed, rounds, wins, lives]) =>
       ({ seed: Number(seed), rounds: Number(rounds), wins: Number(wins), lives: Number(lives) }));
     assert.equal(completed.length, 3);
-    return { evidence: { ...evidence, expandedPractice: completed } };
+    evidence.expandedPractice = completed;
+    expandedTrace = path.join(workspace, 'expanded-practice.tsv');
+    const actions = bundled.split('\n').filter(row => /^expanded_(input|result)\t/.test(row));
+    assert.ok(actions.length > completed.find(({ seed }) => seed === 8).rounds);
+    fs.writeFileSync(expandedTrace, actions.join('\n') + '\n');
   }
   const client = (lua, suffix) => {
     const captures = path.join(workspace, `captures-${suffix}.tsv`);
     const { templateIndex, layersPerSlot } = game.artPreview ?? {};
     const template = templateIndex ? [String(templateIndex), String(layersPerSlot)] : [];
-    const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures, ...template]);
+    const args = template.length || !expandedTrace ? template : ['', ''];
+    const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures, ...args,
+      ...(expandedTrace ? [expandedTrace] : [])]);
     return { trace, frames: fs.readFileSync(captures, 'utf8') };
   };
   const gameClient = client(lua53, '53');

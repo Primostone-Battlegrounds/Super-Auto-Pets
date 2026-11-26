@@ -131,6 +131,13 @@ if profile == "expanded" then
                 local command = bot.choose_action(state, "guardian", used, "standard", data)
                 if not command then break end
                 assert(game.shop:apply(command))
+                if seed == 8 then
+                    local from = command.offer or command.from or 0
+                    local to = command.target or command.to or 0
+                    if command.action == "sell" then from, to = to, 0 end
+                    io.write(table.concat({"expanded_input", round, command.action, from, to,
+                        command.reward and "reward" or command.kind or "pet"}, "\t"), "\n")
+                end
             end
             local team = game:snapshot().shop.team
             assert(#team > 0 and #team <= data.rules.team_size)
@@ -140,6 +147,9 @@ if profile == "expanded" then
             highest_tier = math.max(highest_tier, state.shop.tier)
             record("expanded_round", {seed = seed, round = round, team = team,
                 outcome = state.battle.outcome, wins = state.wins, lives = state.lives})
+            if seed == 8 then
+                io.write(table.concat({"expanded_result", round, state.battle.outcome, state.wins, state.lives}, "\t"), "\n")
+            end
             if state.phase == "ended" then
                 assert(state.wins == data.rules.wins_to_win or state.lives == 0)
                 io.write("expanded_complete ", seed, " ", round, " ", state.wins, " ", state.lives, "\n")

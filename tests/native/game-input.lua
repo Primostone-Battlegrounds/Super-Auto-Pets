@@ -1,5 +1,6 @@
 local source, layout, captures = assert(arg[1]), assert(arg[2]), assert(arg[3])
 local template_index, layer_limit = tonumber(arg[4]), tonumber(arg[5])
+local expanded_trace = arg[6]
 local order = {}
 for line in io.lines(layout) do order[#order + 1] = line end
 local output = assert(io.open(captures, "w"))
@@ -148,9 +149,18 @@ practice.capture("menu")
 practice.press("Lobby/Choices/Practice/Hit")
 practice.press("Practice/Menu/Continue/Hit")
 local function practice_press(path) practice.press("Practice/" .. path .. "/Hit") end
-local function shop(action, from, to)
+local function shop(action, from, to, kind)
     if action == "buy" or action == "combine" then
-        practice_press("Shop/Pet" .. from)
+        if kind == "reward" then
+            local tag = practice.get("Practice/Shop/Reward/Tag")
+            local index, count = tag.text:match("^(%d+)/(%d+)$")
+            index, count = assert(tonumber(index)), assert(tonumber(count))
+            assert(from <= count)
+            for _ = 1, (from - index) % count do practice_press("Shop/RewardNext") end
+            practice_press("Shop/Reward")
+        else
+            practice_press("Shop/Pet" .. from)
+        end
         practice_press(to and "Team" .. to or "Shop/Buy")
     elseif action == "feed" then
         practice_press("Shop/Food" .. from)
@@ -158,6 +168,16 @@ local function shop(action, from, to)
     elseif action == "move" or action == "sell" then
         practice_press("Team" .. from)
         practice_press(to and "Team" .. to or "Shop/Sell")
+    elseif action == "merge" then
+        practice_press("Team" .. from)
+        practice_press("Shop/Merge")
+        practice_press("Team" .. to)
+    elseif action == "freeze" then
+        local slot = "Shop/" .. (kind == "food" and "Food" or "Pet") .. from
+        practice_press(slot)
+        practice_press("Shop/Freeze")
+        assert(practice.get("Practice/" .. slot .. "/Tag").visible)
+        practice_press(slot) -- A freeze leaves the offer selected.
     elseif action == "reward" then
         practice_press("Shop/Reward")
         practice_press("Shop/Buy")
@@ -166,11 +186,29 @@ local function shop(action, from, to)
         practice_press("Shop/Reroll")
     end
 end
-local rounds = dofile("tests/native/release-practice-rounds.lua")
+local rounds, final_wins, final_lives = {}, 10, 1
+if expanded_trace then
+    for row in io.lines(expanded_trace) do
+        local label, number, action, a, b, kind = row:match("^(%S+)\t(%d+)\t(%S+)\t(%d+)\t(%d+)[\t]?(%S*)$")
+        local index = assert(tonumber(number), row)
+        local round = rounds[index] or {false}
+        rounds[index] = round
+        if label == "expanded_input" then
+            round[#round + 1] = {action, tonumber(a) ~= 0 and tonumber(a) or nil, tonumber(b) ~= 0 and tonumber(b) or nil, kind}
+        else
+            assert(label == "expanded_result")
+            round[1] = action
+            final_wins, final_lives = assert(tonumber(a)), assert(tonumber(b))
+        end
+    end
+    assert(#rounds >= 11)
+else
+    rounds = dofile("tests/native/release-practice-rounds.lua")
+end
 local outcomes = {win = "胜利", loss = "落败", draw = "平局"}
 for round, actions in ipairs(rounds) do
     assert(practice.get("Practice/Shop/Caption").text == ("商店 · %d 阶"):format(math.min(6, (round + 1) // 2)))
-    for index = 2, #actions do shop(table.unpack(actions[index])) end
+    for index = 2, #actions do shop(table.unpack(actions[index], 1, 4)) end
     if round == 1 then practice.capture("practice_shop") end
     if round == 11 then practice.capture("practice_tier_six") end
     practice_press("Primary")
@@ -182,7 +220,8 @@ for round, actions in ipairs(rounds) do
     if round < #rounds then practice_press("Primary") end
 end
 assert(practice.get("Practice/Primary/Title").text == "再挑战本局")
-assert(practice.get("Practice/Wins/Value").text == "10 / 10" and practice.get("Practice/Lives/Value").text == "1 / 5")
+assert(practice.get("Practice/Wins/Value").text == final_wins .. " / 10")
+assert(practice.get("Practice/Lives/Value").text == final_lives .. " / 5")
 practice.capture("practice_result")
 practice_press("Primary")
 assert(practice.get("Practice/Round/Value").text == "第 1 轮 · 准备")
