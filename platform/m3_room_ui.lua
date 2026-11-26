@@ -292,7 +292,9 @@ local function paint_battle()
                     local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                     local event = frame.event
                     if portrait then
-                        display = badges and def.name .. "\n" .. pet_presentation.level(unit)
+                        local growth = frame.growth[key][unit.uid]
+                        if growth and (growth.id ~= unit.id or growth.level ~= unit.level) then growth = nil end
+                        display = badges and def.name .. "\n" .. pet_presentation.level(growth or unit, native_catalog.rules.level_xp)
                             or replay_view.stats(def.name, unit.attack, unit.health, unit.shield)
                         attacking = event and event.type == "attack" and event.uid == unit.uid and event.side == key
                     else
@@ -462,7 +464,7 @@ local function decode_formation(wire)
         local definition = native_catalog.pets[wire[at]]
         if not definition then return nil end
         team[#team + 1] = {id = definition.id, uid = wire[at + 1], attack = wire[at + 2],
-            health = wire[at + 3], level = wire[at + 4]}
+            health = wire[at + 3], level = wire[at + 4], xp = wire[at + 5]}
     end
     return team
 end
@@ -479,12 +481,16 @@ local function receive_replay(_, values)
         print(string.format("AUTO_PETS_M3 replay_mismatch round=%d", round))
         return
     end
+    local growth = {player = {}, enemy = {}}
+    for side, team in pairs({player = left_team, enemy = right_team}) do
+        for _, unit in ipairs(team) do growth[side][unit.uid] = unit end
+    end
     local resolved, board = {}, nil
     for index in ipairs(result.events) do
         local event = replay_view.event(result.events, index, native_catalog)
         board = event.board or board
         resolved[#resolved + 1] = {left = left, right = right, outcome = event.type == "result" and outcome or 0,
-            teams = board, event = event}
+            teams = board, event = event, growth = growth}
     end
     frames, frame_round, frame_index, following, canonical_round = resolved, round, 1, false, round
     replay_playing, replay_elapsed, replay_speed = #resolved > 1, 0, 1
