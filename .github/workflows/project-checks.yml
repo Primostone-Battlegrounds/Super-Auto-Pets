@@ -273,3 +273,18 @@ jobs:
           path: ${{ runner.temp }}/verified-game
           if-no-files-found: error
           retention-days: 30
+      - name: Verify six fitted portraits in real practice
+        env:
+          MILIASTRA_ALLOW_LIVE_WRITE: '0'
+        run: |
+          package="$RUNNER_TEMP/art-practice"
+          node tests/native/verify-art-practice.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
+            docs/design/revisions/v2.1.0/prototype/rows-40.json "$package"
+          (cd "$package" && sha256sum --strict -c SHA256SUMS)
+      - name: Upload verified art practice
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: art-practice-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/art-practice
+          if-no-files-found: error
+          retention-days: 30

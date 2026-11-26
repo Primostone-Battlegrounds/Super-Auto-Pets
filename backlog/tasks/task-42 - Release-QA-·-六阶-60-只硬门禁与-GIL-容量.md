@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-11-26 05:39'
-updated_date: '2026-11-26 05:42'
+updated_date: '2026-11-26 08:01'
 labels: []
 dependencies: []
 references:
@@ -41,4 +41,6 @@ Design-Version: v2.0.0
 
 <!-- SECTION:NOTES:BEGIN -->
 现有 18 只 GIL 回读输出六阶各 3 只，成品门禁显示 launchPetPool 待通过。65 个测试代码（60 个购买池容量与 5 个召唤代码）的原生开场图编译及回读通过，兼容与六阶触发回归均通过。完整首发动物池和官方设备证据见 TASK-35、TASK-41。
+
+新增完整规模的原生八席机器人阶级边界回归，修正双人验证对同种动物货位的固定编号假设。
 <!-- SECTION:NOTES:END -->

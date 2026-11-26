@@ -148,7 +148,7 @@ local function card(path, title, selected, id, face, rim, mirrored)
     control(path .. "/Rim").imageColor = colour(rim)
     if drag and drag.parent == control(path) then title = "拖动中" end
     if title then text(path .. "/Name", title) else show(path .. "/Name", false) end
-    portrait(path .. "/Portrait", id, mirrored)
+    portrait(path .. "/Portrait", id, mirrored, path:match("^Shop/") and 1.5 or 1)
     if selected ~= nil then show(path .. "/Selected", selected) end
 end
 
@@ -988,7 +988,7 @@ function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
     if not view_root then set_visual_plates(root) end
-    shared_portraits = view_root ~= nil
+    shared_portraits = view_root ~= nil or fitted_portraits
     portrait = bind_portrait(portrait_control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"

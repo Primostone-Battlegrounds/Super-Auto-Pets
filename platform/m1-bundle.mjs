@@ -19,7 +19,7 @@ function plateInitializer(controls) {
   return `local function set_visual_plates(root)\n    for _, path in ipairs({${paths.join(',')}}) do\n        root:FindChild(path).imageType = Enum.ImageType.Stretch\n    end\nend`;
 }
 
-function bundleModules(parse, names, entry, release, prefix = []) {
+function bundleModules(parse, names, entry, release, prefix = [], configure = '') {
   const modules = release ? [...names, 'release_data'] : names;
   const validModules = new Set(modules.map(name => `autopets.${name}`));
   const catalog = release ? 'autopets.release_data' : 'autopets.data';
@@ -61,18 +61,32 @@ function bundleModules(parse, names, entry, release, prefix = []) {
     'end',
     ...factories,
     `local native_catalog = loadAutoPetsModule('${catalog}')`,
+    ...(configure ? [configure] : []),
     typeof entry === 'function' ? entry(convert) : convert(entry),
   ].join('\n\n');
 }
 
-export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout = nativeRun) {
+export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout = nativeRun, artPreview) {
   const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'native_portrait',
     'shop_wire', 'animal_ability', 'replay_view'];
+  const configure = artPreview && [
+    'fitted_portraits = true',
+    'local preview_art = loadAutoPetsModule("autopets.art")',
+    ...Object.entries(artPreview.commonNames).flatMap(([catalog, names]) =>
+      Object.entries(names).map(([id, name]) =>
+        `assert(native_catalog[${JSON.stringify(catalog)}][${JSON.stringify(id)}]).name = ${JSON.stringify(name)}`)),
+    ...Object.entries(artPreview.animals).flatMap(([id, { name, layers }]) => {
+      const key = JSON.stringify(id);
+      return [`assert(native_catalog.pet_by_id[${key}]).name = ${JSON.stringify(name)}`,
+        `preview_art[${key}] = {${layers.map(row => `{${row.join(',')}}`).join(',')}}`];
+    }),
+  ].join('\n');
   return bundleModules(parse, names, entry, release, [
-    `local portrait_layers = ${portraitLayers}`,
+    `local portrait_layers = ${artPreview?.layersPerSlot ?? portraitLayers}`,
     `local shared_portrait_homes = {${sharedPortraitHomes.map(name => JSON.stringify(name)).join(',')}}`,
+    'local fitted_portraits',
     plateInitializer(layout.controls),
-  ]);
+  ], configure);
 }
 
 export function bundleBattleReplay(parse, entry, release = false) {
