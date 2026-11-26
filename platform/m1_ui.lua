@@ -373,8 +373,16 @@ local function draw_tooltip(preparing)
     end
     local x = math.max(-370, math.min(370, centre))
     if not shared_portraits then control("Shop/Caption"):SetAnchoredPosition(x < -150 and 452 or -465, 106) end
-    local _, hit_height = control(path .. "/Hit"):GetSizeDelta()
-    tooltip:SetAnchoredPosition(x, beside_team and card_y - (tooltip_height + hit_height) / 2 - 6 or -2)
+    local hit = control(path .. "/Hit")
+    local _, hit_height = hit:GetSizeDelta()
+    local gap = (tooltip_height + hit_height) / 2 + 6
+    local popup_y = beside_team and (card_y - gap) or -2
+    if not beside_team and not shared_portraits then
+        local _, shop_y = control("Shop"):GetAnchoredPosition()
+        local _, hit_y = hit:GetAnchoredPosition()
+        popup_y = shop_y + card_y + hit_y + gap
+    end
+    tooltip:SetAnchoredPosition(x, popup_y)
     local pointer_limit = tooltip_width / 2 - 20
     local pointer_x = math.max(-pointer_limit, math.min(pointer_limit, card_x - x))
     control("Tooltip/Pointer"):SetAnchoredPosition(pointer_x, beside_team and 40 or -40)
