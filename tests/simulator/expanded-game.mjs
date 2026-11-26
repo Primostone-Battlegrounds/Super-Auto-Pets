@@ -75,10 +75,15 @@ function createView(canvasId, playerCount) {
   const control = trail => trail.split('/').reduce((node, name) => node?.children.find(child => child.name === name),
     session.runtime.roots[0]);
   const presses = [];
+  const boxFor = trail => api.runtimeLayout(session).get(control(trail).Id);
+  function pointer(type, { centerX, centerY }) {
+    api.injectPlayPointer(session, type, centerX, centerY);
+    api.stepPlay(session, 1 / 60);
+  }
   function click(trail) {
     const node = control(trail);
     assert.ok(node, `Missing control ${trail}`);
-    const box = api.runtimeLayout(session).get(node.Id);
+    const box = boxFor(trail);
     assert.equal(api.hitPlayControl(session, box.centerX, box.centerY)?.Id, node.Id, `${trail} is occluded`);
     api.injectPlayPointer(session, 'down', box.centerX, box.centerY);
     api.injectPlayPointer(session, 'up', box.centerX, box.centerY);
@@ -113,7 +118,7 @@ function createView(canvasId, playerCount) {
     fs.writeFileSync(path.join(output, file), png);
     frames.push({ file, sha256: sha256(png) });
   }
-  return { session, control, click, snapshot, show, text, capture, presses,
+  return { session, control, click, boxFor, pointer, snapshot, show, text, capture, presses,
     measurements: () => ({ mountMs, peakSampledRuntimeControls, peakSampledRssBytes }) };
 }
 
@@ -141,7 +146,7 @@ function integerText(value, suffix = '') {
 
 async function practice(canvasId) {
   const view = createView(canvasId, 1);
-  const { control, click, snapshot, show, text, capture } = view;
+  const { control, click, boxFor, pointer, snapshot, show, text, capture } = view;
   const press = name => click(`Practice/${name}/Hit`);
   const team = positions('Practice/Team', 5);
   const opponent = positions('Practice/Enemy', 5);
@@ -153,6 +158,7 @@ async function practice(canvasId) {
     assert.match(text(snapshot(), 'Practice/Menu/Difficulty/Title'), /入门/u);
     press('Menu/Continue');
     let fullBattle = false;
+    let firstLoss;
     let finish;
     let maxTier = 0;
     for (let round = 1; round <= 40; round += 1) {
@@ -175,7 +181,7 @@ async function practice(canvasId) {
         return [{ id, slot: index + 1, attack, health }];
       });
       currentOffers();
-      if (round === 1 || tier > 1 && round % 2 === 1) await capture(`practice-shop-${round}`, opened);
+      if (round === 2 * tier - 1) await capture(`practice-shop-${round}`, opened);
       while (money() >= 3 && teamSize() < 5) {
         const offer = currentOffers().sort((a, b) => b.attack + b.health - a.attack - a.health)[0];
         if (!offer) break;
@@ -208,14 +214,28 @@ async function practice(canvasId) {
       if (!fullBattle && cards.length === 10) {
         fullBattle = true;
         await capture('practice-five-v-five', battle);
+        press('Battle/Auto');
+        const event = text(snapshot(), 'Practice/Battle/Event');
+        for (let index = 0; index < 12; index += 1) api.stepPlay(view.session, 0.05);
+        assert.equal(text(snapshot(), 'Practice/Battle/Event'), event, 'Paused replay moved');
+        press('Battle/Replay');
+        assert.notEqual(text(snapshot(), 'Practice/Battle/Event'), event, 'Step did not advance replay');
+        press('Battle/Auto');
+        assert.equal(text(snapshot(), 'Practice/Battle/Auto/Title'), '暂停回放');
       }
       press('Primary');
       press('Primary');
       const settled = snapshot();
       const phase = text(settled, 'Practice/Round/Value');
+      const lives = text(settled, 'Practice/Lives/Value');
+      if (!firstLoss && lives !== text(opened, 'Practice/Lives/Value')) {
+        const before = integerText(text(opened, 'Practice/Lives/Value'), ' / 5');
+        assert.equal(integerText(lives, ' / 5'), before - 1);
+        firstLoss = round;
+        await capture('practice-loss', settled);
+      }
       if (phase.endsWith('终局')) {
         const wins = text(settled, 'Practice/Wins/Value');
-        const lives = text(settled, 'Practice/Lives/Value');
         assert.ok(wins === '10 / 10' || lives === '0 / 5');
         finish = { round, wins, lives };
         await capture('practice-terminal', settled);
@@ -224,22 +244,58 @@ async function practice(canvasId) {
       press('Primary');
     }
     assert.ok(fullBattle, 'No complete five-v-five practice battle');
+    assert.ok(firstLoss, 'Adaptive practice did not exercise a loss');
     assert.ok(finish, 'Adaptive practice run did not reach a terminal result');
+    press('Primary');
+    const restarted = snapshot();
+    assert.equal(text(restarted, 'Practice/Round/Value'), '第 1 轮 · 准备');
+    const firstOffer = 'Practice/Shop/Pet1';
+    const offerName = text(restarted, `${firstOffer}/Name`);
+    press('Shop/Pet1');
+    press('Shop/Freeze');
+    press('Shop/Reroll');
+    const frozen = snapshot();
+    assert.equal(text(frozen, 'Practice/Money/Value'), '9');
+    assert.equal(text(frozen, `${firstOffer}/Name`), offerName);
+    assert.equal(text(frozen, `${firstOffer}/Tag`), '已冻结');
+    await capture('practice-frozen-reroll', frozen);
+    const source = boxFor(`${firstOffer}/Hit`);
+    const target = boxFor('Practice/Team1/Hit');
+    pointer('down', source);
+    pointer('move', target);
+    pointer('up', target);
+    const preview = snapshot();
+    assert.equal(text(preview, 'Practice/Money/Value'), '9');
+    assert.match(text(preview, 'Practice/Hint'), /点击标记站位确认/u);
+    press('Team1');
+    const bought = snapshot();
+    assert.equal(text(bought, 'Practice/Money/Value'), '6');
+    assert.equal(text(bought, 'Practice/Team1/Name'), offerName);
+    await capture('practice-drag-purchase', bought);
+    press('OpenMenu');
+    press('Menu/Back');
+    click('Lobby/Choices/Practice/Hit');
+    press('Menu/Continue');
+    const resumed = snapshot();
+    assert.equal(text(resumed, 'Practice/Money/Value'), '6');
+    assert.equal(text(resumed, 'Practice/Team1/Name'), offerName);
+    await capture('practice-resumed', resumed);
     results.push({ mode: 'practice', canvasId, inputSource: 'pointer input against readback Lua rules',
-      actions, presses: view.presses, seenOffers: [...seenOffers], maxTier, finish, fullBattle, ...view.measurements() });
+      actions, presses: view.presses, seenOffers: [...seenOffers], maxTier, finish, fullBattle, firstLoss,
+      ...view.measurements() });
   } finally {
     api.stopPlay(view.session);
   }
 }
 
-async function online(canvasId, mode) {
+async function online(canvasId, mode, count, fullCatalog = true) {
   const duel = mode === 2;
-  const count = duel ? 2 : 8;
   const view = createView(canvasId, count);
   const { session, control, click, snapshot, text, capture } = view;
   const shop = duel ? 'Duel' : 'Room/Match/Shop';
   const badgePool = duel ? `${shop}/MarketOffers/BadgePool` : `${shop}/BadgePool`;
   const onlineMode = duel ? 'duel' : 'eight-seat';
+  const evidenceName = `${onlineMode}-${count}clients`;
   const teamPortraits = positions('Practice/Team', 5).map(trail => control(`${trail}/Portrait`));
   const shelfPortraits = [...positions('Practice/Shop/Pet', 3), ...positions('Practice/Shop/Food', 2)]
     .map(trail => control(`${trail}/Portrait`));
@@ -255,28 +311,39 @@ async function online(canvasId, mode) {
     event.name === (duel ? 'AP_DuelRequest' : 'AP_RoomRequest')).length;
   const entries = [];
   let version = 0;
-  function publish(group, round, level, battling = false) {
+  function publish(group, round, level, battling = false, player = 1) {
     version += 1;
     const tier = group[0].tier;
     const pets = [...group, ...Array(3 - group.length).fill(group[0])].map(pet => codeById.get(pet.id));
     const units = group.flatMap((pet, index) => [codeById.get(pet.id), index + 1, pet.attack + level - 1,
       pet.health + level - 1, level, [0, 2, 5][level - 1]]);
-    const market = [round, tier, 10, 0, 0, group.length, ...pets, 0, 0, ...units, ...Array(30 - units.length).fill(0)];
+    const market = [round, tier, 11 - player, 0, 0, group.length, ...pets, 0, 0, ...units, ...Array(30 - units.length).fill(0)];
+    const target = `Player${player}`;
     if (duel) {
-      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, round, battling ? 3 : 0, battling, false, 0, version, version,
-        0, 0, 30, 0, 5, 5, 0], 'Player1');
-      api.sendPlaySignal(session, 'AP_DuelMarket', [round, version, market], 'Player1');
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, player, round, battling ? 3 : 0, battling, false, 0, version, version,
+        0, 0, 30, 0, 5, 5, 0], target);
+      api.sendPlaySignal(session, 'AP_DuelMarket', [round, version, market], target);
     } else {
-      api.sendPlaySignal(session, 'AP_RoomView', [version, battling ? 3 : 2, round, 1, version, count, 0, battling, Array(8).fill(5),
-        Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 42], 'Player1');
+      api.sendPlaySignal(session, 'AP_RoomView', [version, battling ? 3 : 2, round, player, version, count, 0, battling,
+        Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 42], target);
     }
   }
   try {
     api.sendPlaySignal(session, 'AP_GameLobby', [0, count, 0, 0, 0], 'AllPlayers');
     click(`Lobby/Choices/${duel ? 'Duel' : 'Room'}/Hit`);
     api.sendPlaySignal(session, 'AP_GameLobby', [mode, count, 0, mode, 0], 'AllPlayers');
+    for (let player = 1; player <= count; player += 1) {
+      publish(tiers[0].slice(0, 3), 1, 1, false, player);
+      api.setPlayView(session, player);
+      const frame = snapshot();
+      const cash = text(frame, duel ? 'Duel/MarketGold' : `${shop}/Money`);
+      assert.match(cash, new RegExp(`金币 ${11 - player}(?: |$)`, 'u'));
+      if (!duel) assert.match(text(frame, 'Room/Standings/Count'), new RegExp(`${count} 真人 · ${8 - count} 机器人`, 'u'));
+    }
+    api.setPlayView(session, 1);
     for (const [tier, pets] of tiers.entries()) {
-      for (let start = 0; start < pets.length; start += 3) {
+      if (!fullCatalog && tier !== 0 && tier !== 5) continue;
+      for (let start = 0; start < (fullCatalog ? pets.length : 3); start += 3) {
         const group = pets.slice(start, start + 3);
         for (const level of [1, 2, 3]) {
           publish(group, 2 * tier + 1, level);
@@ -298,11 +365,11 @@ async function online(canvasId, mode) {
               title, body, layers: portraitLayers(state, portrait, pet.id) });
           }
           assert.equal(requests(), before, 'Ability inspection mutated online shop requests');
-          if (level === 1) await capture(`${onlineMode}-tier-${tier + 1}-shelf-${start / 3 + 1}-fixture`);
+          if (level === 1) await capture(`${evidenceName}-tier-${tier + 1}-shelf-${start / 3 + 1}-fixture`);
         }
       }
     }
-    assert.equal(new Set(entries.map(entry => `${entry.id}:${entry.level}`)).size, 180);
+    assert.equal(new Set(entries.map(entry => `${entry.id}:${entry.level}`)).size, fullCatalog ? 180 : 18);
     publish(tiers.at(-1).slice(0, 3), 11, 1, true);
     if (duel) {
       api.sendPlaySignal(session, 'AP_DuelReplay', [11, replaySeed, replayOutcome,
@@ -323,11 +390,11 @@ async function online(canvasId, mode) {
         if (build.artPreview?.animals[pet.id]) assert.equal(portrait.localScaleX, side ? -1 : 1, pet.id);
       }
     }
-    await capture(`${onlineMode}-five-v-five-fixture`, replay);
+    await capture(`${evidenceName}-five-v-five-fixture`, replay);
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     assert.ok([...teamPortraits, ...shelfPortraits].every(root =>
       root.children.every(child => child.name !== 'FittedPortraitLayers')));
-    await capture(`${onlineMode}-return-fixture`);
+    await capture(`${evidenceName}-return-fixture`);
     results.push({ mode: onlineMode, canvasId, clients: count, inputSource: 'pointer input against client wire fixtures',
       presses: view.presses, entries, replay: { seed: replaySeed, outcome: oracle, teams: replayTeams }, ...view.measurements() });
   } finally {
@@ -335,11 +402,14 @@ async function online(canvasId, mode) {
   }
 }
 
-for (const canvasId of ['pc-16-9', 'mobile-19.5-9']) {
-  await practice(canvasId);
-  await online(canvasId, 2);
-  await online(canvasId, 8);
-}
+for (const canvasId of ['pc-16-9', 'pc-21-9', 'mobile-16-9', 'mobile-19.5-9', 'mobile-4-3']) await practice(canvasId);
+await online('pc-16-9', 2, 2);
+await online('pc-16-9', 8, 2);
+await online('mobile-16-9', 8, 1, false);
+await online('mobile-16-9', 2, 2, false);
+await online('mobile-16-9', 8, 8, false);
+await online('mobile-19.5-9', 2, 2);
+await online('mobile-19.5-9', 8, 8);
 const report = { ...receipt, schemaVersion: 1, status: 'executed', sourceRevision: build.sourceRevision, designVersion: build.designVersion,
   mcpCommit: lock.mcp.commit, simulatorCommit: lock.simulator.commit, textDefects: [], assetDefects: [],
   scope: 'Actual readback Lua and software renderer. Practice is played using input; online client wires are fixtures.',
