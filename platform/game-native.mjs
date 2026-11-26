@@ -28,7 +28,7 @@ export const practiceSeed = 8;
 
 const back = (x, y) => button('Back', [x, y], [156, 48], '返回主菜单');
 const view = (name, controls) => ({ ...group(name, [0, 0], [1280, 720], controls, false), active: false });
-const guidePosition = -205;
+const guidePosition = -155;
 
 function lobbyButton(name, position, size, title, { primary = false, small = false, visible = true } = {}) {
   const caption = label('Title', [0, 0], size, title, small ? 22 : 27, small ? pigment.cream : pigment.ink);
@@ -50,7 +50,7 @@ function layout(duelRules) {
       return child;
     }), button('Back', [0, -218], [334, 82], '返回主菜单', false, 24)] };
   });
-  const guide = label('Help', [0, -9], [1056, 222], [
+  const guide = label('Help', [0, 10], [1056, 222], [
     '单人 AI 练习 · 买入动物、编入阵容，再与电脑对战。',
     '好友 1v1 · 邀请一名好友进入同一房间，两人到齐即可开局。',
     '八人吃鸡 · 至少一名玩家即可开局，空席由机器人补齐。',
@@ -76,8 +76,8 @@ function layout(duelRules) {
         lobbyButton('Guide', [0, guidePosition], secondarySize, '玩法说明', { small: true }),
       ]),
       view('Practice', practice),
-      view('Duel', [...duelLayout(duelRules).controls, back(221, 278)]),
-      view('Room', [...unifiedRoomLayout.controls, back(-145, 276)]),
+      view('Duel', [...duelLayout(duelRules).controls, back(226, 306)]),
+      view('Room', [...unifiedRoomLayout.controls, back(-145, 294)]),
     ],
   };
 }

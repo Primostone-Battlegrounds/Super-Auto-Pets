@@ -177,9 +177,17 @@ for round, actions in ipairs(rounds) do
     if round == 1 then practice.capture("practice_shop") end
     if round == 11 then practice.capture("practice_tier_six") end
     practice_press("Primary")
-    assert(practice.get("Practice/Primary/Title").text == "跳过回放")
-    if round == 1 then practice.capture("practice_battle") end
-    practice_press("Primary")
+    assert(not practice.get("Practice/Primary").active and practice.get("Practice/Battle/Replay/Title").text == "跳过")
+    assert(practice.get("Practice/Battle/Outcome").text == "战斗中")
+    if round == 1 then
+        practice.capture("practice_battle")
+        practice_press("Battle/Auto")
+        assert(practice.get("Practice/Battle/Outcome").text == "已暂停")
+        assert(practice.get("Practice/Battle/Fast/Title").text == "倍速 x1")
+        practice_press("Battle/Fast")
+        assert(practice.get("Practice/Battle/Fast/Title").text == "倍速 x2")
+    end
+    practice_press("Battle/Replay")
     assert(practice.get("Practice/Battle/Outcome").text == "本轮" .. outcomes[actions[1]])
     practice_press("Primary")
     if round < #rounds then practice_press("Primary") end
@@ -188,14 +196,14 @@ assert(practice.get("Practice/Primary/Title").text == "再挑战本局")
 assert(practice.get("Practice/Wins/Value").text == "10 / 10" and practice.get("Practice/Lives/Value").text == "1 / 5")
 practice.capture("practice_result")
 practice_press("Primary")
-assert(practice.get("Practice/Round/Value").text == "第 1 轮 · 准备")
+assert(practice.get("Practice/Round/Value").text == "1")
 practice.press("Practice/OpenMenu/Hit")
 practice.press("Practice/Menu/Back/Hit")
 practice.expect("AP_GameChooseMode:0,false,2")
 assert(practice.get("Lobby/Choices/Practice/Title").text == "继续 AI 练习")
 practice.press("Lobby/Choices/Practice/Hit")
 practice.press("Practice/Menu/Continue/Hit")
-assert(practice.get("Practice/Round/Value").text == "第 1 轮 · 准备")
+assert(practice.get("Practice/Round/Value").text == "1")
 practice.destroy()
 
 local duel = simulate()
