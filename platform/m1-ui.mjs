@@ -13,6 +13,18 @@ export const pigment = {
   shelf: '#edc985', shelfRule: '#92663c', chip: '#edf3dd', primary: '#f5a13c',
   player: '#91be8a', enemy: '#cc966e', market: '#e5b565', gold: '#805015', ice: '#245f72',
 };
+export const preparationColours = {
+  header: '#fff0cd',
+  grass: '#a9cb76',
+  grassLight: '#c6df9c',
+  grassDark: '#7da256',
+  shelf: '#ebc68b',
+  shelfInset: '#f5dda9',
+  priceInk: '#573319',
+  pricePaper: '#ffe39b',
+  badgeInk: '#254333',
+  badgePaper: '#e1edc0',
+};
 
 export function image(name, position, size, colour, options = {}) {
   return { name, kind: 'image', position, size, image: plane, colour, ...options };
@@ -50,8 +62,8 @@ function portrait() {
 function card(name, position, width, type, interactive = true, visible = true, front = false) {
   const size = [front ? width + 22 : width, 154];
   const market = type === 'market';
-  const badgeWidth = market ? 60 : 49;
-  const badgeX = market ? 35 : 26;
+  const badgeWidth = market ? 54 : 49;
+  const badgeX = market ? 34 : 26;
   const children = [
     ...(type === 'player' ? [image('DropTarget', [0, 6], [104, 54], '#438d7e', { image: fadedTeal, visible: false })] : []),
     ...(interactive && !market ? [image('Selected', [0, 6], [102, 47], '#d19a3f', { image: 107015, visible: false })] : []),
@@ -65,15 +77,16 @@ function card(name, position, width, type, interactive = true, visible = true, f
     image('LifePaper', [badgeX - 12, -49], [20, 20], '#813830', { image: lifeIcon }),
     label('Detail', [-badgeX + 10, -49], [badgeWidth - 14, 35], '', 25, '#253e58'),
     label('LifeValue', [badgeX + 9, -49], [badgeWidth - 14, 35], '', 25, '#813830'),
-    label('Tag', [0, 61], [Math.min(width - 4, 90), 29], '', 18, market ? pigment.ice : '#58431f'),
+    market ? preparationBadge('Tag', [-47, 58], [58, 34])
+      : label('Tag', [0, 61], [Math.min(width - 4, 90), 29], '', 18, '#58431f'),
   ];
   if (market) {
-    const price = label('Price', [64, 46], [38, 32], '', 21, '#634016');
-    Object.assign(price.text, { background: '#ffdc80', backgroundOpacity: 1 });
+    const price = label('Price', [52, 49], [49, 40], '', 20, preparationColours.priceInk);
+    Object.assign(price.text, { background: preparationColours.pricePaper, backgroundOpacity: 1 });
     children.push(
       price,
-      image('PriceIcon', [39, 46], [21, 21], '#754214', { image: priceIcon, visible: false }),
-      image('Frozen', [-39, 61], [19, 19], pigment.ice, { image: 102004, visible: false }),
+      image('PriceIcon', [19, 49], [19, 19], preparationColours.priceInk, { image: priceIcon, visible: false }),
+      image('Frozen', [-48, 23], [20, 20], pigment.ice, { image: 102004, visible: false }),
     );
   } else {
     children.push(
@@ -89,9 +102,17 @@ function card(name, position, width, type, interactive = true, visible = true, f
     );
   }
   if (interactive) {
-    children.push({ name: 'Hit', kind: 'cursorArea', size: [width, size[1]] });
+    children.push(market
+      ? { name: 'Hit', kind: 'cursorArea', position: [0, 12], size: [width, 130] }
+      : { name: 'Hit', kind: 'cursorArea', size: [width, size[1]] });
   }
   return group(name, position, size, children, visible);
+}
+
+export function preparationBadge(name, position, size, content = '') {
+  const badge = label(name, position, size, content, 18, preparationColours.badgeInk);
+  Object.assign(badge.text, { background: preparationColours.badgePaper, backgroundOpacity: 1 });
+  return badge;
 }
 
 export function button(name, position, size, title, primary = false, fontSize = primary ? 28 : 20) {
@@ -110,22 +131,24 @@ export function button(name, position, size, title, primary = false, fontSize = 
   ]);
 }
 
-function stat(name, x, title, paper, number) {
-  const glyph = name === 'Money' ? disc : name === 'Lives' ? lifeIcon : null;
-  return group(name, [x, 281], [152, 65], [
-    glyph ? image('Surface', [-35, 18], [18, 18], number, { image: glyph }) : image('Surface', [0, 0], [152, 65], paper),
-    label('Label', [glyph ? 11 : 0, 18], [glyph ? 120 : 144, 28], title, 17, pigment.muted),
-    label('Value', [0, -15], [144, 35], '', name === 'Round' ? 23 : 28, number),
+function stat(name, x, title, glyph, colour) {
+  return group(name, [x, 307], [116, 56], [
+    image('Surface', [-41, 6], [23, 23], colour, { image: glyph }),
+    label('Label', [8, -14], [83, 25], title, 15, pigment.muted),
+    label('Value', [11, 11], [87, 33], '', 24, colour),
   ]);
 }
 
 const slots = [1, 2, 3, 4, 5];
 const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
+const offerX = [-464, -288, -112, 110, 282, 464];
 export const sharedPortraitHomes = offers.slice(0, slots.length).map(name => `Shop/${name}`);
-const playButtonHeight = 82;
 const actions = [
-  ['Buy', '购买'], ['Freeze', '冻结 / 解冻'], ['Sell', '出售'], ['Merge', '合并队员'],
-  ['RewardNext', '下个奖励'],
+  ['Buy', '购买', [-250, -102]],
+  ['Freeze', '冻结 / 解冻', [0, -101]],
+  ['Sell', '出售', [0, 129]],
+  ['Merge', '合并队员', [0, -102]],
+  ['RewardNext', '下个奖励', [464, -102]],
 ];
 
 export const nativeRun = {
@@ -137,39 +160,42 @@ export const nativeRun = {
   controls: [
     image('Border', [0, 0], [1202, 684], '#42533a'),
     image('Panel', [0, 0], [1192, 674], '#e4e6ba'),
-    image('Header', [0, 280], [1172, 98], '#f9edce'),
-    label('Heading', [-373, 303], [374, 46], '小动物自走棋', 39, pigment.ink, 'left'),
-    button('OpenMenu', [-486, 255], [142, 48], '菜单'),
-    button('Reset', [-328, 255], [142, 48], '重开本局'),
-    stat('Round', -105, '回合', '#d5efe9', pigment.ink),
-    stat('Money', 69, '金币', '#ffedba', '#7c4618'),
-    stat('Wins', 243, '胜场', '#dcedc3', '#2b5c40'),
-    stat('Lives', 417, '生命', '#f9dfcb', '#893e2e'),
-    group('Field', [0, 61], [1172, 334], [
-      image('Surface', [0, 0], [1172, 334], '#bbdfdd'),
-      image('Cloud', [212, 137], [199, 47], '#ffffff', { image: 105102 }),
-      terrain('Ridge', [72, 48], [1004, 157], '#6d9e8d'),
-      terrain('Divider', [-192, 34], [766, 147], '#55805f'),
-      image('Ground', [0, -56], [1172, 221], '#94b36a'),
-      image('TrackShadow', [0, -22], [1172, 106], '#bc995c'),
-      image('PrepRail', [0, -15], [1172, 103], '#e3c183'),
-      image('RivalTrack', [293, -15], [586, 103], '#dfb380', { visible: false }),
-      image('LeftBrush', [-507, 55], [152, 64], '#7e9a6b', { image: 105135 }),
-      image('RightBrush', [500, 52], [170, 62], '#8ca970', { image: 105136 }),
-      image('Foreground', [-515, -115], [126, 47], '#7c9b67', { image: 105135 }),
-      image('Pine', [-409, 94], [49, 88], '#86a989', { image: 105098 }),
+    image('Header', [0, 307], [1200, 82], preparationColours.header),
+    { ...label('Heading', [65, 306], [226, 44], '小动物自走棋', 26), visible: false },
+    button('OpenMenu', [522, 306], [112, 82], '设置'),
+    { ...button('Reset', [392, 306], [132, 48], '重开本局'), visible: false },
+    stat('Money', -528, '金币', disc, '#83501b'),
+    stat('Lives', -402, '生命', lifeIcon, '#893e2e'),
+    stat('Wins', -276, '胜场', 102036, '#335c36'),
+    stat('Round', -150, '回合', 101049, '#314f43'),
+    group('Field', [0, 129], [1200, 282], [
+      image('Surface', [0, 0], [1200, 282], preparationColours.grass),
+      image('Cloud', [266, 103], [178, 38], '#f8f4d4', { image: 105102 }),
+      terrain('Ridge', [92, 66], [1010, 123], preparationColours.grassLight),
+      terrain('Divider', [-192, 59], [782, 112], preparationColours.grassDark),
+      image('Ground', [0, -61], [1200, 160], preparationColours.grass),
+      image('TrackShadow', [0, 10], [1200, 93], '#96b96a'),
+      image('PrepRail', [0, 17], [1200, 88], '#bad78d'),
+      image('RivalTrack', [300, -15], [600, 88], '#d3ba7e', { visible: false }),
+      image('LeftBrush', [-520, 42], [152, 60], '#83a65b', { image: 105135 }),
+      image('RightBrush', [502, 37], [170, 56], '#8daa62', { image: 105136 }),
+      image('Foreground', [-519, -110], [126, 45], '#7da052', { image: 105135 }),
+      image('Pine', [-453, 86], [45, 83], '#7c9a61', { image: 105098 }),
     ]),
     label('TeamCaption', [-309, 208], [521, 32], '', 22, pigment.ink, 'left'),
     label('OpponentCaption', [309, 208], [521, 32], '', 19, pigment.ink, 'right'),
-    ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 82], 106, 'player', true, true, slot === 1)),
+    ...slots.map(slot => card(`Team${slot}`, [(3 - slot) * 176, 145], 106, 'player', true, true, slot === 1)),
     ...slots.map(slot => card(`Enemy${slot}`, [82 + (slot - 1) * 112, 54], 106, 'enemy', false, false, slot === 1)),
-    group('Shop', [0, -124], [1172, 428], [
-      image('Paper', [0, 0], [1172, 268], '#c8ca83'),
-      image('Rail', [0, 0], [1172, 174], '#efd498'),
-      label('Caption', [-465, 106], [198, 28], '', 24, pigment.ink, 'left'),
-      ...offers.map((name, index) => card(name, [-465 + index * 186, 0], 174, 'market')),
-      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -104], [172, 52], title)),
-      button('Reroll', [-455, -172], [206, playButtonHeight], '刷新', true),
+    group('Shop', [0, -106], [1200, 462], [
+      image('Paper', [0, -64], [1200, 334], preparationColours.shelf),
+      image('Rail', [0, 0], [1200, 166], preparationColours.shelfInset),
+      label('Caption', [-465, 104], [199, 32], '', 20, pigment.ink, 'left'),
+      ...offers.map((name, index) => card(name, [offerX[index], 0], 158, 'market')),
+      ...actions.map(([name, title, position]) => ({
+        ...button(name, position, [136, 82], title, false, 18),
+        visible: false, active: false,
+      })),
+      button('Reroll', [-481, -185], [204, 82], '刷新', true),
     ]),
     group('Tooltip', [0, -10], [420, 86], [
       image('Border', [0, 0], [420, 86], '#4d623c'),
@@ -191,28 +217,28 @@ export const nativeRun = {
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),
-    group('Battle', [0, -174], [1152, 154], [
-      image('Surface', [0, 0], [1148, 154], '#e6e9bb'),
-      label('Outcome', [0, 60], [1038, 34], '', 28, pigment.ink),
-      label('Event', [0, 29], [1038, 28], '', 20, pigment.ink),
-      button('Replay', [-222, -33], [202, playButtonHeight], '下一条战斗事件'),
-      button('Auto', [0, -33], [202, playButtonHeight], '暂停回放'),
-      button('Fast', [222, -33], [202, playButtonHeight], '速度：1 倍'),
-      button('Rewatch', [-111, -33], [202, playButtonHeight], '重新回放'),
-      button('NewSeed', [111, -33], [202, playButtonHeight], '新一局'),
+    group('Battle', [0, -15], [1200, 622], [
+      image('Surface', [0, -192], [1200, 150], preparationColours.shelfInset),
+      label('Outcome', [0, -137], [1074, 36], '', 27, pigment.ink),
+      label('Event', [0, -176], [1074, 34], '', 20, pigment.ink),
+      button('Auto', [-164, 239], [144, 82], '暂停'),
+      button('Fast', [0, 239], [144, 82], '倍速 ×1'),
+      button('Replay', [164, 239], [144, 82], '跳过'),
+      button('Rewatch', [-111, -230], [202, 54], '重新回放'),
+      button('NewSeed', [111, -230], [202, 54], '新一局'),
     ], false),
-    button('Primary', [411, -296], [329, playButtonHeight], '开战', true),
-    label('Hint', [-153, -292], [824, 53], '', 19, pigment.ink, 'left'),
+    button('Primary', [481, -291], [204, 82], '开战', true),
+    label('Hint', [0, -291], [690, 53], '', 19, pigment.ink),
     { ...group('Menu', [0, 0], [1202, 684], [
       image('Backdrop', [0, 0], [1202, 684], '#a3be82'),
-      image('Rim', [0, 0], [556, 416], pigment.edge),
-      image('Paper', [0, 2], [548, 406], pigment.cream),
-      label('Heading', [0, 134], [500, 63], '小动物自走棋', 43),
-      label('Progress', [0, 55], [496, 28], '', 21, pigment.muted),
-      button('Continue', [0, 0], [334, 56], '单人练习', true),
-      button('NewGame', [0, -68], [334, 52], '放弃并开新局'),
-      button('Difficulty', [0, -68], [334, 52], '练习难度：标准'),
-      button('Audio', [0, -139], [334, 48], '音效：开启'),
+      image('Rim', [0, 0], [556, 584], pigment.edge),
+      image('Paper', [0, 2], [548, 576], pigment.cream),
+      label('Heading', [0, 212], [500, 68], '小动物自走棋', 39),
+      label('Progress', [0, 134], [496, 38], '', 21, pigment.muted),
+      button('Continue', [0, 52], [334, 82], '单人练习', true),
+      button('NewGame', [0, -38], [334, 82], '放弃并开新局'),
+      button('Difficulty', [0, -38], [334, 82], '练习难度：标准'),
+      button('Audio', [0, -128], [334, 82], '音效：开启'),
     ], false), blockCursor: true },
     { ...group('Restart', [0, 0], [1202, 684], [
       image('Shade', [0, 0], [1202, 684], pigment.ink, { opacity: 0.65 }),
