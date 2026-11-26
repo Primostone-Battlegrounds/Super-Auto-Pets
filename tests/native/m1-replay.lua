@@ -1,5 +1,7 @@
 local mode, extracted = arg[1], arg[2]
-local release = arg[mode == "source" and 2 or 3] == "release"
+local profile = arg[mode == "source" and 2 or 3] or "compatibility"
+local names = {compatibility = "autopets.data", release = "autopets.release_data", expanded = "autopets.expanded_data"}
+local release = profile ~= "compatibility"
 local load_module
 if mode == "source" then
     package.path = "src/?.lua;" .. package.path
@@ -18,8 +20,14 @@ else
     load_module = assert(load(source .. "\nreturn loadAutoPetsModule", "@" .. extracted, "t", env))()
 end
 
-local data = load_module(release and "autopets.release_data" or "autopets.data")
+local data = load_module(assert(names[profile], "unknown catalog profile"))
 local art = load_module("autopets.art")
+if profile == "expanded" and mode == "source" then
+    for id, layers in pairs(require("autopets.expanded_art")) do
+        assert(not art[id], id)
+        art[id] = layers
+    end
+end
 local bot = load_module("autopets.bot")
 local run = load_module("autopets.run")
 
@@ -108,6 +116,49 @@ for _, fixture in ipairs({{seed = 7, style = "guardian"}, {seed = -12, style = "
     local replayed = assert(bot.replay(trace, data))
     assert(canonical(replayed) == canonical(expected), "training replay diverged")
     record("training", {fixture = fixture, opponent = expected, trace = trace})
+end
+
+if profile == "expanded" then
+    local highest_tier = 0
+    for _, seed in ipairs({7, 8, 11}) do
+        local game = run.new(seed, nil, data)
+        local opening = game:snapshot()
+        local completed
+        for round = 1, 80 do
+            assert(game:snapshot().round == round)
+            for used = 0, 20 do
+                local state = game:snapshot().shop
+                local command = bot.choose_action(state, "guardian", used, "standard", data)
+                if not command then break end
+                assert(game.shop:apply(command))
+            end
+            local team = game:snapshot().shop.team
+            assert(#team > 0 and #team <= data.rules.team_size)
+            assert(game:submit())
+            assert(game:settle())
+            local state = game:snapshot()
+            highest_tier = math.max(highest_tier, state.shop.tier)
+            record("expanded_round", {seed = seed, round = round, team = team,
+                outcome = state.battle.outcome, wins = state.wins, lives = state.lives})
+            if state.phase == "ended" then
+                assert(state.wins == data.rules.wins_to_win or state.lives == 0)
+                io.write("expanded_complete ", seed, " ", round, " ", state.wins, " ", state.lives, "\n")
+                completed = true
+                break
+            end
+            for _ = 1, 10 do
+                local advanced, reason = game:advance()
+                if advanced then break end
+                assert(reason == "opponent_preparing", reason)
+            end
+            assert(game:snapshot().round == round + 1)
+        end
+        assert(completed, "expanded practice did not reach a terminal result")
+        assert(game:restart(seed))
+        assert(canonical(game:snapshot()) == canonical(opening), "expanded practice restart diverged")
+    end
+    assert(highest_tier == data.rules.max_tier, "expanded practice did not reach the highest tier")
+    return
 end
 
 local game = run.new(7, nil, data)

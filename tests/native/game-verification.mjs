@@ -82,6 +82,8 @@ export function verifyLobby(source, ts, id) {
 }
 
 export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings }) {
+  const profile = game.profile ?? 'release';
+  const expanded = profile === 'expanded';
   const source = key => game.graphs.find(graph => graph.graphId === ids[key]).code;
   const lobby = verifyLobby(source('lobby'), ts, ids.lobby);
   const { GOLD, PET_COST, SELL_GOLD, TEAM_SIZE, MAX_LEVEL } = game.shopRules;
@@ -111,29 +113,46 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   const positionsPath = tsv('room-positions.tsv', positions);
   const run = (lua, args) => execFileSync(lua, ['-E', ...args], { cwd: project, encoding: 'utf8', timeout: 30_000,
     maxBuffer: 16 * 1024 * 1024 });
-  const replayCheck = lua => run(lua, ['tests/native/m3-room-replay.lua', receiptsPath, 'release', positionsPath]);
+  const replayCheck = lua => run(lua, ['tests/native/m3-room-replay.lua', receiptsPath, profile, positionsPath]);
   const roomReplay = replayCheck(lua53);
   assert.equal(roomReplay, replayCheck(lua54));
-  const { shopFixture, startingLives } = duelFixture(lua53, lua54, project, 'release');
+  const { shopFixture, startingLives, catalog } = duelFixture(lua53, lua54, project, profile);
+  if (expanded) {
+    assert.equal(catalog.length, 60);
+    assert.deepEqual(game.expanded.catalog, catalog.map(({ code, ...entry }) => entry));
+    assert.ok(room.combinations.some(room => room.highestTier === 6 && room.releaseBattles > 0));
+  }
   const buttons = duelProbeButtons.map(button => ({ ...button, id: Number(button.placeholder) }));
   const fixtureButtons = fs.readFileSync(path.join(project, 'platform/m2_probe_buttons.ts'), 'utf8');
   const duel = verifyDuel(source('duel'), fixtureButtons, source('duelFight'), buttons, ts,
-    { ...shopFixture, startingLives, foodSlots: 2, release: true, gated: true },
-    duelReplayOracle(lua53, lua54, project, 'release'));
-  const practice53 = run(lua53, ['tests/native/m1-replay.lua', 'source', 'release']);
-  assert.equal(practice53, run(lua54, ['tests/native/m1-replay.lua', 'source', 'release']));
-  const readback = lua => run(lua, ['tests/native/m1-replay.lua', 'bundle', extracted, 'release']);
+    { ...shopFixture, startingLives, foodSlots: 2, release: true, gated: true, expandedCatalog: expanded ? catalog : undefined },
+    duelReplayOracle(lua53, lua54, project, profile));
+  const practice53 = run(lua53, ['tests/native/m1-replay.lua', 'source', profile]);
+  assert.equal(practice53, run(lua54, ['tests/native/m1-replay.lua', 'source', profile]));
+  const readback = lua => run(lua, ['tests/native/m1-replay.lua', 'bundle', extracted, profile]);
   const bundled = readback(lua53);
-  if (game.artPreview) {
+  if (expanded) {
+    assert.equal(bundled, readback(lua54));
+    const ignoreArt = text => text.replace(/^assets .*\n/m, '');
+    assert.equal(ignoreArt(bundled), ignoreArt(practice53));
+  } else if (game.artPreview) {
     assert.equal(bundled, readback(lua54));
     assert.equal(bundled.split('\n')[0], practice53.split('\n')[0]);
   } else {
     assert.equal(bundled, practice53);
   }
-  const counts = practice53.match(/^pet_tier_counts (\d+(?: \d+)*)$/m);
+  const counts = bundled.match(/^pet_tier_counts (\d+(?: \d+)*)$/m);
   assert.ok(counts, 'Missing readback shop tier counts');
   const petTierCounts = counts[1].split(' ').map(Number);
   assert.deepEqual(petTierCounts, game.petTierCounts, 'Practice and multiplayer must share the purchasable tier sizes');
+  const evidence = { petTierCounts, stockCapacityBound, lobby, room, roomReplay: roomReplay.trim(), duel };
+  if (expanded) {
+    assert.deepEqual(petTierCounts, [10, 10, 10, 10, 10, 10]);
+    const completed = [...bundled.matchAll(/^expanded_complete (\d+) (\d+) (\d+) (\d+)$/gm)].map(([, seed, rounds, wins, lives]) =>
+      ({ seed: Number(seed), rounds: Number(rounds), wins: Number(wins), lives: Number(lives) }));
+    assert.equal(completed.length, 3);
+    return { evidence: { ...evidence, expandedPractice: completed } };
+  }
   const client = (lua, suffix) => {
     const captures = path.join(workspace, `captures-${suffix}.tsv`);
     const { templateIndex, layersPerSlot } = game.artPreview ?? {};
@@ -143,8 +162,7 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   };
   const gameClient = client(lua53, '53');
   assert.deepEqual(gameClient, client(lua54, '54'));
-  return { frames: gameClient.frames, evidence: { petTierCounts, stockCapacityBound, lobby, room,
-    roomReplay: roomReplay.trim(), duel, client: gameClient.trace.trim() } };
+  return { frames: gameClient.frames, evidence: { ...evidence, client: gameClient.trace.trim() } };
 }
 
 export function readGameFrames(input, controls) {

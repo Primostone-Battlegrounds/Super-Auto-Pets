@@ -1,7 +1,7 @@
 package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
-local data = require(arg[2] == "release" and "autopets.release_data" or "autopets.data")
+local data = require("autopets.catalog")(arg[2] or "compatibility")
 local outcomes = {win = 1, loss = 2, draw = 3}
 local codes, tokens = {}, {}
 for code, pet in ipairs(data.pets) do codes[pet.id] = code end
