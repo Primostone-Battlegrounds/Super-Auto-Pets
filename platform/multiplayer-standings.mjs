@@ -103,7 +103,7 @@ local function bind_online_badges(pool)
     local function place_cue(control, cue, own_side)
         if not cue then set(control, nil); return end
         local field = fields[(cue.side == own_side and 0 or 5) + cue.slot]
-        control:SetSizeDelta(72, 32)
+        control:SetSizeDelta(72, 28)
         control:SetAnchoredPosition(field.cue_x, field.cue_y)
         control.bgColor, control.fontColor = colour(cue.face), colour(cue.ink)
         set(control, cue.label)
