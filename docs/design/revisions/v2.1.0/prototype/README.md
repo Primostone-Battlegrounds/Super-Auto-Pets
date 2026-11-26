@@ -12,3 +12,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 fit-samples.py \
 ```
 
 预算档仅用于实验。现行统一候选已有 1,000 个控件，正式方案需要在实际货架和五对五界面重新验证控件复用、加载、画面和设备数据。 [样板门禁](../ACCEPTANCE.md)
+
+## 40 图元运行稿
+
+`native-fit-source.webp` 无损保留六份 88×88 透明裁剪。运行稿以实测源图的连续剪影为底，优先配置大色面与物种特征，再加入眼睛、兔子口鼻及长颈鹿蹄部。直接调用原塔的原生三角变换，每只使用 36 至 40 个绘图控件。导出的 `rows-40.json` 使用 44×44 居中坐标与可选的三轴角度，统一从肖像宿主镜像。
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 fit-production.py <Slay-the-Heavens> <scratch-output>
+```
+
+脚本还生成每只动物的图元、画面和前景误差及剪影交并比。源图只用于生成和评审。
