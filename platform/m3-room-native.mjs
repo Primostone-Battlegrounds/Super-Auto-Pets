@@ -34,7 +34,6 @@ const initialize = (source, marker, length) =>
 export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence = 1, wait, profile = 'compatibility') {
   assert.ok(Number.isInteger(cadence) && cadence >= 1 && cadence <= 3, 'Cadence must be 1–3 seconds');
   assert.ok(wait === undefined || Number.isInteger(wait) && wait >= 0 && wait <= 60, 'Room wait must be 0–60 seconds');
-  assert.ok(profile === 'compatibility' || profile === 'release');
   const sources = executable => execFileSync(executable, ['-E', 'platform/m3_room_data.lua', String(seed), profile], {
     cwd: project, timeout: 30_000, encoding: 'utf8',
   });
@@ -95,7 +94,7 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   fight = bindFaintColumns(fight, battle.faintMetadata);
   fight = bindOpeningColumns(fight, battle.openingMetadata);
   fight = initialize(fight, 'BOARD', 12 * shop.rules.TEAM_SIZE + 6);
-  const collisionArguments = profile === 'release'
+  const collisionArguments = profile !== 'compatibility'
     ? `f, board, ${faintArguments}, openingEffect, openingPower, openingState, false`
     : `f, board, ${faintArguments}, false`;
   fight = replace(fight, '// AP_ROOM_COLLISION',

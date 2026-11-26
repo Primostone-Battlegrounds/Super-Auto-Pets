@@ -2,8 +2,7 @@
 package.path = "src/?.lua;" .. package.path
 
 local profile = arg[1] or "compatibility"
-assert(profile == "compatibility" or profile == "release")
-local data = require(profile == "release" and "autopets.release_data" or "autopets.data")
+local data = require("autopets.catalog")(profile)
 local duel = require("autopets.duel")
 
 local function positive_integer(value, label)

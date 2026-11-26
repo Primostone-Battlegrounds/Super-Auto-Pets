@@ -20,9 +20,10 @@ function plateInitializer(controls) {
 }
 
 function bundleModules(parse, names, entry, release, prefix = [], configure = '') {
-  const modules = release ? [...names, 'release_data'] : names;
+  const expanded = release === 'expanded';
+  const modules = [...names, ...(release ? ['release_data'] : []), ...(expanded ? ['expanded_data'] : [])];
   const validModules = new Set(modules.map(name => `autopets.${name}`));
-  const catalog = release ? 'autopets.release_data' : 'autopets.data';
+  const catalog = expanded ? 'autopets.expanded_data' : release ? 'autopets.release_data' : 'autopets.data';
   function convert(relativePath) {
     let source = fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8');
     const references = [];
@@ -69,7 +70,17 @@ function bundleModules(parse, names, entry, release, prefix = [], configure = ''
 export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout = nativeRun, artPreview) {
   const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'native_portrait',
     'shop_wire', 'animal_ability', 'replay_view'];
-  const configure = artPreview && [
+  const expanded = release === 'expanded';
+  if (expanded) names.push('expanded_art');
+  const configure = [
+    ...(expanded ? [
+      'local art = loadAutoPetsModule("autopets.art")',
+      'for id, layers in pairs(loadAutoPetsModule("autopets.expanded_art")) do',
+      '    assert(not art[id], "duplicate expanded art: " .. id)',
+      '    art[id] = layers',
+      'end',
+    ] : []),
+    ...(artPreview ? [
     'fitted_portraits = true',
     'local preview_art = loadAutoPetsModule("autopets.art")',
     ...Object.entries(artPreview.commonNames).flatMap(([catalog, names]) =>
@@ -80,6 +91,7 @@ export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout 
       return [`assert(native_catalog.pet_by_id[${key}]).name = ${JSON.stringify(name)}`,
         `preview_art[${key}] = {${layers.map(row => `{${row.join(',')}}`).join(',')}}`];
     }),
+    ] : []),
   ].join('\n');
   return bundleModules(parse, names, entry, release, [
     `local portrait_layers = ${artPreview && !artPreview.templateIndex ? artPreview.layersPerSlot : portraitLayers}`,

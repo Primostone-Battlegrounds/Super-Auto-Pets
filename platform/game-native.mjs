@@ -73,17 +73,20 @@ function gated(source, anchors, mode) {
   return source;
 }
 
-export function nativeGame(lua53, lua54, parse, ids, artPreview) {
-  const profile = 'release';
+export function nativeGame(lua53, lua54, parse, ids, artPreview, profile = 'release') {
+  assert.ok(profile === 'release' || profile === 'expanded');
   const shop = nativeShop(lua53, lua54, profile);
   const battle = nativeBattle(lua53, lua54, parse, profile);
+  const tiers = shop.petTierCounts.flatMap((count, index) => Array(count).fill(index + 1));
+  assert.equal(shop.catalog.pet.length, tiers.length);
+  const catalog = shop.catalog.pet.map((pet, index) => {
+    const id = battle.ids[index];
+    assert.ok(id);
+    const name = artPreview?.animals[id]?.name ?? artPreview?.commonNames.pet_by_id?.[id] ?? pet.name;
+    return { ...pet, id, name, tier: tiers[index] };
+  });
+  assert.equal(new Set(catalog.map(pet => pet.id)).size, catalog.length);
   if (artPreview) {
-    const catalog = shop.catalog.pet.map((pet, index) => {
-      const id = battle.ids[index];
-      assert.ok(id);
-      return { id, name: artPreview.animals[id]?.name ?? artPreview.commonNames.pet_by_id[id] ?? pet.name };
-    });
-    assert.equal(new Set(catalog.map(pet => pet.id)).size, catalog.length);
     artPreview = { ...artPreview, catalog };
   }
   const room = nativeRoom(lua53, lua54, parse, ids.room, ids.roomFight, 1n, 1, undefined, profile);
@@ -96,7 +99,7 @@ export function nativeGame(lua53, lua54, parse, ids, artPreview) {
   ], 2);
   const lobbySource = read('./game_lobby.ts').replace('id: 1073741825,', `id: ${ids.lobby},`);
   const clientLayout = layout(shop.rules);
-  const source = bundleRun(parse, true, convert => {
+  const source = bundleRun(parse, profile, convert => {
     const wrap = (name, code, callbacks, argument = '') => [
       `local function ${name}(${argument})`,
       `local ${Object.values(callbacks).join(', ')}`,
@@ -119,9 +122,11 @@ export function nativeGame(lua53, lua54, parse, ids, artPreview) {
     });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
   }, clientLayout, artPreview);
+  assert.ok(Buffer.byteLength(source) <= 400_000, 'Client Lua exceeds GIL authoring limit');
   parse(source, { luaVersion: '5.3' });
   return {
-    layout: clientLayout, source, roomSettings: room.settings, artPreview,
+    layout: clientLayout, source, roomSettings: room.settings, artPreview, profile,
+    ...(profile === 'expanded' && { expanded: { catalog, tokenCount: battle.ids.length - catalog.length } }),
     shopRules: shop.rules, shopLevelThresholds: shop.levelThresholds, stockBaseLength: shop.start[0].length,
     petTierCounts: shop.petTierCounts,
     graphs: [

@@ -58,7 +58,7 @@ function combatMath(parse) {
 }
 
 function openingSource(math, profile) {
-  const release = profile === 'release';
+  const release = profile !== 'compatibility';
   const source = fs.readFileSync(new URL('./m3_battle_opening.ts', import.meta.url), 'utf8')
     .replace(' /* AP_OPENING_HURT */', release ? ', 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n' : '')
     .replace('false /* AP_OPENING_HURT_CHECK */', release
@@ -89,7 +89,7 @@ export function nativeBattle(lua53, lua54, parse, profile = 'compatibility') {
     .replace('// AP_LOWERED_BUFF', math.buffCode)
     .replace('// AP_LOWERED_SUMMON', math.summonCode);
   assert.doesNotMatch(collision, /\/\/ AP_/);
-  const release = profile === 'release';
+  const release = profile !== 'compatibility';
   const reactions = release ? fs.readFileSync(new URL('./m3_battle_release_step.ts', import.meta.url), 'utf8') : '';
   const source = [collision, openingSource(math, profile), reactions].join('\n');
   return {

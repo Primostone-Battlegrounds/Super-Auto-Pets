@@ -14,8 +14,9 @@ import { initialAcceptance } from '../../scripts/acceptance-gate.mjs';
 
 const [checkoutArg, scratch, lua53, output, profile] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua53 && output,
-  'Usage: node tests/native/verify-game.mjs <MCP checkout> <scratch> <Lua 5.3> <new game package> [--art-preview]');
-assert.ok(profile === undefined || profile === '--art-preview');
+  'Usage: node tests/native/verify-game.mjs <MCP checkout> <scratch> <Lua 5.3> <new game package> [--art-preview|--expanded]');
+assert.ok(profile === undefined || profile === '--art-preview' || profile === '--expanded');
+const expanded = profile === '--expanded';
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0');
 assert.ok(!fs.existsSync(output), 'Use a new game package directory');
 
@@ -86,6 +87,7 @@ let preview;
 if (profile) {
   const rows = fs.readFileSync(new URL('../../docs/design/revisions/v2.1.0/prototype/rows-40.json', import.meta.url));
   preview = { ...artPreview(JSON.parse(rows)), visualDesign: 'v2.1.0', rowsSha256: sha256(rows) };
+  if (expanded) preview.commonNames = {};
   const template = fittedTemplate(preview.layersPerSlot);
   const { templateIndex } = await stage('scene_add_client_template', { template });
   preview.templateIndex = templateIndex;
@@ -96,7 +98,7 @@ if (profile) {
   assert.deepEqual(readback.template.children.map(layer => [layer.name, layer.image, layer.active, layer.visible]),
     template.children.map(layer => [layer.name, layer.image, layer.active, layer.visible]));
 }
-const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids, preview);
+const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids, preview, expanded ? 'expanded' : 'release');
 for (const { graphId, code } of game.graphs) assertAssemblySourceLimits(graphId, code, ts);
 await stage('write_graphs', { graphs: game.graphs });
 await stage('scene_set_client_script', {
@@ -185,7 +187,7 @@ fs.writeFileSync(bindings, controls.map(control => [control.path, Number(control
 
 const tests = await import('./game-verification.mjs');
 const simulation = tests.verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings });
-const frames = tests.readGameFrames(simulation.frames, controls);
+const frames = simulation.frames && tests.readGameFrames(simulation.frames, controls);
 assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
 assert.equal(sha256(fs.readFileSync(input)), fixtureHash);
 const gil = 'super-auto-pets.gil';
@@ -194,21 +196,23 @@ assert.equal(inspected.sha256, hash);
 fs.mkdirSync(output, { recursive: true });
 fs.copyFileSync(mapPath, path.join(output, gil), fs.constants.COPYFILE_EXCL);
 fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(output, 'MCP-FIXTURE-LICENSE.txt'));
-fs.copyFileSync(new URL(profile ? '../../platform/ART-PRACTICE.md' : '../../platform/GAME.md', import.meta.url),
+const readme = expanded ? 'EXPANDED-GAME.md' : profile ? 'ART-PRACTICE.md' : 'GAME.md';
+fs.copyFileSync(new URL('../../platform/' + readme, import.meta.url),
   path.join(output, 'README.md'));
 const build = {
   ...design, version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
   node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,
   ...(preview && { artPreview: { ...game.artPreview, commonNames: undefined } }),
+  ...(expanded && { expanded: { ...game.expanded, design: 'v2.1.0' } }),
   officialClient: 'pending',
 };
 const buildJson = JSON.stringify(build, null, 2) + '\n';
 fs.writeFileSync(path.join(output, 'BUILD.json'), buildJson);
 fs.writeFileSync(path.join(output, 'ACCEPTANCE.json'), JSON.stringify(initialAcceptance(build, buildJson), null, 2) + '\n');
-fs.writeFileSync(path.join(workspace, 'frames.json'), JSON.stringify(frames));
+if (frames) fs.writeFileSync(path.join(workspace, 'frames.json'), JSON.stringify(frames));
 const files = [gil, 'README.md', 'BUILD.json', 'ACCEPTANCE.json', 'MCP-FIXTURE-LICENSE.txt'];
 fs.writeFileSync(path.join(output, 'SHA256SUMS'),
   files.map(file => `${sha256(fs.readFileSync(path.join(output, file)))}  ${file}`).join('\n') + '\n');
 console.log(`Game: ${path.join(output, gil)} (${hash})`);
-console.log(`Offline frames: ${path.join(workspace, 'frames.json')}`);
+if (frames) console.log(`Offline frames: ${path.join(workspace, 'frames.json')}`);
 for (const graph of graphs) console.log(`${graph.name}: ${graph.nodeCount} nodes, ${graph.editorCount} weighted`);

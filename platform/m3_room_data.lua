@@ -1,8 +1,7 @@
 package.path = "src/?.lua;" .. package.path
 local profile = arg[2] or "compatibility"
-assert(profile == "compatibility" or profile == "release", "unknown native room profile")
 local compatibility = require("autopets.data")
-local data = profile == "release" and require("autopets.release_data") or compatibility
+local data = require("autopets.catalog")(profile)
 local bot = require("autopets.bot")
 local rng = require("autopets.rng")
 local room = require("autopets.room")
