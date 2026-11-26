@@ -849,7 +849,10 @@ function OnUpdate(dt)
     end
     event_index, elapsed = event_index + 1, 0
     local upcoming = replay_view.event(battle.events, event_index, rules_data)
-    if upcoming.type == "damage" then play_sound((upcoming.health_loss or upcoming.amount) > 0 and 50936 or 51044) end
+    if upcoming.type == "damage" then
+        if (upcoming.health_loss or upcoming.amount) > 0 then play_sound(50936)
+        elseif upcoming.absorbed > 0 then play_sound(51044) end
+    end
     if event_index == #battle.events then reach_result() end
     draw(false)
 end

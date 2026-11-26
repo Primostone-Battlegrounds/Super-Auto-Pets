@@ -114,7 +114,7 @@ function stat(name, x, title, paper, number) {
   const glyph = name === 'Money' ? disc : name === 'Lives' ? lifeIcon : null;
   return group(name, [x, 281], [152, 65], [
     glyph ? image('Surface', [-35, 18], [18, 18], number, { image: glyph }) : image('Surface', [0, 0], [152, 65], paper),
-    label('Label', [glyph ? 11 : 0, 18], [144, 28], title, 17, pigment.muted),
+    label('Label', [glyph ? 11 : 0, 18], [glyph ? 120 : 144, 28], title, 17, pigment.muted),
     label('Value', [0, -15], [144, 35], '', name === 'Round' ? 23 : 28, number),
   ]);
 }

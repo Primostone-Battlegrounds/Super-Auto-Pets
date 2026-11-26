@@ -6,8 +6,8 @@ local cursor = {CursorDown = "CursorDown", CursorClick = "CursorClick",
     CursorBeginDrag = "CursorBeginDrag", CursorDrag = "CursorDrag", CursorEndDrag = "CursorEndDrag"}
 local device = arg[5] or "pc"
 local release = arg[6] == "release"
-local canvas = assert(({pc = {1600, 900}, mobile = {1280, 720}})[device], "unknown input device")
-local main_touch = device == "pc" and -1 or 4
+local canvas = assert(({pc = {1600, 900}, pc1080 = {1920, 1080}, mobile = {1280, 720}})[device], "unknown input device")
+local main_touch = device == "mobile" and 4 or -1
 local capture_file = assert(io.open(arg[4], "w"))
 local ticking, image_writes = false, 0
 local captured = {}
