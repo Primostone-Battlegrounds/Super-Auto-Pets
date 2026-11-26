@@ -358,8 +358,9 @@ local function finish(outcome, terminal, inspect_playback, observe_event)
             local impact = nodes["BattleFX/Impact"]
             local value = impact.active and label("BattleFX/Impact/Value")
             if value and value:match("^-%d+$") and not saw_damage then
-                local side, name, damage, health = label("Battle/Event"):match(" → (%S+) (%S+) -(%d+)命 · 余(%d+)命")
-                assert(side and nodes.BattleFX.active and value == "-" .. damage)
+                local summary = label("Battle/Event")
+                local side, name, damage, health = summary:match("(%S+) (%S+) %-(%d+)命 · 余(%d+)命")
+                assert((side == "我方" or side == "对方") and nodes.BattleFX.active and value == "-" .. damage, summary)
                 local prefix = side == "我方" and "Team" or "Enemy"
                 local hit
                 for slot = 1, 5 do
@@ -392,6 +393,7 @@ local function finish(outcome, terminal, inspect_playback, observe_event)
             end
             if value == "格挡" then
                 assert(label("Battle/Event"):find("护盾抵消", 1, true))
+                assert(nodes["BattleFX/Impact/Spark"].visible, "Guard must display its shield icon")
                 saw_block = true
             end
             local summoned = event_card("^入场$")
