@@ -177,7 +177,7 @@ local function paint_shop()
             local combining = planned and (planned[1] == 15 or planned[1] == 12)
             if unified_layout and unit then
                 text("Shop/InspectTeam" .. slot .. "/Text",
-                    (combining and "➜ " or "") .. pet_presentation.level(unit, native_catalog.rules.level_xp))
+                    (combining and "→ " or "") .. pet_presentation.level(unit, native_catalog.rules.level_xp))
             end
             object("Shop/Team" .. slot .. "/Surface").imageColor =
                 mark == 2 and Color(104, 194, 168, 255) or mark == 1 and Color(125, 168, 133, 255)

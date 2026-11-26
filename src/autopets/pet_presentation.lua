@@ -1,7 +1,9 @@
 local animal_ability = require("autopets.animal_ability")
 
 local presentation = {}
-local dice = {"⚀", "⚁", "⚂", "⚃", "⚄", "⚅"}
+-- The default native CJK face lacks dedicated dice glyphs. Compose the
+-- visible pips from supported characters and keep the number on every badge.
+local dice = {"·", ":", "∴", "∷", "∷·", "∷:"}
 
 function presentation.tier(item)
     local tier = type(item) == "table" and item.tier or item
@@ -16,7 +18,7 @@ function presentation.level(unit, thresholds)
     if not next_level then return caption .. " 满级" end
     local current_level = thresholds[level]
     local filled = math.max(0, math.min(next_level - current_level, unit.xp - current_level))
-    return caption .. " " .. string.rep("▰", filled) .. string.rep("▱", next_level - current_level - filled)
+    return caption .. " " .. string.rep("■", filled) .. string.rep("□", next_level - current_level - filled)
 end
 
 function presentation.animal(catalog, item, unit)

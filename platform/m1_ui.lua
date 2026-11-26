@@ -362,14 +362,22 @@ local function draw_tooltip(preparing)
     local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
     local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
     local card_x, card_y = control(path):GetAnchoredPosition()
-    local x = math.max(-370, math.min(370, card_x))
-    if not shared_portraits then control("Shop/Caption"):SetAnchoredPosition(x < -150 and 452 or -465, 106) end
     local beside_team = picked.kind == "team"
     local tooltip = control("Tooltip")
-    local _, tooltip_height = tooltip:GetSizeDelta()
+    local tooltip_width, tooltip_height = tooltip:GetSizeDelta()
+    local centre = card_x
+    if shared_portraits and beside_team then
+        local sell_width = control("Shop/Sell"):GetSizeDelta()
+        local separation = (tooltip_width + sell_width) / 2 + 16
+        centre = card_x + (card_x >= 0 and -separation or separation)
+    end
+    local x = math.max(-370, math.min(370, centre))
+    if not shared_portraits then control("Shop/Caption"):SetAnchoredPosition(x < -150 and 452 or -465, 106) end
     local _, hit_height = control(path .. "/Hit"):GetSizeDelta()
     tooltip:SetAnchoredPosition(x, beside_team and card_y - (tooltip_height + hit_height) / 2 - 6 or -2)
-    control("Tooltip/Pointer"):SetAnchoredPosition(card_x - x, beside_team and 40 or -40)
+    local pointer_limit = tooltip_width / 2 - 20
+    local pointer_x = math.max(-pointer_limit, math.min(pointer_limit, card_x - x))
+    control("Tooltip/Pointer"):SetAnchoredPosition(pointer_x, beside_team and 40 or -40)
     local heading, body = selected_info(picked)
     text("Tooltip/Heading", heading)
     text("Tooltip/Body", body)
@@ -385,13 +393,21 @@ local function arrange(preparing)
     show("Field/RivalTrack", not preparing)
     control("TeamCaption"):SetAnchoredPosition(-309, preparing and 208 or 161)
     control("OpponentCaption"):SetAnchoredPosition(309, preparing and 208 or 161)
-    control("Hint"):SetAnchoredPosition(preparing and -52 or -153, -292)
+    local hint_y = shared_portraits and (preparing and -291 or -317) or -292
+    control("Hint"):SetAnchoredPosition(preparing and -52 or -153, hint_y)
     control("Hint"):SetSizeDelta(preparing and 590 or 824, 53)
     for index = 1, rules.team_size do
         local x, y = 82 + (index - 1) * 112, 54
         local team_path = "Team" .. index
         local prep_y = shared_portraits and 145 or 82
         control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and prep_y or y)
+        if shared_portraits then
+            for _, path in ipairs({team_path, "Enemy" .. index}) do
+                local tag = control(path .. "/Tag")
+                local tag_x = tag:GetAnchoredPosition()
+                tag:SetAnchoredPosition(tag_x, preparing and 61 or 74)
+            end
+        end
         show(team_path .. "/Hit", preparing)
         if preparing then show("Enemy" .. index, false) end
     end
@@ -471,7 +487,7 @@ local function draw(refresh)
     local drop_source = drag or pending_drop
     local drag_hint, drop_label = drag_feedback(drop_source)
     arrange(preparing)
-    text("Round/Value", shared_portraits and preparing and tostring(state.round)
+    text("Round/Value", shared_portraits and tostring(state.round)
         or string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
@@ -480,6 +496,7 @@ local function draw(refresh)
     local opponent = preparing and "下一位电脑对手" or "电脑对手"
     local style = state.opponent and styles[state.opponent.style]
     text("OpponentCaption", style and (opponent .. " · " .. style) or opponent)
+    if preparing and shared_portraits then show("OpponentCaption", false) end
     if drag then
         show("TeamCaption", false)
         show("OpponentCaption", false)
@@ -502,9 +519,9 @@ local function draw(refresh)
         if drop then
             show(path .. "/Name", false)
             local caption = pending_drop and ("确认" .. drop_label) or drop_label
-            text(path .. "/DropLabel", shared_portraits and combining and ("➜ " .. caption) or caption)
+            text(path .. "/DropLabel", shared_portraits and combining and ("→ " .. caption) or caption)
         elseif shared_portraits and combining then
-            text(path .. "/DropLabel", "➜ 合并")
+            text(path .. "/DropLabel", "→ 合并")
         else
             show(path .. "/DropLabel", false)
         end

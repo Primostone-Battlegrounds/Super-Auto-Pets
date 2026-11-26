@@ -314,7 +314,7 @@ local function render_market()
             local combining = planned and (planned[1] == 15 or planned[1] == 12)
             if unit then
                 child("InspectTeam" .. slot .. "Label").text =
-                    (combining and "➜ " or "") .. pet_presentation.level(unit, native_catalog.rules.level_xp)
+                    (combining and "→ " or "") .. pet_presentation.level(unit, native_catalog.rules.level_xp)
             end
             local face = mark == 2 and Color(104, 194, 168, 255) or mark == 1 and Color(125, 168, 133, 255)
                 or combining and Color(206, 177, 94, 255)
