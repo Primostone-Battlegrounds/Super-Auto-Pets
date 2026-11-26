@@ -98,6 +98,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(item?.textLayout?.fits && item.textLayout.visibleLineCount > 0, `Missing or clipped text: ${trail}`);
     assert.match(item.text, expected, trail);
   };
+  const requireTextLines = (trail, lines) => {
+    const item = visibleText(trail);
+    assert.ok(item?.textLayout?.fits, `Missing or clipped text: ${trail}`);
+    assert.equal(item.textLayout.visibleLineCount, lines.length, `Unexpected line wrapping: ${trail}`);
+    assert.deepEqual(item.textLayout.lines, lines, trail);
+    return item;
+  };
   try {
   await capture('startup');
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
@@ -547,7 +554,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         if (duel && name === 'result') requireText('Duel/Status', /战斗结束 · 等待结算/u);
         if (name === 'attack') {
           requireText(statusTrail, duel ? /^战斗中$/mu : /^战斗中 · 对手席位 2$/u);
-          if (!duel) requireText('Room/Match/Replay/Own1', /^芦纹龟\nLv\.1 ■□$/u);
+          if (!duel) requireTextLines('Room/Match/Replay/Own1', ['芦纹龟', 'Lv.1 ■□']);
           requireText(playbackLabel, /^暂停$/u);
           requireText(speedLabel, /^倍速 x1$/u);
           requireText(skipLabel, /^跳过$/u);
@@ -649,15 +656,23 @@ for(const {canvasId,playerCount,mode} of configurations) {
         api.stepPlay(session, 0.05);
       }
       const shieldFrame = await capture('client-1-replay-long-stats');
-      requireText(stats, duel ? /^芦纹龟\nLv\.3$/u : /^芦纹龟\nLv\.3 满级$/u);
-      assert.equal(shieldFrame.paint.find(item => item.id === shieldIconId)?.imageId, 102036);
+      const heading = requireTextLines(stats, ['芦纹龟', duel ? 'Lv.3' : 'Lv.3 满级']);
+      const shieldIcon = shieldFrame.paint.find(item => item.id === shieldIconId);
+      assert.equal(shieldIcon?.imageId, 102036);
       const shieldValue = shieldFrame.paint.find(item => item.id === shieldValueId);
       assert.ok(shieldValue?.textLayout?.fits && shieldValue.textLayout.visibleLineCount === 1);
       assert.match(shieldValue.text, /^[1-9]\d*$/u);
+      const badges = [shieldIcon, shieldValue];
       for (const [name, expected] of [['Attack1', /^攻999$/u], ['Life1', /^命99[89]$/u]]) {
-        const measurement = visibleText(`${replayBadges}/${name}`)?.textLayout;
+        const badge = visibleText(`${replayBadges}/${name}`);
+        const measurement = badge?.textLayout;
         assert.ok(measurement?.fits && measurement.visibleLineCount === 1);
         assert.match(measurement.lines[0], expected);
+        badges.push(badge);
+      }
+      for (const badge of badges) {
+        assert.ok(heading.bottom >= badge.bottom + badge.height,
+          `Battle name and level overlap the ${badge.name} badge`);
       }
     }
   }
