@@ -84,31 +84,45 @@ jobs:
           retention-days: 30
           overwrite: true
       - name: Download the exact GIL from GitHub
+        id: download
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_WEB_URL: ${{ steps.artifact.outputs.artifact-url }}
         run: |
           [[ "$ARTIFACT_ID" =~ ^[0-9]+$ ]]
           download="$RUNNER_TEMP/game-download"
+          api_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip"
           mkdir -p "$download"
           # The download endpoint retains /zip in its path and serves the uploaded raw bytes.
           # A new artifact can take a short time to become visible.
-          for delay in 0 1 2 4 8 16; do
-            sleep "$delay"
-            if status=$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' \
-                --connect-timeout 10 --max-time 30 --output "$download/artifact.partial" --write-out '%{http_code}' \
-                --header "Authorization: Bearer $GH_TOKEN" --header 'X-GitHub-Api-Version: 2022-11-28' \
-                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip"); then
-              case "$status" in
-                200) mv "$download/artifact.partial" "$download/super-auto-pets.gil"; exit 0 ;;
-                404|408|429|5??) printf 'Artifact download returned HTTP %s.\n' "$status" ;;
-                *) printf '::error::Artifact download failed with HTTP %s.\n' "$status"; exit 1 ;;
-              esac
-            fi
-          done
-          printf '::error::Artifact download did not succeed within the retry limit.\n'
-          exit 1
+          fetch_artifact() {
+            local delay status
+            for delay in 0 1 2 4 8 16; do
+              sleep "$delay"
+              if status=$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' \
+                  --connect-timeout 10 --max-time 30 --output "$download/artifact.partial" --write-out '%{http_code}' \
+                  --header 'X-GitHub-Api-Version: 2022-11-28' "$@" "$api_url"); then
+                case "$status" in
+                  200) mv "$download/artifact.partial" "$download/super-auto-pets.gil"; return $? ;;
+                  404|408|429|5??) printf 'Artifact download returned HTTP %s.\n' "$status" ;;
+                  *) printf 'Artifact download failed with HTTP %s.\n' "$status"; return 1 ;;
+                esac
+              fi
+            done
+            return 1
+          }
+          if fetch_artifact; then
+            printf 'url=%s\nrequires_login=false\n' "$api_url" >> "$GITHUB_OUTPUT"
+            printf 'Downloaded the artifact anonymously.\n'
+          elif fetch_artifact --header "Authorization: Bearer $GH_TOKEN"; then
+            printf 'url=%s\nrequires_login=true\n' "$ARTIFACT_WEB_URL" >> "$GITHUB_OUTPUT"
+            printf 'Downloaded the artifact with GitHub authentication.\n'
+          else
+            printf '::error::Artifact download did not succeed within the retry limit.\n'
+            exit 1
+          fi
       - name: Verify the downloaded GIL
         env:
           ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
@@ -134,7 +148,8 @@ jobs:
       - name: Link the game download
         if: github.ref == 'refs/heads/develop'
         env:
-          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          ARTIFACT_URL: ${{ steps.download.outputs.url }}
+          ARTIFACT_REQUIRES_LOGIN: ${{ steps.download.outputs.requires_login }}
           EVIDENCE_NAME: ${{ steps.build.outputs.evidence }}
           ACCEPTANCE_VERDICT: ${{ steps.build.outputs.verdict }}
         run: |
@@ -142,7 +157,12 @@ jobs:
           {
             printf '## 小动物自走棋 · 千星隔离候选\n\n'
             printf '[下载 super-auto-pets.gil](%s)\n\n' "$ARTIFACT_URL"
-            printf '登录 GitHub 下载后，将 GIL 导入获授权的隔离存档。产物保留 30 天。\n\n'
+            if [ "$ARTIFACT_REQUIRES_LOGIN" = true ]; then
+              printf '此链接需要登录 GitHub。\n\n'
+            else
+              printf '此下载无需登录 GitHub。\n\n'
+            fi
+            printf '下载后将 GIL 导入获授权的隔离存档。产物保留 30 天。\n\n'
             printf 'Git SHA `%s`\n\n' "$SOURCE_SHA"
             printf '成品验收 `%s`。各层状态、校验和及夹具许可见工程证据 `%s`。\n' \
               "$ACCEPTANCE_VERDICT" "$EVIDENCE_NAME"
