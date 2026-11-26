@@ -574,6 +574,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
           new RegExp(`^${name}$`, 'u'));
         requireArt(artShop, artHosts[5 + index], id, false, 1.5);
       }
+      for (const [index, [code]] of own.entries()) {
+        requireArt(artShop, artHosts[index], species.get(code)[0], false, 1);
+      }
       const beforeAbility = requests();
       const abilityPatterns = [/开场.*1 盾/u, /退场.*兔宝宝/u, /开场.*随机 2 名对手各受 2 伤/u];
       for (const [index, code] of shelf.entries()) {

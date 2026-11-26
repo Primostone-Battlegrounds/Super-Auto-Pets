@@ -149,7 +149,8 @@ local function online_portraits(duel)
             plate.imageColor = mirrored and Color(118, 80, 59, 255) or Color(75, 98, 59, 255)
             set_visible(plate, true)
         elseif id ~= nil then
-            draw(tostring(slot), id, mirrored, view == "shop" and 1.5 or 1)
+            local fitted_scale = view == "shop" and slot > 5 and 1.5 or 1
+            draw(tostring(slot), id, mirrored, fitted_scale)
         elseif fitted_portrait_template then
             draw(tostring(slot), nil, false)
         end
