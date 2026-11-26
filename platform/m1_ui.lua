@@ -373,13 +373,6 @@ local function draw_battle_cue(event, passed, cue)
         burst.imageColor = colour(cue.face)
         local has_shield = cue.kind == "shield" or (event.absorbed or 0) > 0
         show("BattleFX/Impact/Spark", has_shield)
-        if has_shield then
-            local shield = control("BattleFX/Impact/Spark")
-            shield:SetImage(Enum.ImageSource.StaticReference, 102036)
-            shield.imageColor = colour(0x315a6d)
-            shield:SetSizeDelta(21, 21)
-            shield:SetAnchoredPosition(29, 18)
-        end
         text("BattleFX/Impact/Value", cue.label, cue.ink)
     end
 end

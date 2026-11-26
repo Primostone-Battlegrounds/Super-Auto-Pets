@@ -184,10 +184,10 @@ export const nativeRun = {
         ellipse('Glint', [0, 0], [52, 4], '#ffe7a4'),
         ellipse('Upper', [-9, 11], [29, 5], '#f8e1a1'),
       ], false),
-      group('Impact', [0, 0], [66, 50], [
+      group('Impact', [0, 0], [86, 60], [
         ellipse('Burst', [0, 0], [64, 41], '#f3c58a'),
         ellipse('Flash', [0, 0], [52, 33], '#fff2d6'),
-        ellipse('Spark', [30, 16], [5, 8], '#ad623c'),
+        image('Spark', [32, 18], [21, 21], '#315a6d', { image: 102036 }),
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),
