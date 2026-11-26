@@ -167,7 +167,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Hint']);
     requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Hint']);
-    requireText('Practice/Shop/Reroll/Title', /^刷新 · 1 金.*· 1阶$/u);
+    requireText('Practice/Shop/Reroll/Title', /^刷新 · 1 金\n· 1阶$/u);
     assert.ok(!visibleText('Practice/Shop/RewardNext/Title'), 'Reward navigation requires multiple reward offers');
     assert.ok(!visibleText('Practice/Shop/Buy/Title'), 'Purchase requires a selected pet or reward');
     requireText('Practice/Money/Value', /^10$/u);
@@ -265,7 +265,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const readOfferNames = () => [1, 2, 3].map(slot => visibleText(`Practice/Shop/Pet${slot}/Name`).text);
     const beforeReroll = readOfferNames();
     press('Shop/Pet1');await capture('practice-offer-detail');
-    requireText('Practice/Tooltip/Heading', /芦纹龟/u);
+    requireText('Practice/Tooltip/Heading', /^芦纹龟 · Lv\.1 · 芦盾 · 1阶$/u);
     press('Shop/Freeze');press('Shop/Reroll');
     const frozen = await capture('practice-frozen-reroll');
     requireText('Practice/Money/Value', /^9$/u);
@@ -411,6 +411,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const between = duel ? 'Duel/InspectReward' : 'Room/Match/Hint';
     requirePlayButton(rerollButton, [readyButton, between]);
     requirePlayButton(readyButton, [rerollButton, between]);
+    requireText(duel ? 'Duel/RerollLabel' : `${shop}/Reroll/Text`, /^刷新 · 1 金\n· 1阶$/u);
     const requestName = duel ? 'AP_DuelRequest' : 'AP_RoomRequest';
     const requests = () => api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).length;
     const beforeInspect = requests();
