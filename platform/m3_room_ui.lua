@@ -368,15 +368,17 @@ local function redraw()
     text("Forfeit/Text", forfeiting and "确认认输" or "认输")
     if shop_open then paint_shop() end
     if replay_open then paint_battle() end
-    local message = hint or "等待服务端推进"
+    local message = hint or (unified_layout and "" or "等待服务端推进")
     if pending then
-        message = "等待服务端响应，可用「同步」查看当前状态"
+        message = unified_layout and "正在确认操作…" or "等待服务端响应，可用「同步」查看当前状态"
     elseif not hint and shop_open then
         local _, unit = chosen()
         local animal = unit and pets[unit.code]
         if match.ready then message = "已准备，等待其他席位"
         elseif animal then message = "已选 " .. animal.name .. " · 可喂食、出售、换位或合并"
         else message = unified_layout and "拖向高亮站位，或点选动物购买" or "点选队员后可喂食、出售、换位或合并" end
+    elseif not hint and unified_layout and match.phase == 2 and alive() then
+        message = "商店准备中…"
     elseif not hint and match.phase == 5 then
         local place = match.places[match.seat]
         message = place and place > 0 and ("我的名次 · 第 " .. place .. " 名") or "本局已结束"
@@ -398,7 +400,7 @@ local function receive_view(_, values)
     if transitioned then
         selected, merge, reward, hint, inspected, offer_pick = nil, false, 1, nil, nil, nil
     elseif acknowledged and sequence == pending[3] then
-        hint = "操作未生效，已同步服务端状态"
+        hint = unified_layout and "操作未生效" or "操作未生效，已同步服务端状态"
     else
         hint = nil
     end

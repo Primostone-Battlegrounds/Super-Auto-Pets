@@ -225,7 +225,7 @@ local function render_market()
         if portrait and preparing then
             for slot = 1, rules.team_size + rules.pet_slots + rules.food_slots do portrait.shop(slot, nil) end
         end
-        market_gold.text = "同步商店中"
+        market_gold.text = portrait and "商店准备中…" or "同步商店中"
         team_label.text = "阵容 —"
         reward_label.text = "升级奖励"
         for slot, label in ipairs(team_labels) do
@@ -252,7 +252,7 @@ local function render_market()
     local price = string.format("购买 %d 金", rules.pet_cost)
     local footer = price
     if view.version ~= latest_version then
-        footer = "等待同步"
+        footer = portrait and "商店更新中…" or "等待同步"
     elseif not preparing then
         footer = "本轮已锁定"
     elseif view.gold < rules.pet_cost then
@@ -734,7 +734,7 @@ draw_status = function()
         end
     end
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
-    local feedback = hint or (portrait and pending and "正在等待服务端确认")
+    local feedback = portrait and pending and "正在确认操作…" or hint
     if not feedback and portrait and preparing then feedback = "拖向高亮站位，或点选动物购买" end
     local content = status_header .. "\n" .. message .. suffix .. (feedback and ("\n" .. feedback) or "")
     if status.text ~= content then status.text = content end
@@ -749,7 +749,7 @@ local function receive_snapshot(_, parameters)
     if new_round < round or version <= latest_version then return end
     if pending and (new_round > pending.round or next_sequence > pending.sequence or phase == 2) then pending = nil end
     if new_round > round then reward_index, inspected, offer_pick = 1, nil, nil end
-    hint = rejected and "操作未生效，已同步服务端状态" or nil
+    hint = rejected and (portrait and "操作未生效" or "操作未生效，已同步服务端状态") or nil
     latest_version = version
     round = new_round
     sequence = next_sequence
