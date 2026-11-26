@@ -113,3 +113,26 @@ test('an exact GIL receipt leaves remaining layers pending and disallows stale e
   report.layers.rules.artifacts = [{ ...report.layers.gil.artifacts[0], kind: 'dual-lua-run' }];
   assert.throws(() => checkAcceptance(root, build, report), /reused across layers/);
 });
+
+test('launch requires ten purchasable pets in each of six tiers', t => {
+  const { root, base, write } = fixture(t);
+  const design = readDesign(root, { forBuild: true });
+  const identity = { ...design, sourceRevision: base, sha256: '0'.repeat(64) };
+  const cases = [
+    [undefined, false],
+    [[3, 3, 3, 3, 3, 3], false],
+    [[6, 6, 6, 6, 6, 6], false],
+    [[9, 11, 10, 10, 10, 10], false],
+    [[10, 10, 10, 10, 10, 10, 0], false],
+    [[10, 10, 10, 10, 10, 10], true],
+  ];
+  for (const [petTierCounts, complete] of cases) {
+    const build = { ...identity, petTierCounts };
+    const content = JSON.stringify(build);
+    write('BUILD.json', content);
+    const report = initialAcceptance(build, content);
+    const result = checkAcceptance(root, build, report);
+    assert.equal(result.unsatisfied.includes('launchPetPool'), !complete, JSON.stringify(petTierCounts));
+    assert.equal(result.verdict, 'NO-GO', 'Roster size does not replace the existing acceptance layers');
+  }
+});

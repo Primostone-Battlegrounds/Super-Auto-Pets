@@ -76,6 +76,23 @@ inspect_assets(data.foods)
 inspect_assets(data.token_by_id)
 io.write("assets ", asset_count, " ", definitions_layers, " ", max_layers, "\n")
 
+if release then
+    local counts, seen = {}, {}
+    for tier = 1, data.rules.max_tier do
+        local pets = data.pets_at_tier(tier)
+        for _, pet in ipairs(pets) do
+            assert(pet.tier == tier and data.pet_by_id[pet.id] == pet, "invalid tier entry " .. pet.id)
+            assert(not seen[pet.id] and not data.token_by_id[pet.id], "duplicate or summon in shop " .. pet.id)
+            seen[pet.id] = true
+        end
+        counts[tier] = #pets
+    end
+    for _, pet in ipairs(data.pets) do
+        assert(seen[pet.id], "missing shop pet " .. pet.id)
+    end
+    io.write("pet_tier_counts ", table.concat(counts, " "), "\n")
+end
+
 for _, fixture in ipairs({{seed = 7, style = "guardian"}, {seed = -12, style = "swarm"}}) do
     local pool = bot.new_pool(fixture.seed, fixture.style, nil, data)
     local attempts = 0

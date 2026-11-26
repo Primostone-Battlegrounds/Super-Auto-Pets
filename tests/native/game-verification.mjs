@@ -122,6 +122,11 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
     duelReplayOracle(lua53, lua54, project, 'release'));
   const practice53 = run(lua53, ['tests/native/m1-replay.lua', 'source', 'release']);
   assert.equal(practice53, run(lua54, ['tests/native/m1-replay.lua', 'source', 'release']));
+  assert.equal(practice53, run(lua53, ['tests/native/m1-replay.lua', 'bundle', extracted, 'release']));
+  const counts = practice53.match(/^pet_tier_counts (\d+(?: \d+)*)$/m);
+  assert.ok(counts, 'Missing readback shop tier counts');
+  const petTierCounts = counts[1].split(' ').map(Number);
+  assert.deepEqual(petTierCounts, game.petTierCounts, 'Practice and multiplayer must share the purchasable tier sizes');
   const client = (lua, suffix) => {
     const captures = path.join(workspace, `captures-${suffix}.tsv`);
     const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures]);
@@ -129,7 +134,7 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   };
   const gameClient = client(lua53, '53');
   assert.deepEqual(gameClient, client(lua54, '54'));
-  return { frames: gameClient.frames, evidence: { stockCapacityBound, lobby, room,
+  return { frames: gameClient.frames, evidence: { petTierCounts, stockCapacityBound, lobby, room,
     roomReplay: roomReplay.trim(), duel, client: gameClient.trace.trim() } };
 }
 

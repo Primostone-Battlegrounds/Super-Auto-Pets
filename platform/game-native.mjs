@@ -110,6 +110,7 @@ export function nativeGame(lua53, lua54, parse, ids) {
   return {
     layout: clientLayout, source, roomSettings: room.settings,
     shopRules: shop.rules, shopLevelThresholds: shop.levelThresholds, stockBaseLength: shop.start[0].length,
+    petTierCounts: shop.petTierCounts,
     graphs: [
       { graphId: ids.lobby, code: lobbySource }, { graphId: ids.duel, code: duelSource },
       { graphId: ids.duelFight, code: duelFight }, { graphId: ids.room, code: roomSource },

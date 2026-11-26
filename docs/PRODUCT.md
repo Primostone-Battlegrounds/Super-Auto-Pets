@@ -20,8 +20,8 @@
 
 练习保留当前 10 胜、5 命和回放流程。机器人与真人共用商店和战斗规则。难度用经营决策、阵容协同和站位区分，使用固定种子与随机购物及不同策略做对抗比较。
 
-首发沿用统一动物池。原神生物志用于内容研究，Standard 用于核对经济、技能触发和战斗结算。美术沿用项目原生控件与原创或已获授权的素材。历史兼容目录和覆盖记录见 [REASONS v1](design/REASONS-v1.md) 与 [Turtle 覆盖表](design/TURTLE-COVERAGE-v1.md)。
+三个模式共用一个首发动物池。正式发版要求六阶各 10 只可购买动物，共 60 只，战斗召唤物另计。原神生物志用于内容研究，Standard 用于对照经济、技能触发和战斗结算。美术沿用项目原生控件与原创或已获授权的素材。历史兼容目录和覆盖记录见 [REASONS v1](design/REASONS-v1.md) 与 [Turtle 覆盖表](design/TURTLE-COVERAGE-v1.md)。
 
 Arena 历史阵容、Daily、天梯、赛季和自定义动物包暂缓。Backlog 维护里程碑，验收证据按层记录。 [QA](QA.md)
 
-Draft PR #5 保留早期单人方案、名册样板及制作过程。首发池对应当前六阶目录。 [历史设计稿](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [六阶目录](design/RELEASE-POOL.md)
+Draft PR #5 保留早期单人方案、名册样板及制作过程。当前六阶目录记录 v2.0.0 的 18 只研发基线。 [历史设计稿](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [六阶目录](design/RELEASE-POOL.md)

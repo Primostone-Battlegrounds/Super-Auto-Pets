@@ -12,6 +12,8 @@
 
 旧离线绘图用于调试 GIL 控件树。每个候选包的 `ACCEPTANCE.json` 标注各层证据和待验项。成品验收使用 `node scripts/acceptance-gate.mjs <package> --require-go`。
 
+成品门禁额外要求 `BUILD.json` 的 `petTierCounts` 为六阶各 10 只。构建从 GIL 回读练习目录，与联机商店的阶级数据比较。计数仅包括可购买动物，排除战斗召唤物与食物。计数缺失或任一阶不足或超额时，门禁报告 `launchPetPool` 为未通过，隔离候选仍可构建。五层证据仍逐项验收。 [六阶目录](design/RELEASE-POOL.md)
+
 OpenHarness 固定到 `aebb0c2255a5df275491009285c1a23d03f90771`，使用 cooperative 模式。运行 `openharness --repo . entry` 和 `openharness --repo . doctor` 读取当下权限和缺口。分支保护和 Required Checks 以 GitHub 实际配置为准。
 
 ## PR 集成
