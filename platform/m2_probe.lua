@@ -691,7 +691,10 @@ function OnStart(_, painter, badge_pool)
     if portrait then
         if game.GetUICanvasSize then child("Background"):SetSizeDelta(game.GetUICanvasSize()) end
         local targets = {}
-        for slot = 1, rules.team_size do targets[slot] = {child("Team" .. slot)} end
+        for slot = 1, rules.team_size do
+            local hit = child("Team" .. slot)
+            targets[slot] = {hit}
+        end
         shop_drag = shop_input.bind_drag(targets, {
             key = function()
                 local view = editable_market()
