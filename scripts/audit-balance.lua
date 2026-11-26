@@ -385,12 +385,12 @@ local function prepare_live(store, catalog, style, difficulty, random)
     return assert(store:finish_turn())
 end
 
-local function audit_release(sample_size)
-    local catalog = require("autopets.release_data")
+local function audit_release(sample_size, catalog, expanded)
     local rounds = 12
     local styles = {"guardian", "striker", "swarm"}
     local compositions = {}
     local results = {}
+    local represented = {}
     local total_fights = 0
     local function matchup(left_style, left_difficulty, right_style, right_difficulty)
         local wins = {win = 0, draw = 0, loss = 0}
@@ -405,6 +405,9 @@ local function audit_release(sample_size)
             for round = 1, rounds do
                 local left_team = prepare_live(left, catalog, left_style, left_difficulty, shopping_random)
                 local right_team = prepare_live(right, catalog, right_style, right_difficulty, shopping_random)
+                if expanded and left_difficulty == "standard" then
+                    for _, unit in ipairs(left_team) do represented[unit.id] = true end
+                end
                 local result = count_both_sides(wins, left_team, right_team, battle_random:next(), catalog)
                 assert(left:record_battle(result, "player"))
                 assert(right:record_battle(result, "enemy"))
@@ -455,6 +458,15 @@ local function audit_release(sample_size)
     local total_standard = #styles * sample_size
     print(("Standard lineups across styles: %d, most common %d/%d (%.1f%%)")
         :format(size(compositions), top_count, total_standard, 100 * top_count / total_standard))
+    if expanded then
+        local missing = {}
+        for _, pet in ipairs(catalog.pets) do
+            if not represented[pet.id] then missing[#missing + 1] = pet.id end
+        end
+        print(("Expanded rules %s; standard bot included %d/%d species in battle formations")
+            :format(catalog.rules_hash, #catalog.pets - #missing, #catalog.pets))
+        if #missing > 0 then print("Unobserved species: " .. table.concat(missing, ", ")) end
+    end
 end
 
 local function audit_pool(sample_size)
@@ -520,8 +532,10 @@ if #arg > 0 then
         audit_against_random(seed, arg[3])
         return
     end
-    if arg[1] == "release" and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
-        audit_release(seed or 128)
+    local expanded = arg[1] == "expanded"
+    if (arg[1] == "release" or expanded) and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
+        local catalog = require("autopets.catalog")(arg[1])
+        audit_release(seed or 128, catalog, expanded)
         return
     end
     if arg[1] == "difficulty" and (#arg == 1 or (#arg == 2 and seed and seed > 0)) then
@@ -542,7 +556,7 @@ if #arg > 0 then
         "       lua scripts/audit-balance.lua trace INTEGER_SEED ROUND [guardian|striker|swarm]\n",
         "       lua scripts/audit-balance.lua versus-random [SEED_COUNT [beginner]]\n",
         "       lua scripts/audit-balance.lua difficulty [SEED_COUNT]\n",
-        "       lua scripts/audit-balance.lua release [SEED_COUNT]\n")
+        "       lua scripts/audit-balance.lua release|expanded [SEED_COUNT]\n")
     os.exit(1)
 end
 
