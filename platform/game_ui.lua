@@ -143,8 +143,8 @@ local function online_portraits(duel)
                 picture = picture, parent = source, index = picture:GetSiblingIndex(), x = px, y = py,
                 label = label, label_x = lx, label_y = ly, width = width, height = height,
             }
-            label:SetAnchoredPosition(lx, ly - (duel and 40 or 35))
-            label:SetSizeDelta(width, duel and 90 or 84)
+            label:SetAnchoredPosition(lx, ly - (duel and 36 or 31))
+            label:SetSizeDelta(width, 52)
             local shop, hit
             if duel then
                 shop = own and duel_board or market
