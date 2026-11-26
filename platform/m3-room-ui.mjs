@@ -196,10 +196,10 @@ function catalogLua(items) {
   }).join(',');
 }
 
-export function roomClientSource(template, { pet, food, battle = pet }) {
+export function roomClientSource(template, { pet, food, battle = pet }, unified = false) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
-    onlineBadgeSource,
+    onlineBadgeSource(unified),
     `local standings = (function()\n${shared}\nend)()`,
     `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,
     `local fighters = {${catalogLua(battle)}}`, template,

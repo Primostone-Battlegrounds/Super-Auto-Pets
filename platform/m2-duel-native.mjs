@@ -234,7 +234,7 @@ export function duelLayout(rule, includeProbeButtons = false) {
   };
 }
 
-export function duelClientSource(template, resource) {
+export function duelClientSource(template, resource, unified = false) {
   const rule = resource.rules;
   const catalogLua = entries => entries.map(({ name, attack, health }) =>
     `{name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
@@ -245,7 +245,7 @@ export function duelClientSource(template, resource) {
     .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
     .replace('-- AP_DUEL_RULES', clientRules);
   assert.doesNotMatch(source, /-- AP_DUEL_/);
-  return `${onlineBadgeSource}\n${source}`;
+  return `${onlineBadgeSource(unified)}\n${source}`;
 }
 
 export function duelGraphs(resource, battleGraph, graphId, fightGraphId, startingLives, release) {
