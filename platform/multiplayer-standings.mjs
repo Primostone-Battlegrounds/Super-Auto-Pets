@@ -29,7 +29,74 @@ export function onlineBadgePool() {
 
 // The mutually exclusive online views draw the same authored badges at their
 // active slot anchors. No input listeners or game state are attached to them.
-export const onlineBadgeSource = `
+const sharedShieldSource = `
+    local shields = {}
+    -- Practice and online play are mutually exclusive. Reuse practice's
+    -- status layer so every combatant can display an independent shield.
+    local function remember(control, home)
+        local x, y = control:GetAnchoredPosition()
+        local width, height = control:GetSizeDelta()
+        return {control = control, home = home, index = control:GetSiblingIndex(), x = x, y = y,
+            width = width, height = height, active = control.active, visible = control.visible}
+    end
+    local function restore(saved)
+        local control = saved.control
+        control.parent = saved.home
+        control:SetSiblingIndex(saved.index)
+        control:SetAnchoredPosition(saved.x, saved.y)
+        control:SetSizeDelta(saved.width, saved.height)
+        control:SetVisible(saved.visible)
+        control:SetActive(saved.active)
+    end
+    local function borrow_shields()
+        local practice = script.object:GetChild("Practice")
+        for slot = 1, 10 do
+            local home = practice:GetChild(slot <= 5 and ("Team" .. slot) or ("Enemy" .. (slot - 5)))
+            local icon, caption = home:GetChild("LifePaper"), home:GetChild("Tag")
+            local saved = {icon = remember(icon, home), caption = remember(caption, home),
+                icon_colour = icon.imageColor, text = caption.text or "", ink = caption.fontColor}
+            shields[slot] = saved
+            icon.parent, caption.parent = pool, pool
+            icon:SetAsLastSibling()
+            caption:SetAsLastSibling()
+            icon:SetImage(Enum.ImageSource.StaticReference, 102036)
+            icon.imageColor, caption.fontColor = colour(0x315a6d), colour(0x315a6d)
+            icon:SetSizeDelta(19, 19)
+            caption:SetSizeDelta(36, 32)
+            icon:SetVisible(false)
+            icon:SetActive(false)
+            set(caption, nil)
+        end
+    end
+    local function restore_shields()
+        for _, saved in ipairs(shields) do
+            local icon, caption = saved.icon.control, saved.caption.control
+            if icon.alive and caption.alive and saved.icon.home.alive then
+                icon:SetImage(Enum.ImageSource.StaticReference, 102018)
+                icon.imageColor = saved.icon_colour
+                caption.text, caption.fontColor = saved.text, saved.ink
+                restore(saved.icon)
+                restore(saved.caption)
+            end
+        end
+        shields = {}
+    end
+    local function paint_shield(slot, field, stacked, shield)
+        local controls = shields[slot]
+        local icon, caption = controls.icon.control, controls.caption.control
+        local visible = (shield or 0) > 0
+        local y = field.y - (stacked and 66 or 34)
+        icon:SetAnchoredPosition(field.x - 14, y)
+        caption:SetAnchoredPosition(field.x + 12, y)
+        if visible then icon:SetActive(true) end
+        icon:SetVisible(visible)
+        if not visible then icon:SetActive(false) end
+        set(caption, visible and tostring(shield) or nil)
+    end
+`;
+
+export function onlineBadgeSource(unified = false) {
+  return `
 local function bind_online_badges(pool)
     if not pool then return nil end
     local source = pool.parent
@@ -49,8 +116,10 @@ local function bind_online_badges(pool)
     local function colour(rgb)
         return Color((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255)
     end
+    ${unified ? sharedShieldSource : ""}
     local function hide()
         if state then
+            ${unified ? "restore_shields()" : ""}
             for _, control in ipairs(cues) do set(control, nil) end
             pool:SetVisible(false)
             pool:SetActive(false)
@@ -71,6 +140,7 @@ local function bind_online_badges(pool)
     end
     local function select(phase, parent, anchors)
         if state == phase then return end
+        ${unified ? "restore_shields()" : ""}
         pool.parent = parent
         pool:SetAsLastSibling()
         state = phase
@@ -85,16 +155,18 @@ local function bind_online_badges(pool)
                 control:SetSizeDelta(52, 32)
                 control.bgColor, control.fontColor = Color(250, 224, 162, 255), Color(105, 67, 33, 255)
             end
+        ${unified ? "else borrow_shields()" : ""}
         end
         pool:SetActive(true)
         pool:SetVisible(true)
     end
-    local function paint(slot, attack, life, price, bonus)
+    local function paint(slot, attack, life, price, bonus, shield)
         local field = fields[slot]
         local sign = bonus and "+" or ""
         if state == "replay" then
             local stacked = math.abs(attack or 0) >= 100 or math.abs(life or 0) >= 100
             if stacked ~= field.stacked then place(field, stacked) end
+            ${unified ? "paint_shield(slot, field, stacked, shield)" : ""}
         end
         set(field[1], attack ~= nil and ("攻" .. sign .. attack) or nil)
         set(field[2], life ~= nil and ("命" .. sign .. life) or nil)
@@ -125,6 +197,7 @@ local function bind_online_badges(pool)
     end}
 end
 `;
+}
 
 const modes = {
   duel: { title: '好友 1v1', probeTitle: '双人同步样本', seats: 2,

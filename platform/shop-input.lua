@@ -138,6 +138,11 @@ function input.bind_drag(targets, options)
                 if action then options.apply(action); options.changed() end
             end,
         }
+        if events.CursorEnter and options.inspect then
+            listeners[events.CursorEnter] = function()
+                if not drag and not staged then options.inspect(kind, fetch_index()) end
+            end
+        end
         bindings[#bindings + 1] = {control, listeners}
         for event, listener in pairs(listeners) do control:AddCursorEventListener(event, listener) end
     end

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { bundleRun } from './m1-bundle.mjs';
-import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
+import { button, group, image, label, pigment, unifiedRun } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
@@ -28,6 +28,7 @@ export const practiceSeed = 8;
 
 const back = (x, y) => button('Back', [x, y], [156, 48], '返回主菜单');
 const view = (name, controls) => ({ ...group(name, [0, 0], [1280, 720], controls, false), active: false });
+const guidePosition = -155;
 
 function lobbyButton(name, position, size, title, { primary = false, small = false, visible = true } = {}) {
   const caption = label('Title', [0, 0], size, title, small ? 22 : 27, small ? pigment.cream : pigment.ink);
@@ -38,7 +39,8 @@ function lobbyButton(name, position, size, title, { primary = false, small = fal
 
 function layout(duelRules) {
   const modeSize = [344, 112];
-  const practice = nativeRun.controls.map(control => {
+  const secondarySize = [224, 82];
+  const practice = unifiedRun.controls.map(control => {
     if (/^Enemy[1-5]$/u.test(control.name)) {
       return { ...control, children: control.children.filter(child => child.name !== 'Portrait') };
     }
@@ -46,15 +48,22 @@ function layout(duelRules) {
     return { ...control, children: [...control.children.map(child => {
       if (child.name === 'Heading') return { ...child, text: { ...child.text, content: '单人 AI 练习' } };
       return child;
-    }), back(425, -261)] };
+    }), button('Back', [0, -218], [334, 82], '返回主菜单', false, 24)] };
   });
+  const guide = label('Help', [0, 10], [1056, 222], [
+    '单人 AI 练习 · 买入动物、编入阵容，再与电脑对战。',
+    '好友 1v1 · 邀请一名好友进入同一房间，两人到齐即可开局。',
+    '八人吃鸡 · 至少一名玩家即可开局，空席由机器人补齐。',
+    '离开关卡 · 从系统菜单选择退出。',
+  ].join('\n'), 24);
+  Object.assign(guide.text, { background: pigment.cream, backgroundOpacity: 1 });
   return {
     name: gameInterface, script: gameScript, showCursor: true, blockCursor: true, blockKeys: true,
     controls: [
       { ...image('GameBackdrop', [0, 0], [1, 1], '#587454'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
         label('Title', [0, 218], [1112, 88], '小动物自走棋', 61, pigment.cream),
-        label('Status', [0, 138], [1112, 52], '正在连接千星关卡', 27, pigment.cream),
+        label('Status', [0, 138], [1112, 52], '同步中…', 23, pigment.cream),
         group('Choices', [0, 31], [1112, 120], [
           lobbyButton('Practice', [-376, 0], modeSize, '单人 AI 练习', { primary: true }),
           lobbyButton('Duel', [0, 0], modeSize, '好友 1v1'),
@@ -62,13 +71,13 @@ function layout(duelRules) {
         ]),
         lobbyButton('Continue', [0, 31], modeSize, '', { primary: true, visible: false }),
         label('Feedback', [0, -76], [1112, 64], '', 24, '#ffe1a0'),
-        label('Help', [0, -157], [1034, 72], '好友 1v1 请先在千星好友房间邀请好友。', 22, pigment.cream),
-        lobbyButton('Cancel', [-116, -263], [198, 82], '取消等待', { small: true, visible: false }),
-        lobbyButton('Exit', [116, -263], [198, 82], '退出指引', { small: true }),
+        { ...guide, visible: false, active: false },
+        lobbyButton('Cancel', [-128, guidePosition], secondarySize, '取消等待', { small: true, visible: false }),
+        lobbyButton('Guide', [0, guidePosition], secondarySize, '玩法说明', { small: true }),
       ]),
       view('Practice', practice),
-      view('Duel', [...duelLayout(duelRules).controls, back(221, 278)]),
-      view('Room', [...unifiedRoomLayout.controls, back(-145, 276)]),
+      view('Duel', [...duelLayout(duelRules).controls, back(226, 306)]),
+      view('Room', [...unifiedRoomLayout.controls, back(-145, 294)]),
     ],
   };
 }
@@ -107,11 +116,11 @@ export function nativeGame(lua53, lua54, parse, ids) {
     const practice = wrap('practice_view', convert('./m1_ui.lua'), {
       start: 'OnStart', enable: 'OnEnable', disable: 'OnDisable', update: 'OnUpdate', destroy: 'OnDestroy',
     });
-    const duelUi = duelClientSource(convert('./m2_probe.lua'), shop)
+    const duelUi = duelClientSource(convert('./m2_probe.lua'), shop, true)
       .replace('local root, offers = script.object, script.object',
         'local root, offers = view_root, view_root:GetChild("MarketOffers")');
     const duel = wrap('duel_view', duelUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot' }, 'view_root');
-    const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
+    const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog, true);
     const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
   }, clientLayout);

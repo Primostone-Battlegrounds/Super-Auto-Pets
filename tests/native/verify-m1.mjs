@@ -289,14 +289,12 @@ try {
   verifyControls(nativeRun.controls, decoded.interface.controls, records);
   assert.equal(new Set(Object.values(decoded.ids)).size, records.length + 2);
   const byPath = new Map(records.map(item => [item.path, item]));
-  const field = byPath.get('Field');
-  const heading = byPath.get('Heading');
+  const separated = (first, second) => first.position.some((value, axis) =>
+    Math.abs(value - second.position[axis]) > (first.size[axis] + second.size[axis]) / 2);
   for (const name of ['OpenMenu', 'Reset']) {
     const button = byPath.get(name);
-    assert.ok(button.position[1] - button.size[1] / 2 > field.position[1] + field.size[1] / 2,
-      `${name} overlaps the field`);
-    assert.ok(button.position[1] + button.size[1] / 2 < heading.position[1] - heading.size[1] / 2,
-      `${name} overlaps the heading`);
+    assert.ok(separated(button, byPath.get('Field')), `${name} overlaps the field`);
+    assert.ok(separated(button, byPath.get('Heading')), `${name} overlaps the heading`);
   }
   const battlePanel = byPath.get('Battle');
   for (const card of records.filter(item => /^Team[1-5]$/.test(item.path))) {

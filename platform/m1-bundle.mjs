@@ -68,7 +68,7 @@ function bundleModules(parse, names, entry, release, prefix = []) {
 
 export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout = nativeRun) {
   const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'native_portrait',
-    'shop_wire', 'animal_ability', 'replay_view', 'shop_input'];
+    'shop_wire', 'animal_ability', 'pet_presentation', 'replay_view', 'shop_input'];
   return bundleModules(parse, names, entry, release, [
     `local portrait_layers = ${portraitLayers}`,
     `local shared_portrait_homes = {${sharedPortraitHomes.map(name => JSON.stringify(name)).join(',')}}`,
@@ -77,6 +77,6 @@ export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout 
 }
 
 export function bundleBattleReplay(parse, entry, release = false) {
-  return bundleModules(parse, ['data', 'rng', 'battle_receipt', 'battle', 'shop_wire', 'animal_ability', 'replay_view',
-    'shop_input'], entry, release);
+  return bundleModules(parse, ['data', 'rng', 'battle_receipt', 'battle', 'shop_wire', 'animal_ability',
+    'pet_presentation', 'replay_view', 'shop_input'], entry, release);
 }

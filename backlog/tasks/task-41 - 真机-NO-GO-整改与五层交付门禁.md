@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-25 15:40'
-updated_date: '2026-11-26 12:44'
+updated_date: '2026-11-26 13:29'
 labels:
   - device-qa
   - design-v2.0.0
@@ -39,6 +39,8 @@ Design-Version: v2.0.0
 并行固定原版及千星参照、制作完整 HTML 原型、修复多人和原生文本、执行 Simulator 与隔离正式构建；统一验证、独立评审候选和画面，再根据门禁集成。
 
 v0.5.0 one-shot（366bb4189b685629e459ce8f86d19e9aa5317b9c）：T01/T02 独立核查，再分路径整改大厅、商店与战斗，同时完善 GIL CD。精确 SHA 独立复验后走 develop PR；官方设备待验单列。
+
+本轮 UI 整改以 develop d250191f94797356c4bc60c0b492cf91f007b464 为冻结基线。先独立核对参照及平台证据，再由各文件负责人落实原创界面的视觉和交互整改。依约集成子提交，使用固定工具构建隔离 GIL，对照基线以真实坐标验证三种模式、输入和画面，核对读回和文件完整性。由未参与实现者独立评审同一候选，记录 Project checks 和官方设备待验项。
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
