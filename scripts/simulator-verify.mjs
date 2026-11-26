@@ -150,7 +150,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
       'Practice primary action must use its sliced native plate');
     requireText('Practice/Shop/Pet1/Price', /^3金$/u);
-    requireText('Practice/Shop/Pet1/Tag', /^⚀ 1阶$/u);
+    requireText('Practice/Shop/Pet1/Tag', /^· 1阶$/u);
     requireText('Practice/Shop/Pet1/Detail', /^\d+$/u);
     requireText('Practice/Shop/Pet1/LifeValue', /^\d+$/u);
     for (const [name, image] of [['StatsPaper', 102035], ['LifePaper', 102018], ['PriceIcon', 102040]]) {
@@ -160,13 +160,14 @@ for(const {canvasId,playerCount,mode} of configurations) {
       assert.equal(box(trail).width, shopFrame.canvasWidth, `${trail} should span the available canvas`);
     }
     assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
+    assert.ok(!visibleText('Practice/OpponentCaption'), 'Preparation should keep focus on the shop and lineup');
     assert.ok(shopFrame.paint.some(item => item.id === control('Practice/Team1/Front').Id));
     for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
       requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
     }
     requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Hint']);
     requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Hint']);
-    requireText('Practice/Shop/Reroll/Title', /^刷新 · 1 金 · ⚀ 1阶$/u);
+    requireText('Practice/Shop/Reroll/Title', /^刷新 · 1 金.*· 1阶$/u);
     assert.ok(!visibleText('Practice/Shop/RewardNext/Title'), 'Reward navigation requires multiple reward offers');
     assert.ok(!visibleText('Practice/Shop/Buy/Title'), 'Purchase requires a selected pet or reward');
     requireText('Practice/Money/Value', /^10$/u);
@@ -196,7 +197,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         if(action==='buy'||action==='combine'){press('Shop/Pet'+from);press(to?'Team'+to:'Shop/Buy');}
         else if(action==='feed'){press('Shop/Food'+from);press('Team'+to);}
         else if(action==='move'||action==='sell'){press('Team'+from);press(to?'Team'+to:'Shop/Sell');}
-        else if(action==='reward'){press('Shop/Reward');press('Shop/Buy');}
+        else if(action==='reward'){
+          await capture('practice-earned-reward');
+          requireText('Practice/Shop/Reward/Tag', /^[·:∴∷]+ [1-6]阶$/u);
+          press('Shop/Reward');
+          press('Shop/Buy');
+        }
         else if(action==='reroll')press('Shop/Reroll');else throw Error('Unknown input fixture '+action);
       }
       if(roundIndex===10)await capture('practice-tier-six');
@@ -205,6 +211,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         const battle = await capture('practice-battle');
         assert.ok(battle.paint.some(item => item.id === control('Practice/Enemy1/Portrait/Layer1').Id));
         requireText('Practice/Battle/Outcome', /^战斗中$/u);
+        requireText('Practice/OpponentCaption', /^电脑对手/u);
         assert.ok(!visibleText('Practice/Primary/Title'), 'Settlement must wait until the battle has ended');
         for (const name of ['Replay', 'Auto', 'Fast']) {
           requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
@@ -262,7 +269,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     press('Shop/Freeze');press('Shop/Reroll');
     const frozen = await capture('practice-frozen-reroll');
     requireText('Practice/Money/Value', /^9$/u);
-    requireText('Practice/Shop/Pet1/Tag', /^⚀ 1阶$/u);
+    requireText('Practice/Shop/Pet1/Tag', /^· 1阶$/u);
     assert.ok(frozen.paint.some(item => item.id === control('Practice/Shop/Pet1/Frozen').Id),
       'A frozen offer retains its tier badge and shows the separate frozen icon');
     const afterReroll = readOfferNames();
@@ -357,8 +364,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Practice/Money/Value', /^3$/u);
     requireText(`${food}/Name`, /^空商品$/u);
     assert.notDeepEqual(stats(), statsBefore);
-    requireText(`${team}/XP`, /^Lv\.1 [▰▱]{2}$/u);
-    requireText('Practice/OpponentCaption', /下一位电脑对手/u);
+    requireText(`${team}/XP`, /^Lv\.1 [■□]{2}$/u);
+    assert.ok(!visibleText('Practice/OpponentCaption'));
     assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {
@@ -373,7 +380,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
         'The online shop must show the pooled lineup, pet and food artwork');
     }
     // Client-only fixture from the native wire schema. No graph output claimed.
-    const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
+    const market = Array(41).fill(0);
+    market.splice(0, 23,
+      1, 1, 10, 0, 0, 2, // Round, tier, gold, reserved fields, team count.
+      1, 2, 3, 1, -2, // Pet and food offers.
+      1, 21, 3, 2, 2, 3, // Turtle at level 2 and 3 total XP.
+      2, 22, 3, 2, 1, 1);
     api.sendPlaySignal(session, 'AP_GameLobby', [0, playerCount, 0, 0, 0, statusToken(), 2,
       playerCount === 2 ? 0 : 1, 0, 0], 'Player1');
     click('Lobby/Choices/'+(mode===2?'Duel':'Room')+'/Hit');
@@ -382,7 +394,6 @@ for(const {canvasId,playerCount,mode} of configurations) {
     for(let player=1;player<=playerCount;player++) {
       const target='Player'+player;const personalMarket=[...market];personalMarket[2]=11-player;
       if (player !== 1) api.sendPlaySignal(session, 'AP_GameLobby', [mode, playerCount, 0, mode, 0, 0, 2, 4, 4, 0], target);
-      personalMarket[15] = 2;
       if(mode===2){api.sendPlaySignal(session,'AP_DuelSnapshot',[2,player,1,0,false,false,0,1,1,0,0,30,0,5,5,0],target);api.sendPlaySignal(session,'AP_DuelMarket',[1,1,personalMarket],target);}
       else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
       api.setPlayView(session,player);
@@ -408,12 +419,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('client-1-inspect-offer');
     requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*Lv\.1.*烟羽/su);
     requireText(`${shop}/AbilityBody`, /战斗开始时.*随机.*1 伤/su);
-    requireText(duel ? 'Duel/MarketOffers/InspectPet2Label' : `${shop}/InspectOffer2/Text`, /^⚀ 1阶$/u);
+    requireText(duel ? 'Duel/MarketOffers/InspectPet2Label' : `${shop}/InspectOffer2/Text`, /^· 1阶$/u);
     click(duel ? `${shop}/TeamInspection/InspectTeam1` : `${shop}/InspectTeam1/Hit`);
     await capture('client-1-inspect-team');
     requireText(`${shop}/AbilityTitle`, /芦纹龟.*Lv\.2.*芦盾/su);
     requireText(`${shop}/AbilityBody`, /战斗开始时.*前排.*2 盾/su);
-    requireText(duel ? 'Duel/TeamInspection/InspectTeam1Label' : `${shop}/InspectTeam1/Text`, /^Lv\.2 ▰▱▱$/u);
+    requireText(duel ? 'Duel/TeamInspection/InspectTeam1Label' : `${shop}/InspectTeam1/Text`, /^Lv\.2 ■□□$/u);
     requireText(`${shopBadges}/Attack1`, /^攻3$/u);
     requireText(`${shopBadges}/Life1`, /^命2$/u);
     const teamName = duel ? 'Duel/TeamLabel1' : `${shop}/Team1/Text`;
