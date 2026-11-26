@@ -257,13 +257,13 @@ end
 
 -- Beginner develops weaker slots and waits for clearer reasons to trade up.
 -- Standard values level breakpoints, role combinations and stable formations.
-local function choose_action(state, style, actions_taken, beginner, catalog)
+local function choose_action(state, style, actions_taken, beginner, catalog, version)
     if actions_taken >= max_actions_per_turn then
         return nil, "action_limit"
     end
     local rules = catalog.rules
     local release = catalog ~= data
-    local prioritize_upgrades = not beginner and policy_version(catalog) == wider_pool_policy
+    local prioritize_upgrades = not beginner and version == wider_pool_policy
     local rate_pet = recruit_value(state, style, catalog)
 
     local action, best_score
@@ -414,7 +414,8 @@ function bot.choose_action(snapshot, style, actions_taken, difficulty, catalog)
     if snapshot.phase ~= "preparation" then
         return nil, "wrong_phase"
     end
-    return choose_action(snapshot, style, actions_taken, difficulty == "beginner", catalog or data)
+    catalog = catalog or data
+    return choose_action(snapshot, style, actions_taken, difficulty == "beginner", catalog, policy_version(catalog))
 end
 
 local function open_turn(pool)
@@ -431,13 +432,15 @@ function bot.new_pool(seed, requested_style, difficulty, catalog)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
     assert(requested_style == nil or weights[requested_style], "unknown bot style")
     assert(difficulty == nil or difficulty == "standard" or difficulty == "beginner", "unknown bot difficulty")
+    catalog = catalog or data
     local selector = rng.salted(seed, 0x424f54, 0x504f4f4c) -- BOTPOOL
     local selected = selector:int(1, 2)
     local style_index = selector:int(1, #styles)
     local style = requested_style or styles[style_index]
     local pool = {
         seed = seed,
-        catalog = catalog or data,
+        catalog = catalog,
+        policy_version = policy_version(catalog),
         requested_style = requested_style,
         difficulty = difficulty == "beginner" and difficulty or nil,
         selected = selected,
@@ -459,7 +462,8 @@ local function prepare_step(pool, expected)
     local session, frame = pool.sessions[index], pool.turn.sessions[index]
     local store = session.store
     local state = store:snapshot()
-    local command, stop = bot.choose_action(state, session.style, #frame.commands, pool.difficulty, pool.catalog)
+    local command, stop = choose_action(state, session.style, #frame.commands, pool.difficulty == "beginner",
+        pool.catalog, pool.policy_version)
     if expected then
         local recorded = expected.sessions[index].commands[#frame.commands + 1]
         assert(equal(command, recorded and recorded.command), "command_mismatch")
@@ -543,7 +547,7 @@ function bot.trace(pool)
         return nil, "opponent_not_ready"
     end
     local trace = {
-        policy_version = policy_version(pool.catalog),
+        policy_version = pool.policy_version,
         rules_hash = assert(pool.catalog.rules_hash),
         seed = pool.seed,
         requested_style = pool.requested_style,
@@ -565,6 +569,7 @@ end
 
 local function replay(trace, catalog)
     local pool = bot.new_pool(trace.seed, trace.requested_style, trace.difficulty, catalog)
+    pool.policy_version = trace.policy_version
     for index, frame in ipairs(trace.rounds) do
         while pool.phase == "prepare" do
             step(pool, frame)
@@ -580,8 +585,12 @@ end
 
 function bot.replay(trace, catalog)
     catalog = catalog or data
+    if type(trace) ~= "table" or trace.rules_hash ~= catalog.rules_hash then
+        return nil, "trace_version_mismatch"
+    end
     local version = policy_version(catalog)
-    if type(trace) ~= "table" or trace.rules_hash ~= catalog.rules_hash or trace.policy_version ~= version then
+    local legacy_wide = version == wider_pool_policy and trace.policy_version == release_policy
+    if trace.policy_version ~= version and not legacy_wide then
         return nil, "trace_version_mismatch"
     end
     local ok, opponent = pcall(replay, trace, catalog)

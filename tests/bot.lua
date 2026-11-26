@@ -253,4 +253,34 @@ for _, style in ipairs(styles) do
 end
 assert(reached_high_tier, "release sample did not reach tier 6")
 
+-- Build a 60-ID shop fixture from existing abilities to exercise both replay versions.
+local original_pets, original_index = release.pets, release.pet_by_id
+local originals_by_tier = {}
+for tier = 1, release.rules.max_tier do
+    originals_by_tier[tier] = release.pets_at_tier(tier)
+end
+release.pets, release.pet_by_id = {}, {}
+for tier, originals in ipairs(originals_by_tier) do
+    for slot = 1, 10 do
+        local pet = {}
+        for key, value in pairs(originals[(slot - 1) % #originals + 1]) do pet[key] = value end
+        if slot > #originals then pet.id = "fixture_" .. tier .. "_" .. slot end
+        release.pets[#release.pets + 1] = pet
+        release.pet_by_id[pet.id] = pet
+    end
+end
+assert(#release.pets == 60)
+local wide = bot.new_pool(1, "guardian", "standard", release)
+local legacy = bot.new_pool(1, "guardian", "standard", release)
+legacy.policy_version = "shared-shop-six-tier-v1"
+assert(bot.advance_to_round(wide, 12, 10000))
+assert(bot.advance_to_round(legacy, 12, 10000))
+local wide_trace, legacy_trace = assert(bot.trace(wide)), assert(bot.trace(legacy))
+assert(wide_trace.policy_version == "shared-shop-wide-pool-v1")
+assert(legacy_trace.policy_version == "shared-shop-six-tier-v1")
+assert(not same(wide_trace.rounds, legacy_trace.rounds), "replay fixture must distinguish the policies")
+assert(same(assert(bot.replay(wide_trace, release)), bot.snapshot(wide)))
+assert(same(assert(bot.replay(legacy_trace, release)), bot.snapshot(legacy)))
+release.pets, release.pet_by_id = original_pets, original_index
+
 print("bot tests passed")
