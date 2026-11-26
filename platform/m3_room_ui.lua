@@ -485,7 +485,7 @@ local function receive_replay(_, values)
     end
     local growth = {player = {}, enemy = {}}
     for side, team in pairs({player = left_team, enemy = right_team}) do
-        for _, unit in ipairs(team) do growth[side][unit.uid] = unit end
+        for _, unit in ipairs(team) do growth[side][side .. ":" .. unit.uid] = unit end
     end
     local resolved, board = {}, nil
     for index in ipairs(result.events) do
