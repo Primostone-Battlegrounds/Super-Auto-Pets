@@ -29,26 +29,8 @@ export function onlineBadgePool() {
 
 // The mutually exclusive online views draw the same authored badges at their
 // active slot anchors. No input listeners or game state are attached to them.
-export const onlineBadgeSource = `
-local function bind_online_badges(pool)
-    if not pool then return nil end
-    local source = pool.parent
-    local index = pool:GetSiblingIndex()
-    local state, fields, shields = nil, {}, {}
-    local function set(control, value)
-        local visible = value ~= nil
-        if visible then control:SetActive(true); control.text = value end
-        control:SetVisible(visible)
-        if not visible then control:SetActive(false) end
-    end
-    for slot = 1, 10 do
-        fields[slot] = {pool:GetChild("Attack" .. slot), pool:GetChild("Life" .. slot),
-            slot > 5 and pool:GetChild("Price" .. (slot - 5)) or nil}
-    end
-    local cues = {fields[6][3], fields[7][3], fields[8][3]}
-    local function colour(rgb)
-        return Color((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255)
-    end
+const sharedShieldSource = `
+    local shields = {}
     -- Practice and online play are mutually exclusive. Reuse practice's
     -- status layer so every combatant can display an independent shield.
     local function remember(control, home)
@@ -99,9 +81,45 @@ local function bind_online_badges(pool)
         end
         shields = {}
     end
+    local function paint_shield(slot, field, stacked, shield)
+        local controls = shields[slot]
+        local icon, caption = controls.icon.control, controls.caption.control
+        local visible = (shield or 0) > 0
+        local y = field.y - (stacked and 66 or 34)
+        icon:SetAnchoredPosition(field.x - 14, y)
+        caption:SetAnchoredPosition(field.x + 12, y)
+        if visible then icon:SetActive(true) end
+        icon:SetVisible(visible)
+        if not visible then icon:SetActive(false) end
+        set(caption, visible and tostring(shield) or nil)
+    end
+`;
+
+export function onlineBadgeSource(unified = false) {
+  return `
+local function bind_online_badges(pool)
+    if not pool then return nil end
+    local source = pool.parent
+    local index = pool:GetSiblingIndex()
+    local state, fields = nil, {}
+    local function set(control, value)
+        local visible = value ~= nil
+        if visible then control:SetActive(true); control.text = value end
+        control:SetVisible(visible)
+        if not visible then control:SetActive(false) end
+    end
+    for slot = 1, 10 do
+        fields[slot] = {pool:GetChild("Attack" .. slot), pool:GetChild("Life" .. slot),
+            slot > 5 and pool:GetChild("Price" .. (slot - 5)) or nil}
+    end
+    local cues = {fields[6][3], fields[7][3], fields[8][3]}
+    local function colour(rgb)
+        return Color((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255)
+    end
+    ${unified ? sharedShieldSource : ""}
     local function hide()
         if state then
-            restore_shields()
+            ${unified ? "restore_shields()" : ""}
             for _, control in ipairs(cues) do set(control, nil) end
             pool:SetVisible(false)
             pool:SetActive(false)
@@ -122,7 +140,7 @@ local function bind_online_badges(pool)
     end
     local function select(phase, parent, anchors)
         if state == phase then return end
-        restore_shields()
+        ${unified ? "restore_shields()" : ""}
         pool.parent = parent
         pool:SetAsLastSibling()
         state = phase
@@ -137,8 +155,7 @@ local function bind_online_badges(pool)
                 control:SetSizeDelta(52, 32)
                 control.bgColor, control.fontColor = Color(250, 224, 162, 255), Color(105, 67, 33, 255)
             end
-        else
-            borrow_shields()
+        ${unified ? "else borrow_shields()" : ""}
         end
         pool:SetActive(true)
         pool:SetVisible(true)
@@ -149,16 +166,7 @@ local function bind_online_badges(pool)
         if state == "replay" then
             local stacked = math.abs(attack or 0) >= 100 or math.abs(life or 0) >= 100
             if stacked ~= field.stacked then place(field, stacked) end
-            local controls = shields[slot]
-            local icon, caption = controls.icon.control, controls.caption.control
-            local visible = (shield or 0) > 0
-            local y = field.y - (stacked and 66 or 34)
-            icon:SetAnchoredPosition(field.x - 14, y)
-            caption:SetAnchoredPosition(field.x + 12, y)
-            if visible then icon:SetActive(true) end
-            icon:SetVisible(visible)
-            if not visible then icon:SetActive(false) end
-            set(caption, visible and tostring(shield) or nil)
+            ${unified ? "paint_shield(slot, field, stacked, shield)" : ""}
         end
         set(field[1], attack ~= nil and ("攻" .. sign .. attack) or nil)
         set(field[2], life ~= nil and ("命" .. sign .. life) or nil)
@@ -189,6 +197,7 @@ local function bind_online_badges(pool)
     end}
 end
 `;
+}
 
 const modes = {
   duel: { title: '好友 1v1', probeTitle: '双人同步样本', seats: 2,
