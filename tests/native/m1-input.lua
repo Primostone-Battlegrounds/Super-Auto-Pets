@@ -25,7 +25,7 @@ function node_methods:GetSiblingIndex() return self.sibling or 0 end
 function node_methods:SetSiblingIndex(index) self.sibling = index end
 function node_methods:SetAsLastSibling() self.sibling = 99 end
 function node_methods:SetImage(source, image)
-    assert(source == "StaticReference" and (image == 100001 or image == 106025))
+    assert(source == "StaticReference" and (image == 100001 or image == 106025 or image == 102036))
     self.image = image
     image_writes = image_writes + 1
 end
@@ -357,8 +357,8 @@ local function finish(outcome, terminal, inspect_playback, observe_event)
             if not ticking then break end
             local impact = nodes["BattleFX/Impact"]
             local value = impact.active and label("BattleFX/Impact/Value")
-            if value and value ~= "格挡" and not saw_damage then
-                local side, name, damage, health = label("Battle/Event"):match("   (%S+) (%S+) · 受到伤害 (%d+) · 剩余 (%d+) 命")
+            if value and value:match("^-%d+$") and not saw_damage then
+                local side, name, damage, health = label("Battle/Event"):match(" → (%S+) (%S+) -(%d+)命 · 余(%d+)命")
                 assert(side and nodes.BattleFX.active and value == "-" .. damage)
                 local prefix = side == "我方" and "Team" or "Enemy"
                 local hit
@@ -371,7 +371,7 @@ local function finish(outcome, terminal, inspect_playback, observe_event)
                         break
                     end
                 end
-                assert(hit and label(hit .. "/LifeValue") == health .. "命")
+                assert(hit and label(hit .. "/LifeValue") == health)
                 local bar = nodes[hit .. "/Health"]
                 assert(not bar.visible or bar.width < nodes[hit .. "/HealthTrack"].width)
                 capture("battle_damage")
@@ -592,7 +592,8 @@ assert(label("Team1/Name") == "棉尾兔")
 assert(label("Team1/XP") == "L1  经验 0/2")
 assert(label("Money/Value") == "7" and label("Shop/Pet1/Name") == "空商品")
 drag_to("Shop/Pet2", "Team1", main_touch, nodes["Team1/Hit"].width / 2 + 1)
-assert(label("Team1/Name") == "棉尾兔" and label("Money/Value") == "7" and not nodes["Shop/Pet2/Selected"].active)
+assert(label("Team1/Name") == "棉尾兔" and label("Money/Value") == "7"
+    and nodes["Shop/Pet2/Face"].imageColor ~= "#fff4ce")
 drag_to("Shop/Pet2", "Team1", main_touch, nodes["Team1/Hit"].width / 2 - 1)
 assert(label("Team1/Name") == "芦纹龟")
 drag_to("Team2", "Team1", 4)
@@ -609,7 +610,7 @@ shop("freeze", 3)
 assert(label("Shop/Pet3/Tag") == "已冻结" and nodes["Shop/Pet3/Frozen"].active)
 shop("reroll")
 click("Shop/Pet3")
-assert(nodes["Shop/Pet3/Selected"].active and nodes["Team1/Portrait/Layer1"].active)
+assert(nodes["Shop/Pet3/Face"].imageColor == "#fff4ce" and nodes["Team1/Portrait/Layer1"].active)
 assert(label("Tooltip/Heading"):find("兔窝接力", 1, true))
 assert_tooltip("Shop/Pet3", true)
 capture("populated")

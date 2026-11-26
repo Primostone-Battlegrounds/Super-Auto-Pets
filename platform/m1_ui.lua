@@ -3,6 +3,8 @@ local run = require("autopets.run")
 local art = require("autopets.art")
 local bind_portrait = require("autopets.native_portrait")
 local animal_ability = require("autopets.animal_ability")
+local shop_input = require("autopets.shop_input")
+local replay_view = require("autopets.replay_view")
 local root
 local view_enabled = false
 local rules = rules_data.rules
@@ -12,10 +14,7 @@ local styles = {guardian = "守护", striker = "强攻", swarm = "群战"}
 local difficulty_names = {standard = "标准", beginner = "入门"}
 local phases = {preparation = "准备", battle = "战斗", settlement = "结算", ended = "终局"}
 local primary = {preparation = "开战", battle = "结算", settlement = "下一轮", ended = "再挑战本局"}
-local events = {
-    start = "战斗开始", skill = "发动技能", attack = "发起攻击", damage = "受到伤害",
-    faint = "退场", summon = "入场", buff = "增加生命", shield = "获得护盾", result = "战斗结束",
-}
+local battle_sides = {player = "我方", enemy = "对方"}
 local errors = {
     empty_team = "先购买至少一只动物", missing_offer = "这个位置暂无商品", invalid_position = "请选择有效位置",
     insufficient_gold = "金币不足", team_full = "阵容已满", different_pet = "只能合并同种动物",
@@ -25,6 +24,7 @@ local errors = {
 
 local session, state, selection, message
 local press, drag, pending_drop
+local drop_targets = {}
 local menu_open, has_started = true, false
 local difficulty
 local confirming_restart
@@ -43,13 +43,6 @@ local preparing_layout
 local lunging
 local accents = {win = 0x286452, loss = 0x984434, draw = 0x89591e}
 local drop_labels = {buy = "购买", combine = "购买并合并", feed = "喂食", move = "换位", merge = "合并"}
-local effects = {
-    attack = {label = "出击", face = 0xe6c881, ink = 0x80521d},
-    damage = {face = 0xe1a18a, ink = 0x8f3c30},
-    summon = {label = "入场", face = 0x94c2a8, ink = 0x286452},
-    shield = {label = "护盾", face = 0x9ebec5, ink = 0x315a6d},
-    buff = {label = "强化", face = 0x94c2a8, ink = 0x286452},
-}
 
 local function control(path)
     if not controls[path] then controls[path] = assert(root:FindChild(path), "missing control: " .. path) end
@@ -149,7 +142,7 @@ local function card(path, title, selected, id, face, rim, mirrored)
     if drag and drag.parent == control(path) then title = "拖动中" end
     if title then text(path .. "/Name", title) else show(path .. "/Name", false) end
     portrait(path .. "/Portrait", id, mirrored)
-    if selected ~= nil then show(path .. "/Selected", selected) end
+    if selected ~= nil and not path:match("^Shop/") then show(path .. "/Selected", selected) end
 end
 
 local function card_stats(path, attack, health, boosted)
@@ -159,8 +152,8 @@ local function card_stats(path, attack, health, boosted)
     end
     if occupied then
         local format = boosted and "%+d" or "%d"
-        text(path .. "/Detail", string.format(format, attack) .. "攻")
-        text(path .. "/LifeValue", string.format(format, health) .. "命")
+        text(path .. "/Detail", string.format(format, attack))
+        text(path .. "/LifeValue", string.format(format, health))
     end
 end
 
@@ -264,6 +257,7 @@ local function offer_card(path, kind, index)
     local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
     show(path .. "/Price", item ~= nil)
+    show(path .. "/PriceIcon", item ~= nil)
     local frozen = item and item.frozen == true
     show(path .. "/Tag", frozen or (item ~= nil and kind == "reward"))
     if frozen then text(path .. "/Tag", "已冻结") end
@@ -326,25 +320,6 @@ local function draw_tooltip(preparing)
     text("Tooltip/Body", body)
 end
 
-local function battle_event(event)
-    if event.type == "result" then return "战斗结束 · " .. outcomes[event.outcome] end
-    if not event.name then return events[event.type] or event.type end
-    local side = event.side == "player" and "我方" or "对方"
-    local summary = side .. " " .. event.name .. " · " .. (events[event.type] or event.type)
-    if event.type == "damage" then
-        if event.amount == 0 then return string.format("%s %s · 护盾抵消 %d", side, event.name, event.absorbed) end
-        local shield = event.absorbed > 0 and " · 盾挡 " .. event.absorbed or ""
-        return string.format("%s %d · 剩余 %d 命%s", summary, event.amount, event.health, shield)
-    end
-    if event.ability then return summary .. "「" .. event.ability .. "」" end
-    if event.target_name then return summary .. " → " .. event.target_name end
-    if event.attack_amount then
-        return string.format("%s %s · +%d攻 +%d命", side, event.name, event.attack_amount, event.amount)
-    end
-    if event.amount then return summary .. " " .. event.amount end
-    return summary
-end
-
 local function arrange(preparing)
     if preparing_layout == preparing then return end
     preparing_layout = preparing
@@ -370,10 +345,10 @@ local function unit_path(side, slot)
     return (side == "player" and "Team" or "Enemy") .. slot
 end
 
-local function draw_battle_cue(event, passed)
-    local strike = event and event.type == "attack"
-    local impact = event and event.type == "damage"
-    local actor = strike and unit_path(event.side, event.slot)
+local function draw_battle_cue(event, passed, cue)
+    local strike = cue and cue.kind == "attack"
+    local impact = cue and (cue.kind == "damage" or cue.kind == "guard" or cue.kind == "shield")
+    local actor = strike and unit_path(cue.side, cue.slot)
     if lunging and lunging ~= actor then portrait_control(lunging .. "/Portrait"):SetAnchoredPosition(0, 27) end
     lunging = actor
     local intensity = math.max(0, 1 - (passed or 0) / 0.28)
@@ -381,23 +356,31 @@ local function draw_battle_cue(event, passed)
     show("BattleFX/Strike", strike == true and intensity > 0)
     show("BattleFX/Impact", impact == true)
     if strike then
-        local direction = event.side == "player" and 1 or -1
+        local direction = cue.side == "player" and 1 or -1
         local lunge = direction * 10 * intensity
         portrait_control(actor .. "/Portrait"):SetAnchoredPosition(lunge, 27 + 2 * intensity)
         local x, y = control(actor):GetAnchoredPosition()
         local target_x, target_y = control(unit_path(event.target_side, event.target_slot)):GetAnchoredPosition()
         control("BattleFX/Strike"):SetAnchoredPosition((x + lunge + target_x) / 2, (y + target_y) / 2 + 27 - 118)
     elseif impact then
-        local x, y = control(unit_path(event.side, event.slot)):GetAnchoredPosition()
-        local centreward = event.side == "player" and 1 or -1
-        local lateral = event.slot == 1 and centreward * 59 or 0
-        local above = event.slot == 1 and 52 or 70
+        local x, y = control(unit_path(cue.side, cue.slot)):GetAnchoredPosition()
+        local centreward = cue.side == "player" and 1 or -1
+        local lateral = cue.slot == 1 and centreward * 59 or 0
+        local above = cue.slot == 1 and 52 or 70
         control("BattleFX/Impact"):SetAnchoredPosition(x + lateral, y + above - 118)
         local burst = control("BattleFX/Impact/Burst")
         burst:SetSizeDelta(52 + 12 * intensity, 34 + 7 * intensity)
-        burst.imageColor = colour(event.amount == 0 and 0xaac9d2 or 0xf3c58a)
-        text("BattleFX/Impact/Value", event.amount == 0 and "格挡" or ("-" .. event.amount),
-            event.amount == 0 and 0x315a6d or 0x8f3c30)
+        burst.imageColor = colour(cue.face)
+        local has_shield = cue.kind == "shield" or (event.absorbed or 0) > 0
+        show("BattleFX/Impact/Spark", has_shield)
+        if has_shield then
+            local shield = control("BattleFX/Impact/Spark")
+            shield:SetImage(Enum.ImageSource.StaticReference, 102036)
+            shield.imageColor = colour(0x315a6d)
+            shield:SetSizeDelta(21, 21)
+            shield:SetAnchoredPosition(29, 18)
+        end
+        text("BattleFX/Impact/Value", cue.label, cue.ink)
     end
 end
 
@@ -426,21 +409,14 @@ local function draw(refresh)
     if refresh ~= false then state = session:snapshot() end
     local preparing = state.phase == "preparation"
     local battle = state.battle
-    local event = battle and battle.events[event_index]
+    local event = battle and replay_view.event(battle.events, event_index, rules_data)
     local player, enemy = state.shop.team, state.opponent and state.opponent.team
-    if battle then
-        for index = event_index, 1, -1 do
-            local board = battle.events[index].board
-            if board then
-                player, enemy = board.player, board.enemy
-                break
-            end
-        end
-    end
-    local effect = event and effects[event.type]
-    if event and event.type == "damage" then
-        local paint = event.amount == 0 and effects.shield or effects.damage
-        effect = { label = "", face = paint.face, ink = paint.ink }
+    local board = battle and replay_view.board(battle.events, event_index)
+    if board then player, enemy = board.player, board.enemy end
+    local first_cue, second_cue = replay_view.cues(event, board)
+    local function effect(side, slot)
+        if first_cue and first_cue.side == side and first_cue.slot == slot then return first_cue end
+        if second_cue and second_cue.side == side and second_cue.slot == slot then return second_cue end
     end
     local drop_source = drag or pending_drop
     local drag_hint, drop_label = drag_feedback(drop_source)
@@ -458,20 +434,18 @@ local function draw(refresh)
         show("OpponentCaption", false)
     end
     for index = 1, rules.team_size do
-        local hit = effect and event.slot == index
         if not preparing then
-            team_card("Enemy" .. index, enemy[index], nil, hit and event.side == "enemy" and effect)
+            team_card("Enemy" .. index, enemy[index], nil, effect("enemy", index))
         end
         local path = "Team" .. index
-        team_card(path, player[index], matches(drag or selection, "team", index),
-            hit and event.side == "player" and effect)
+        team_card(path, player[index], matches(drag or selection, "team", index), effect("player", index))
         local drop = drop_label and drop_source.target == index
         local _, _, legal = drag_feedback(drag and {kind = drag.kind, index = drag.index, merge = drag.merge, target = index})
         show(path .. "/DropTarget", drop == true or legal ~= nil)
         if drop or legal then control(path .. "/DropTarget").imageColor = colour(drop and 0x20655e or 0x508774) end
         if drop then
             show(path .. "/Name", false)
-            text(path .. "/DropLabel", drop_label)
+            text(path .. "/DropLabel", pending_drop and ("确认" .. drop_label) or drop_label)
         else
             show(path .. "/DropLabel", false)
         end
@@ -488,13 +462,13 @@ local function draw(refresh)
         text("Restart/Cancel/Title", in_menu and "返回菜单" or "继续本局")
         text("Restart/Confirm/Title", in_menu and "确认放弃" or "确认重开")
     end
-    draw_battle_cue(event, elapsed)
+    draw_battle_cue(event, elapsed, first_cue)
     local title = primary[state.phase]
     local hint = "拖动商品或队员到阵容，也可点击选择"
     if preparing then
         if #state.shop.team == 0 then
             hint = state.shop.gold < rules.pet_cost and "金币不足以招募。点“重开本局”恢复。"
-                or "先拖一只动物入队，或点选购买。输一轮扣一命，平局保留生命。"
+                or "先招一只动物：拖到高亮站位，点一下确认。也可以点选动物后购买。"
         end
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
         text("Shop/Caption", string.format("商店 · %d 阶", state.shop.tier))
@@ -513,7 +487,8 @@ local function draw(refresh)
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
         local accent = replaying and 0x286452 or accents[battle.outcome]
         text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
-        text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events, battle_event(event)))
+        text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events,
+            replay_view.describe(event, rules_data, battle_sides)))
         text("Battle/Auto/Title", playing and "暂停回放" or "继续回放")
         text("Battle/Fast/Title", string.format("速度：%d 倍", replay_speed))
         show("Battle/Replay", replaying)
@@ -534,7 +509,7 @@ local function draw(refresh)
     draw_tooltip(preparing)
     text("Primary/Title", title)
     if pending_drop then
-        drag_hint = string.format("%s。点击标记站位确认，或取消拖放。", drag_hint)
+        drag_hint = string.format("%s。点高亮站位确认，或点「取消拖放」。", drag_hint)
     end
     text("Hint", drag_hint or message or hint)
 end
@@ -622,20 +597,7 @@ local function begin_drag(event, path, kind, index)
 end
 
 local function drop_slot(event)
-    local pointer_x, pointer_y = event:GetUIPos()
-    local width, height = game.GetUICanvasSize()
-    -- The script root stretches across the canvas. The roster and its hit areas have centred anchors and pivots.
-    local x, y = pointer_x - width / 2, pointer_y - height / 2
-    for index = 1, rules.team_size do
-        local path = "Team" .. index
-        local slot_x, slot_y = control(path):GetAnchoredPosition()
-        local hit = control(path .. "/Hit")
-        local hit_x, hit_y = hit:GetAnchoredPosition()
-        local hit_width, hit_height = hit:GetSizeDelta()
-        if math.abs(x - slot_x - hit_x) <= hit_width / 2 and math.abs(y - slot_y - hit_y) <= hit_height / 2 then
-            return index
-        end
-    end
+    return shop_input.team_slot(event, drop_targets)
 end
 
 local function update_drag(event)
@@ -875,16 +837,19 @@ end
 function OnUpdate(dt)
     if not view_enabled or not playing or menu_open then return end
     local battle = state.battle
-    local event = battle.events[event_index]
-    local delay = event.type == "damage" and 0.55 or 0.4
+    local event = replay_view.event(battle.events, event_index, rules_data)
+    local delay = replay_view.duration(event)
     elapsed = elapsed + dt * replay_speed
     if elapsed < delay then
-        if event.type == "attack" or event.type == "damage" then draw_battle_cue(event, elapsed) end
+        if event.type == "attack" or event.type == "damage" or event.type == "shield" then
+            local cue = replay_view.cues(event, replay_view.board(battle.events, event_index))
+            draw_battle_cue(event, elapsed, cue)
+        end
         return
     end
     event_index, elapsed = event_index + 1, 0
-    local upcoming = battle.events[event_index]
-    if upcoming.type == "damage" then play_sound(upcoming.amount > 0 and 50936 or 51044) end
+    local upcoming = replay_view.event(battle.events, event_index, rules_data)
+    if upcoming.type == "damage" then play_sound((upcoming.health_loss or upcoming.amount) > 0 and 50936 or 51044) end
     if event_index == #battle.events then reach_result() end
     draw(false)
 end
@@ -964,6 +929,18 @@ local function bind_button(path, callback)
     bind(path, callback)
 end
 
+local function fill_viewport()
+    local width, height = game.GetUICanvasSize()
+    for _, path in ipairs({"Border", "Panel", "Menu/Backdrop", "Restart/Shade"}) do
+        control(path):SetSizeDelta(width, height)
+    end
+    for _, path in ipairs({"Header", "Field/Surface", "Field/Ground", "Field/PrepRail", "Field/TrackShadow",
+        "Shop/Paper", "Shop/Rail", "Battle/Surface"}) do
+        local _, authored_height = control(path):GetSizeDelta()
+        control(path):SetSizeDelta(width, authored_height)
+    end
+end
+
 local function release_view()
     view_enabled = false
     clear_drag()
@@ -980,6 +957,7 @@ local function release_view()
     root, session, state = nil, nil, nil
     press, selection, message, pending_drop = nil, nil, nil, nil
     listeners, controls, portrait = {}, {}, nil
+    drop_targets = {}
     visibility, displayed_text, displayed_colour = {}, {}, {}
     preparing_layout, lunging = nil, nil
 end
@@ -989,6 +967,7 @@ function OnStart(view_root, back_to_game_menu)
     root, view_enabled = view_root or script.object, true
     if not view_root then set_visual_plates(root) end
     shared_portraits = view_root ~= nil
+    if shared_portraits and game.GetUICanvasSize then fill_viewport() end
     portrait = bind_portrait(portrait_control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
@@ -999,7 +978,11 @@ function OnStart(view_root, back_to_game_menu)
     end
     local seed = assert(math.tointeger(script:GetParam("seed")), "seed must be an integer")
     session = run.new(seed, difficulty, rules_data)
-    for index = 1, rules.team_size do bind_card("Team" .. index, "team", index) end
+    for index = 1, rules.team_size do
+        local path = "Team" .. index
+        drop_targets[index] = {control(path), control(path .. "/Hit")}
+        bind_card(path, "team", index)
+    end
     for index = 1, rules.pet_shop_slots do bind_card("Shop/Pet" .. index, "pet", index) end
     for index = 1, rules.food_shop_slots do bind_card("Shop/Food" .. index, "food", index) end
     bind_card("Shop/Reward", "reward")

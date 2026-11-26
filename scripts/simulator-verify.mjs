@@ -55,6 +55,15 @@ for(const {canvasId,playerCount,mode} of configurations) {
     return node;
   };
   const click=trail=>{const c=control(trail);const box=api.runtimeLayout(session).get(c.Id);const hit=api.hitPlayControl(session,box.centerX,box.centerY);assert.equal(hit?.Id,c.Id,'Input is occluded '+trail);api.injectPlayPointer(session,'down',box.centerX,box.centerY);api.injectPlayPointer(session,'up',box.centerX,box.centerY);api.stepPlay(session,1/60);inputs.push({trail,x:box.centerX,y:box.centerY});};
+  const box = trail => api.runtimeLayout(session).get(control(trail).Id);
+  const pointer = (type, { centerX, centerY }) => {
+    api.injectPlayPointer(session, type, centerX, centerY);
+    api.stepPlay(session, 1 / 60);
+    inputs.push({ type, x: centerX, y: centerY });
+  };
+  const lobbyMessages = () => api.playSnapshot(session).server.inbound.filter(row => row.name === 'AP_GameChooseMode');
+  const statusToken = () => lobbyMessages().filter(row => row.values[0] === 0).at(-1).values[2];
+  const startRequests = () => lobbyMessages().filter(row => row.values[0] !== 0).length;
   function requirePlayButton(trail, neighbors = []) {
     const { Id } = control(trail);
     const boxes = api.runtimeLayout(session);
@@ -93,27 +102,52 @@ for(const {canvasId,playerCount,mode} of configurations) {
     for (const name of ['Room', 'Duel', 'Practice']) {
       requirePlayButton(`Lobby/Choices/${name}/Hit`, ['Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     }
+    requirePlayButton('Lobby/Exit/Hit', ['Lobby/Feedback', 'Lobby/Help']);
+    click('Lobby/Exit/Hit');
+    await capture('lobby-exit-guide');
+    requireText('Lobby/Feedback', /左上角.*Esc.*退出/u);
     click('Lobby/Choices/Room/Hit');
     await capture('first-request-before-sync');
+    requireText('Lobby/Feedback', /状态未同步/u);
+    assert.equal(startRequests(), 0, 'Status must synchronize before a gameplay request');
+    api.sendPlaySignal(session, 'AP_GameLobby', [0, 1, 0, 0, 0, statusToken(), 1, 1, 0, 0]);
+    await capture('lobby-fixture');
+    requireText('Lobby/Status', /已进入 1 人/u);
+    click('Lobby/Choices/Duel/Hit');
+    await capture('duel-wait-fixture');
+    requireText('Lobby/Feedback', /等待好友/u);
+    assert.equal(startRequests(), 0, 'Known-invalid duel start must stay on the client');
+    click('Lobby/Choices/Room/Hit');
+    await capture('lobby-room-request');
     requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
+    requirePlayButton('Lobby/Cancel/Hit', ['Lobby/Exit/Hit', 'Lobby/Help']);
+    click('Lobby/Cancel/Hit');
+    await capture('lobby-cancelled');
+    requireText('Lobby/Feedback', /已停止等待/u);
+    click('Lobby/Choices/Room/Hit');
     for (let frame = 0; frame < 61; frame++) api.stepPlay(session, 0.1);
     await capture('lobby-request-timeout');
     requireText('Lobby/Feedback', /可以重试/u);
-    api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);await capture('lobby-fixture');
-    requireText('Lobby/Status', /已进入 1 人/u);
-    click('Lobby/Choices/Duel/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,2,1]);await capture('duel-wait-fixture');
-    requireText('Lobby/Feedback', /等待好友/u);
-    click('Lobby/Choices/Room/Hit');api.sendPlaySignal(session,'AP_GameLobby',[0,1,1,8,3]);await capture('room-wait-fixture');
+    api.sendPlaySignal(session, 'AP_GameLobby', [0, 1, 1, 0, 0, statusToken(), 2, 1, 3, 0]);
+    const beforeFill = startRequests();
+    click('Lobby/Choices/Room/Hit');
+    await capture('room-wait-fixture');
     requireText('Lobby/Feedback', /仍在加载/u);
-    api.sendPlaySignal(session,'AP_GameLobby',[0,1,0,0,0]);
+    assert.equal(startRequests(), beforeFill, 'Robot fill requires explicit confirmation');
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
     const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
     assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
       'Practice primary action must use its sliced native plate');
     requireText('Practice/Shop/Pet1/Price', /^3金$/u);
-    requireText('Practice/Shop/Pet1/Detail', /^\d+攻$/u);
-    requireText('Practice/Shop/Pet1/LifeValue', /^\d+命$/u);
+    requireText('Practice/Shop/Pet1/Detail', /^\d+$/u);
+    requireText('Practice/Shop/Pet1/LifeValue', /^\d+$/u);
+    for (const [name, image] of [['StatsPaper', 102035], ['LifePaper', 102018], ['PriceIcon', 102040]]) {
+      assert.equal(shopFrame.paint.find(item => item.id === control(`Practice/Shop/Pet1/${name}`).Id)?.imageId, image);
+    }
+    for (const trail of ['Practice/Panel', 'Practice/Field/Surface']) {
+      assert.equal(box(trail).width, shopFrame.canvasWidth, `${trail} should span the available canvas`);
+    }
     assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
     assert.ok(shopFrame.paint.some(item => item.id === control('Practice/Team1/Front').Id));
     for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
@@ -144,7 +178,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         }
         assert.ok(strike, 'Authoritative attack did not present its strike animation');
         await capture('practice-strike');
-        requireText('Practice/Battle/Event', /攻击/u);
+        requireText('Practice/Battle/Event', /出击/u);
         for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
         await capture('practice-replay');
         for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
@@ -170,14 +204,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(afterReroll.slice(1).some((name, index) => name !== beforeReroll[index + 1]),
       'At least one unfrozen offer must change for the fixed restart seed');
 
-    function pointer(type, { centerX, centerY }) {
-      api.injectPlayPointer(session, type, centerX, centerY);
-      api.stepPlay(session, 1 / 60);
-    }
     const pet = 'Practice/Shop/Pet1';
     const team = 'Practice/Team1';
     const food = 'Practice/Shop/Food1';
-    const box = trail => api.runtimeLayout(session).get(control(trail).Id);
     const slot = box(`${team}/Hit`);
     const outside = box('Practice/TeamCaption');
     function requireLiftedClearance(trail) {
@@ -230,7 +259,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('practice-drag-purchase-preview');
     requireText('Practice/Money/Value', /^9$/u);
     assert.ok(!visibleText(`${team}/Name`));
-    requireText('Practice/Hint', /购买需 3 金.*点击标记站位确认/u);
+    requireText('Practice/Hint', /购买需 3 金.*点高亮站位确认/u);
+    requireText(`${team}/DropLabel`, /^确认购买$/u);
     assert.equal(visibleText(`${pet}/Name`).text, petBefore);
     press('Team1');
     await capture('practice-drag-purchase');
@@ -254,7 +284,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('practice-drag-feed-preview');
     requireText('Practice/Money/Value', /^6$/u);
     assert.deepEqual(stats(), statsBefore);
-    requireText('Practice/Hint', /喂食需 3 金.*点击标记站位确认/u);
+    requireText('Practice/Hint', /喂食需 3 金.*点高亮站位确认/u);
+    requireText(`${team}/DropLabel`, /^确认喂食$/u);
     press('Team1');
     await capture('practice-drag-feed');
     requireText('Practice/Money/Value', /^3$/u);
@@ -275,11 +306,14 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     // Client-only fixture from the native wire schema. No graph output claimed.
     const market=Array(41).fill(0);market.splice(0,23,1,1,10,0,0,2,1,2,3,1,-2,1,21,3,2,1,1,2,22,3,2,1,1);
-    api.sendPlaySignal(session,'AP_GameLobby',[0,playerCount,0,0,0],'AllPlayers');
+    api.sendPlaySignal(session, 'AP_GameLobby', [0, playerCount, 0, 0, 0, statusToken(), 2,
+      playerCount === 2 ? 0 : 1, 0, 0], 'Player1');
     click('Lobby/Choices/'+(mode===2?'Duel':'Room')+'/Hit');
-    api.sendPlaySignal(session,'AP_GameLobby',[mode,playerCount,0,mode,0],'AllPlayers');
+    const startToken = lobbyMessages().at(-1).values[2];
+    api.sendPlaySignal(session, 'AP_GameLobby', [mode, playerCount, 0, mode, 0, startToken, 2, 4, 4, startToken], 'Player1');
     for(let player=1;player<=playerCount;player++) {
       const target='Player'+player;const personalMarket=[...market];personalMarket[2]=11-player;
+      if (player !== 1) api.sendPlaySignal(session, 'AP_GameLobby', [mode, playerCount, 0, mode, 0, 0, 2, 4, 4, 0], target);
       personalMarket[15] = 2;
       if(mode===2){api.sendPlaySignal(session,'AP_DuelSnapshot',[2,player,1,0,false,false,0,1,1,0,0,30,0,5,5,0],target);api.sendPlaySignal(session,'AP_DuelMarket',[1,1,personalMarket],target);}
       else api.sendPlaySignal(session,'AP_RoomView',[1,2,1,player,1,playerCount,0,false,Array(8).fill(5),Array(8).fill(0),[2,1,4,3,6,5,8,7],Array(8).fill(0),personalMarket,0,42],target);
@@ -318,9 +352,67 @@ for(const {canvasId,playerCount,mode} of configurations) {
       assert.equal(visibleText(`${shop}/Team1/Text`).textLayout.visibleLineCount, 1);
     }
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
-    click(duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`);
+    const petOffer = duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`;
+    const foodOffer = duel ? 'Duel/MarketOffers/Food1' : `${shop}/Offer4/Hit`;
+    const teamSlot = slot => duel ? `Duel/Team${slot}` : `${shop}/Team${slot}/Hit`;
+    const shopHint = duel ? 'Duel/Status' : 'Room/Match/Hint';
+    function beginShopDrag(source, target) {
+      for (const trail of [source, target]) {
+        const { centerX, centerY } = box(trail);
+        assert.equal(api.hitPlayControl(session, centerX, centerY)?.Id, control(trail).Id, `Drag target occluded: ${trail}`);
+      }
+      pointer('down', box(source));
+      pointer('move', box(target));
+    }
+    beginShopDrag(foodOffer, teamSlot(5));
+    pointer('up', box(teamSlot(5)));
+    await capture('client-1-invalid-food-drop');
+    requireText(shopHint, /食物拖向一名队员/u);
+    assert.equal(requests(), beforeInspect, 'Food dropped on an empty seat must send zero requests');
+
+    beginShopDrag(petOffer, teamSlot(3));
+    pointer('cancel', box(teamSlot(3)));
+    await capture('client-1-interrupted-drag');
+    assert.equal(requests(), beforeInspect, 'Interrupted drag must send zero requests');
+    click(rerollButton);
+    await capture('client-1-cancel-drag');
+    requireText(shopHint, /已取消拖放/u);
+    assert.equal(requests(), beforeInspect, 'Cancelling staged drag must send zero requests');
+
+    beginShopDrag(petOffer, teamSlot(3));
+    pointer('up', box(teamSlot(3)));
+    await capture('client-1-drag-purchase-preview');
+    requireText(shopHint, /点高亮站位确认购买/u);
+    assert.equal(requests(), beforeInspect, 'A fresh click is required to distinguish release from interruption');
+    click(teamSlot(3));
     await capture('client-1-buy-request');
-    assert.ok(api.playSnapshot(session).server.inbound.some(row=>row.name===requestName&&row.values[0]===11),'Client buy did not send native request');
+    assert.equal(requests(), beforeInspect + 1, 'A confirmed purchase should send exactly one request');
+    const buy = api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).at(-1).values;
+    assert.equal(buy[0], 11);
+    assert.deepEqual(buy.slice(duel ? 4 : 3, duel ? 6 : 5), [1, 3]);
+    const purchased = [...market];
+    purchased[2] = 7;
+    purchased[5] = 3;
+    purchased[6] = 0;
+    purchased.splice(23, 6, 1, 23, 2, 3, 1, 0);
+    if (duel) {
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 0, false, false, 0, 2, 2, 0, 0, 30, buy[3], 5, 5, 0], 'Player1');
+      api.sendPlaySignal(session, 'AP_DuelMarket', [1, 2, purchased], 'Player1');
+    } else {
+      api.sendPlaySignal(session, 'AP_RoomView', [2, 2, 1, 1, 2, playerCount, 0, false,
+        Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), purchased, buy[6], 42], 'Player1');
+    }
+    await capture('client-1-drag-purchase-ack-fixture');
+    requireText(duel ? 'Duel/MarketGold' : `${shop}/Money`, /金币 7/u);
+    requireText(duel ? 'Duel/TeamLabel3' : `${shop}/Team3/Text`, /芦纹龟/u);
+    beginShopDrag(foodOffer, teamSlot(3));
+    pointer('up', box(teamSlot(3)));
+    click(teamSlot(3));
+    await capture('client-1-drag-feed-request');
+    assert.equal(requests(), beforeInspect + 2);
+    const feed = api.playSnapshot(session).server.inbound.filter(row => row.name === requestName).at(-1).values;
+    assert.equal(feed[0], 16);
+    assert.deepEqual(feed.slice(duel ? 4 : 3, duel ? 6 : 5), [1, 3]);
 
     // Round-one deterministic receipt for Player1 against seat 2. The simulator
     // supplies wire values while the GIL client verifies and resolves them.
@@ -329,9 +421,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
       ? [1, 42, outcome, [1, 1, 5, 8, 1], [2, 2, 1, 4, 1]]
       : [1, 1, 2, outcome, 42, [1, 1, 1, 5, 8, 1, 0], [1, 2, 2, 1, 4, 1, 0]], target);
     if (duel) {
-      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 3, true, false, 0, 2, 2, 0, 0, 0, 0, 5, 5, 0], 'Player1');
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 3, true, false, 0, 3, 3, 0, 0, 0, 0, 5, 5, 0], 'Player1');
     } else {
-      api.sendPlaySignal(session, 'AP_RoomView', [2, 3, 1, 1, 2, playerCount, 0, true,
+      api.sendPlaySignal(session, 'AP_RoomView', [3, 3, 1, 1, 3, playerCount, 0, true,
         Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
     }
     await capture('client-1-replay-wait');
@@ -346,7 +438,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const renderedEvent = () => api.playSnapshot(session, { paint: true }).paint.find(item => item.id === eventId)?.text;
     const expectEvents = [
       ['attack', /芦纹龟.*出击.*烟尾雨燕/u],
-      ['damage', /烟尾雨燕.*-5命.*余0命/u],
+      ['damage', /烟尾雨燕.*-4命.*余0命/u],
       ['faint', /烟尾雨燕.*退场/u],
       ['result', /战斗结束|本轮获胜/u],
     ];
@@ -356,11 +448,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
       if (eventText && pattern.test(eventText)) {
         const replayFrame = await capture(`client-1-replay-${name}`);
         requireText(eventTrail, pattern);
-        if (name === 'damage') requireText(`${replayBadges}/Price1`, /^-5$/u);
+        if (name === 'damage') requireText(`${replayBadges}/Price1`, /^-4$/u);
         else assert.ok(!replayFrame.paint.some(item => item.id === priceId), 'The impact badge must clear after damage');
         if (duel && name === 'attack') requireText('Duel/Status', /正在播放本轮战斗/u);
         if (duel && name === 'result') requireText('Duel/Status', /回放结束 · 等待结算/u);
         if (name === 'attack') {
+          requireText(`${replayBadges}/Price2`, /^出击$/u);
+          requireText(`${replayBadges}/Price3`, /^目标$/u);
           const [own, enemy] = portraits.map(id => replayFrame.paint.find(item => item.id === id));
           assert.ok(own && enemy && own.left + own.width < enemy.left,
             'The original portraits must appear on opposing lanes');
@@ -383,7 +477,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     }
     assert.deepEqual(expectEvents.map(([name]) => name), [], 'Replay must visibly progress through authority-derived phases');
     if (duel) {
-      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 1, true, false, 1, 3, 3, 0, 0, 7, 0, 5, 4, 1], 'Player1');
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 1, true, false, 1, 4, 4, 0, 0, 7, 0, 5, 4, 1], 'Player1');
       await capture('client-1-settlement');
       requireText('Duel/Status', /本轮获胜 · 确认下一轮/u);
     }
@@ -426,16 +520,16 @@ for(const {canvasId,playerCount,mode} of configurations) {
       assert.equal(after.length, before + 1, `Expected one pending request from ${trail}`);
       assert.equal(after.at(-1).values[0], action);
     }
-    nextMarket(4, 10);
+    nextMarket(5, 10);
     requireSingleRequest(rerollButton, 10);
-    nextMarket(5, 9);
+    nextMarket(6, 9);
     requireSingleRequest(readyButton, 1);
     requireShopPortraits(await capture('client-1-next-round-actions-fixture'));
     if (canvasId === 'mobile-19.5-9') {
       if (duel) {
-        api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 2, 3, true, false, 1, 6, 6, 0, 0, 0, 0, 5, 4, 0], 'Player1');
+        api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 2, 3, true, false, 1, 7, 7, 0, 0, 0, 0, 5, 4, 0], 'Player1');
       } else {
-        api.sendPlaySignal(session, 'AP_RoomView', [6, 3, 2, 1, 6, playerCount, 0, true,
+        api.sendPlaySignal(session, 'AP_RoomView', [7, 3, 2, 1, 7, playerCount, 0, true,
           Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 0], 'Player1');
       }
       api.sendPlaySignal(session, replaySignal, duel

@@ -16,6 +16,7 @@ local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
 local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
+local shop_input = require("autopets.shop_input")
 local pets = {
     -- AP_DUEL_PETS
 }
@@ -42,6 +43,7 @@ local market
 local playback, status_header, status_message, seconds, hint
 local awaiting_settlement = false
 local portrait, badges
+local shop_drag
 local draw_status
 local visible = {}
 local bindings = {}
@@ -204,6 +206,10 @@ local function render_market()
     end
 
     market_gold.text = string.format("金币 %d  ·  第 %d 阶", view.gold, view.tier)
+    if portrait then
+        child("RerollLabel").text = shop_drag and shop_drag.waiting() and "取消拖放"
+            or string.format("刷新 · %d 金", native_catalog.rules.reroll_cost)
+    end
     local picked = selected_slot(view)
     if not picked then selected_uid = nil end
     local price = string.format("购买 %d 金", rules.pet_cost)
@@ -229,6 +235,7 @@ local function render_market()
             if shop_badges then badges.paint(rules.team_size + slot, pet and pet.attack, pet and pet.health, pet and rules.pet_cost) end
             label.text = pet and (badges and pet.name or string.format("%s\n%s\n%d金", pet.name,
                 replay_view.combat_values(pet.attack, pet.health), rules.pet_cost)) or "售罄"
+            if shop_drag and shop_drag.source("pet", slot) then label.text = "拖动中" end
         else
             label.text = pet and string.format("%s\n攻%d / 命%d · %s", pet.name, pet.attack, pet.health, footer) or "售罄"
         end
@@ -246,6 +253,7 @@ local function render_market()
             end
             label.text = food and (badges and food.name or string.format("%s\n%s\n%d金", food.name,
                 replay_view.combat_values(food.attack, food.health, true), rules.food_cost)) or "售罄"
+            if shop_drag and shop_drag.source("food", slot) then label.text = "拖动中" end
         else
             label.text = food and string.format("%s\n+%d攻 / +%d命 · %d 金",
                 food.name, food.attack, food.health, rules.food_cost) or "售罄"
@@ -257,7 +265,9 @@ local function render_market()
         if portrait then
             local animal = unit and native_catalog.pets[unit.code]
             portrait.shop(slot, animal and animal.id)
-            local face = slot == picked and Color(228, 176, 94, 255)
+            local mark = shop_drag and shop_drag.mark(slot) or 0
+            local face = mark == 2 and Color(104, 194, 168, 255) or mark == 1 and Color(125, 168, 133, 255)
+                or slot == picked and Color(228, 176, 94, 255)
                 or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
             child("Team" .. slot .. "Face").imageColor = face
             if shop_badges then badges.paint(slot, unit and unit.attack, unit and unit.health) end
@@ -286,10 +296,22 @@ local function render_market()
     if reward_index > #view.rewards then reward_index = 1 end
     local reward = pets[view.rewards[reward_index]]
     reward_label.text = reward and string.format("奖励 %d/%d · %s", reward_index, #view.rewards, reward.name) or "暂无升级奖励"
+    if shop_drag and shop_drag.source("reward", reward_index) then reward_label.text = "拖动中" end
+end
+
+local function shop_action(kind, slot, target, merging)
+    local action, reason = shop_input.plan(editable_market(), native_catalog.rules, kind, slot, target, merging)
+    if action then
+        send(table.unpack(action, 1, 4))
+    elseif portrait then
+        hint = reason
+        draw_status()
+    end
 end
 
 local function acquire(slot, reward)
     local view = editable_market()
+    if portrait then shop_action(reward and "reward" or "pet", slot, view and selected_slot(view)); return end
     if not view or view.gold < rules.pet_cost then return end
     local shelf = reward and view.rewards or view.pets
     local code = math.abs(shelf[slot] or 0)
@@ -304,6 +326,7 @@ end
 
 local function feed(slot)
     local view = editable_market()
+    if portrait then shop_action("food", slot, view and selected_slot(view)); return end
     if not view or view.gold < rules.food_cost or view.foods[slot] == 0 then return end
     local picked = selected_slot(view)
     if picked then send(16, slot, picked) end
@@ -313,7 +336,8 @@ local function freeze(slot, food)
     local view = editable_market()
     if not view then return end
     local shelf = food and view.foods or view.pets
-    if shelf[slot] ~= 0 then send(17, slot, food and 1 or 0) end
+    if shelf[slot] ~= 0 then send(17, slot, food and 1 or 0)
+    elseif portrait then hint = "这个货位没有商品"; draw_status() end
 end
 
 local function select_unit(slot)
@@ -325,6 +349,9 @@ local function select_unit(slot)
         selected_uid = view.team[slot].uid
     elseif picked == slot then
         selected_uid = nil
+    elseif portrait then
+        shop_action("team", picked, slot, merge_mode)
+        if pending then selected_uid, merge_mode = nil, false; merge_label.text = "合并模式" end
     elseif not merge_mode or view.team[picked].code == view.team[slot].code
         and view.team[slot].level < rules.max_level then
         send(merge_mode and 15 or 14, picked, slot)
@@ -359,8 +386,41 @@ local function forfeit()
     end
 end
 
-local function bind(name, callback, parent)
-    bindings[#bindings + 1] = {object = (parent or root):GetChild(name), callback = callback}
+local function bind(name, callback, parent, kind, index)
+    bindings[#bindings + 1] = {object = (parent or root):GetChild(name), callback = callback, kind = kind, index = index}
+end
+
+-- These controls belong to the reward shelf during preparation. In the unified
+-- view they can be reused when the shelf is hidden, without adding hit areas.
+local replay_controls = {
+    {name = "Reward", caption = "下一条", x = -413},
+    {name = "RewardNext", caption = "跳过回放", x = -230},
+}
+local function show_replay_controls(enabled)
+    if offers == root then return end
+    for _, button in ipairs(replay_controls) do
+        local caption = child(button.name .. "Label")
+        if enabled and not button.positions then
+            button.positions = {}
+            for _, suffix in ipairs({"", "Face", "Label"}) do
+                local control = child(button.name .. suffix)
+                local x, y = control:GetAnchoredPosition()
+                local width, height = control:GetSizeDelta()
+                button.positions[suffix] = {x, y, width, height}
+                control:SetAnchoredPosition(button.x, -234)
+                control:SetSizeDelta(166, 82)
+            end
+        elseif not enabled and button.positions then
+            for suffix, position in pairs(button.positions) do
+                local control = child(button.name .. suffix)
+                control:SetAnchoredPosition(position[1], position[2])
+                control:SetSizeDelta(position[3], position[4])
+            end
+            button.positions = nil
+        end
+        if enabled then caption.text = button.caption end
+        show_action(button.name, button.name .. "Label", enabled or preparing)
+    end
 end
 
 local function show_replay()
@@ -368,6 +428,7 @@ local function show_replay()
     local replay_available = not preparing or offers == root
     show(replay_status, replay_available)
     show_action("Replay", "ReplayLabel", replay_available and playback ~= nil)
+    show_replay_controls(not preparing and playback ~= nil and playback.position < #playback.events)
     local board_root = child("ReplayBoard")
     show(board_root, playback ~= nil and not preparing)
     local replay_badges = badges and not preparing and playback
@@ -375,7 +436,7 @@ local function show_replay()
         badges.select("replay", board_root, function(slot)
             local label = board_root:GetChild(slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5)))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 40, x, y + 23
+            return x, y - 40, x, y + 29
         end)
     elseif badges and not preparing then badges.hide() end
     for slot = 1, rules.team_size do
@@ -398,11 +459,11 @@ local function show_replay()
         replay_label.text = "回放"
         return
     end
-    local event = playback.events[playback.position]
+    local event = replay_view.event(playback.events, playback.position, native_catalog)
     playback.board = replay_view.board(playback.events, playback.position)
     if replay_badges then
-        local damaged = event.type == "damage" and (event.side == "player" and event.slot or rules.team_size + event.slot)
-        badges.feedback(damaged, event)
+        local primary, target = replay_view.cues(event, playback.board)
+        badges.feedback(primary, target, "player")
     end
     for side, key in ipairs({"player", "enemy"}) do
         for slot = 1, rules.team_size do
@@ -463,6 +524,13 @@ local function receive_replay(_, parameters)
     show_replay()
 end
 
+local function seek_replay(to_end)
+    if not playback or preparing or offers == root then return end
+    playback.position = to_end and #playback.events or math.min(playback.position + 1, #playback.events)
+    playback.elapsed, playback.playing = 0, false
+    show_replay()
+end
+
 bind("Replay", function()
     if not playback then return end
     if playback.position == #playback.events then
@@ -480,7 +548,12 @@ bind("Ready", submit_ready)
 bind("Advance", request_advance)
 bind("Leave", forfeit)
 bind("Reroll", function()
-    if editable_market() then send(10) end
+    if not portrait then
+        if editable_market() then send(10) end
+        return
+    end
+    local ok, reason = shop_input.reroll(editable_market(), native_catalog.rules.reroll_cost)
+    if ok then send(10) else hint = reason; draw_status() end
 end)
 bind("Sell", function()
     local view = editable_market()
@@ -489,6 +562,9 @@ bind("Sell", function()
         send(13, 0, slot)
         selected_uid = nil
         render_market()
+    elseif portrait then
+        hint = "请先选择要出售的队员"
+        draw_status()
     end
 end)
 bind("Merge", function()
@@ -497,8 +573,11 @@ bind("Merge", function()
         merge_label.text = merge_mode and "取消合并" or "合并模式"
     end
 end)
-bind("Reward", function() acquire(reward_index, true) end)
+bind("Reward", function()
+    if preparing then acquire(reward_index, true) else seek_replay(false) end
+end, nil, "reward", function() return reward_index end)
 bind("RewardNext", function()
+    if not preparing then seek_replay(true); return end
     local view = editable_market()
     if view and #view.rewards > 1 then
         reward_index = reward_index % #view.rewards + 1
@@ -513,19 +592,19 @@ for slot = 1, rules.pet_slots do
     bind("InspectPet" .. slot, function() inspected = {kind = "pet", slot = slot}; render_market() end, offers)
     pet_labels[slot] = offers:GetChild("OfferLabel" .. slot)
     pet_freeze_labels[slot] = offers:GetChild("FreezePetLabel" .. slot)
-    bind("Buy" .. slot, function() acquire(slot, false) end, offers)
+    bind("Buy" .. slot, function() acquire(slot, false) end, offers, "pet", function() return slot end)
     bind("FreezePet" .. slot, function() freeze(slot, false) end, offers)
 end
 for slot = 1, rules.food_slots do
     food_labels[slot] = offers:GetChild("FoodLabel" .. slot)
     food_freeze_labels[slot] = offers:GetChild("FreezeFoodLabel" .. slot)
-    bind("Food" .. slot, function() feed(slot) end, offers)
+    bind("Food" .. slot, function() feed(slot) end, offers, "food", function() return slot end)
     bind("FreezeFood" .. slot, function() freeze(slot, true) end, offers)
 end
 for slot = 1, rules.team_size do
     bind("InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot}; render_market() end, root:FindChild("TeamInspection"))
     team_labels[slot] = root:GetChild("TeamLabel" .. slot)
-    bind("Team" .. slot, function() select_unit(slot) end)
+    bind("Team" .. slot, function() select_unit(slot) end, nil, "team", function() return slot end)
 end
 
 local function receive_market(_, parameters)
@@ -550,7 +629,9 @@ draw_status = function()
         end
     end
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
-    local content = status_header .. "\n" .. message .. suffix .. (hint and ("\n" .. hint) or "")
+    local feedback = hint or (portrait and pending and "正在等待服务端确认")
+    if not feedback and portrait and preparing then feedback = "拖向高亮站位，或点选动物购买" end
+    local content = status_header .. "\n" .. message .. suffix .. (feedback and ("\n" .. feedback) or "")
     if status.text ~= content then status.text = content end
 end
 
@@ -607,10 +688,39 @@ end
 function OnStart(_, painter, badge_pool)
     portrait = painter
     badges = bind_online_badges(badge_pool)
+    if portrait then
+        if game.GetUICanvasSize then child("Background"):SetSizeDelta(game.GetUICanvasSize()) end
+        local targets = {}
+        for slot = 1, rules.team_size do targets[slot] = {child("Team" .. slot)} end
+        shop_drag = shop_input.bind_drag(targets, {
+            key = function()
+                local view = editable_market()
+                return view and (round .. ":" .. sequence)
+            end,
+            plan = function(kind, index, target)
+                return shop_input.plan(editable_market(), native_catalog.rules, kind, index, target)
+            end,
+            apply = function(action) send(table.unpack(action, 1, 4)) end,
+            changed = function(message)
+                hint = message
+                render_market()
+                draw_status()
+            end,
+        })
+    end
     script:RegisterServerSignalHandler("AP_DuelSnapshot", receive_snapshot)
     script:RegisterServerSignalHandler("AP_DuelMarket", receive_market)
     script:RegisterServerSignalHandler("AP_DuelReplay", receive_replay)
-    for _, binding in ipairs(bindings) do binding.object:AddCursorEventListener(click, binding.callback) end
+    for _, binding in ipairs(bindings) do
+        if shop_drag and binding.kind then
+            shop_drag.bind(binding.object, binding.kind, binding.index, binding.callback)
+        else
+            binding.listener = function()
+                if not shop_drag or not shop_drag.cancel() then binding.callback() end
+            end
+            binding.object:AddCursorEventListener(click, binding.listener)
+        end
+    end
     render_market()
     show_actions()
     show_replay()
@@ -635,8 +745,12 @@ function OnDestroy()
     script:UnregisterServerSignalHandler("AP_DuelSnapshot")
     script:UnregisterServerSignalHandler("AP_DuelMarket")
     script:UnregisterServerSignalHandler("AP_DuelReplay")
+    if shop_drag then shop_drag.destroy(); shop_drag = nil end
     for _, binding in ipairs(bindings) do
-        if binding.object.alive then binding.object:RemoveCursorEventListener(click, binding.callback) end
+        if binding.listener and binding.object.alive then
+            binding.object:RemoveCursorEventListener(click, binding.listener)
+        end
+        binding.listener = nil
     end
     round, latest_version, sequence = 0, 0, 0
     pending, market, selected_uid = nil, nil, nil
