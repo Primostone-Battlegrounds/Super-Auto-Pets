@@ -20,8 +20,8 @@
 
 练习保留当前 10 胜、5 命和回放流程。机器人与真人共用商店和战斗规则。难度用经营决策、阵容协同和站位区分，使用固定种子与随机购物及不同策略做对抗比较。
 
-三个模式共用一个首发动物池。正式发版要求六阶各 10 只可购买动物，共 60 只，战斗召唤物另计。动物和食物使用易懂的通俗名称，例如乌龟、兔子、猫咪和企鹅。千星奇域是游戏承载平台，原神生物志命名退出首发制作。经典 Turtle Pack 用于研究经济、技能触发、构筑深度与成品体验。现有图鉴供研发占位，正式视觉标准由六只原创样板的实际画面和性能证据确定，独立评审和 Owner 确认后开始批产。 [新版设计草案](design/revisions/v2.1.0/SPECIFICATION.md) · [美术工艺](ART_PIPELINE.md)
+三个模式共用一个首发动物池。统一隔离候选已达到六阶各 10 只可购买动物，共 60 只，战斗召唤物另计。动物和食物使用易懂的通俗名称，例如乌龟、兔子、猫咪和企鹅。千星奇域是游戏承载平台，原神生物志命名退出首发制作。经典 Turtle Pack 用于研究经济、技能触发、构筑深度与成品体验。候选包含六只拟合样板与全名单研发肖像，正式视觉标准和批产仍需独立评审及 Owner 确认。 [完整名册](design/revisions/v2.1.0/ROSTER.md) · [新版设计草案](design/revisions/v2.1.0/SPECIFICATION.md) · [美术工艺](ART_PIPELINE.md)
 
 Arena 历史阵容、Daily、天梯、赛季和自定义动物包暂缓。Backlog 维护里程碑，验收证据按层记录。 [QA](QA.md)
 
-Draft PR #5 保留早期单人方案、名册样板及制作过程。当前六阶目录记录 v2.0.0 的 18 只研发基线。 [历史设计稿](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [六阶目录](design/RELEASE-POOL.md)
+Draft PR #5 保留早期单人方案、名册样板及制作过程。v2.0.0 的 18 只动物目录用于历史回归。 [历史设计稿](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [六阶目录](design/RELEASE-POOL.md)

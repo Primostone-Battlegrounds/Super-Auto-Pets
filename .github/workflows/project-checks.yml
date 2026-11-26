@@ -189,7 +189,7 @@ jobs:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
         run: |
           mkdir -p "$RUNNER_TEMP/m3-opening-probes"
-          for profile in compatibility release; do
+          for profile in compatibility release expanded; do
             candidate="$RUNNER_TEMP/m3-opening-probes/$profile"
             node tests/native/verify-m3-opening.mjs "$RUNNER_TEMP/miliastra-mcp" \
               "$RUNNER_TEMP/native-validation" lua5.3 lua5.4 "$candidate" "$profile"

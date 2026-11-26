@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-26 05:39'
+updated_date: '2026-11-26 09:34'
 labels: []
 milestone: m-4
 dependencies:
@@ -47,4 +47,6 @@ ordinal: 29000
 六阶源码及策略验收已通过 PR #25 和 #26 的独立评审与 Project checks。每个 Lua 运行 73,728 场，输出 SHA-256 783b7caf846a0fe58319713379a8582588feed36dbf058affed214e81c8d097a。标准对随机得分率 89.1%–91.5%，入门对随机为 65.9%–72.6%，标准档第 12 轮 768 个阵容中有 653 种。双人和八席 Lua 宿主可选择相同目录，终端六阶练习亦可复验。正式多人原生接入及官方验收继续跟踪。
 
 18 只目录的既有验收仅对应 v2.0.0 研发基线。首发扩充仍待定稿内容映射、原版参照版本和完整候选证据。
+
+已实现 42 只可购买动物，60 只按六阶各 10 只接入同一隔离 GIL 的三个模式。名单与等级映射见 docs/design/revisions/v2.1.0/ROSTER.md。双 Lua 在单核、128 MiB 下对照 64 局练习、64 局双人和 128 局八席。五层成品门禁继续追踪正式视觉、原版参考和同候选官方设备证据。
 <!-- SECTION:NOTES:END -->
