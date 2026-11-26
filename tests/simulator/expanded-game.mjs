@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 import { nativeSimulatorSave, sha256 } from '../../scripts/simulator-native.mjs';
 
@@ -46,9 +47,31 @@ const assets = new ImageAssetStore({ cacheDir: path.join(output, 'image-cache') 
 const frames = [];
 const results = [];
 
+const replaySeed = 42;
+const replayTeams = [[1, 15, 29, 43, 57], [2, 16, 30, 44, 60]].map((team, side) => team.map((code, index) => {
+  const { attack, health } = catalog[code - 1];
+  return [code, side * 5 + index + 1, attack, health, 1, 0];
+}));
+const formatLuaTeam = team => `{${team.map(([code, uid, attack, health, level]) =>
+  `{id=native_catalog.pets[${code}].id,uid=${uid},attack=${attack},health=${health},level=${level}}`).join(',')}}`;
+const lua = save.assets.scripts[0].source;
+const oracle = execFileSync(process.env.LUA54 ?? 'lua5.4', ['-E', '-'], { encoding: 'utf8', input: [
+  'local Enum = {CursorEventType={CursorClick=1}}', lua,
+  'local battle = loadAutoPetsModule("autopets.battle")',
+  `local result = battle.resolve(${replayTeams.map(formatLuaTeam).join(',')},${replaySeed},native_catalog)`,
+  'assert(result.status ~= "strike_limit")', 'io.write(result.outcome)',
+].join('\n') });
+const replayOutcome = { win: 1, loss: 2, draw: 3 }[oracle];
+assert.ok(replayOutcome, 'Readback Lua did not resolve the replay formation');
+
 function createView(canvasId, playerCount) {
+  const start = performance.now();
   const session = api.startPlay(save.assets.server, { scripts: save.assets.scripts, templatesProject: save.assets.client,
     canvasId, playerCount, language: 'zh-CN' });
+  const mountMs = performance.now() - start;
+  let peakSampledRssBytes = process.memoryUsage.rss();
+  let peakSampledRuntimeControls = 0;
+  const count = node => 1 + node.children.reduce((total, child) => total + count(child), 0);
   const control = trail => trail.split('/').reduce((node, name) => node?.children.find(child => child.name === name),
     session.runtime.roots[0]);
   const presses = [];
@@ -66,6 +89,8 @@ function createView(canvasId, playerCount) {
     const frame = api.playSnapshot(session, { paint: true });
     assert.equal(frame.mountError, null);
     assert.deepEqual(frame.logs.filter(log => /error/u.test(log.level)), []);
+    peakSampledRuntimeControls = Math.max(peakSampledRuntimeControls, count(session.runtime.roots[0]));
+    peakSampledRssBytes = Math.max(peakSampledRssBytes, process.memoryUsage.rss());
     return frame;
   }
   function show(frame, trail) {
@@ -88,7 +113,8 @@ function createView(canvasId, playerCount) {
     fs.writeFileSync(path.join(output, file), png);
     frames.push({ file, sha256: sha256(png) });
   }
-  return { session, control, click, snapshot, show, text, capture, presses };
+  return { session, control, click, snapshot, show, text, capture, presses,
+    measurements: () => ({ mountMs, peakSampledRuntimeControls, peakSampledRssBytes }) };
 }
 
 function positions(prefix, count) {
@@ -200,7 +226,7 @@ async function practice(canvasId) {
     assert.ok(fullBattle, 'No complete five-v-five practice battle');
     assert.ok(finish, 'Adaptive practice run did not reach a terminal result');
     results.push({ mode: 'practice', canvasId, inputSource: 'pointer input against readback Lua rules',
-      actions, presses: view.presses, seenOffers: [...seenOffers], maxTier, finish, fullBattle });
+      actions, presses: view.presses, seenOffers: [...seenOffers], maxTier, finish, fullBattle, ...view.measurements() });
   } finally {
     api.stopPlay(view.session);
   }
@@ -215,7 +241,8 @@ async function online(canvasId, mode) {
   const badgePool = duel ? `${shop}/MarketOffers/BadgePool` : `${shop}/BadgePool`;
   const onlineMode = duel ? 'duel' : 'eight-seat';
   const teamPortraits = positions('Practice/Team', 5).map(trail => control(`${trail}/Portrait`));
-  const shelfPortraits = positions('Practice/Shop/Pet', 3).map(trail => control(`${trail}/Portrait`));
+  const shelfPortraits = [...positions('Practice/Shop/Pet', 3), ...positions('Practice/Shop/Food', 2)]
+    .map(trail => control(`${trail}/Portrait`));
   const shelfLabels = positions(duel ? `${shop}/MarketOffers/OfferLabel` : `${shop}/Offer`, 3)
     .map(trail => duel ? trail : `${trail}/Text`);
   const teamLabels = positions(duel ? `${shop}/TeamLabel` : `${shop}/Team`, 5)
@@ -228,7 +255,7 @@ async function online(canvasId, mode) {
     event.name === (duel ? 'AP_DuelRequest' : 'AP_RoomRequest')).length;
   const entries = [];
   let version = 0;
-  function publish(group, round, level) {
+  function publish(group, round, level, battling = false) {
     version += 1;
     const tier = group[0].tier;
     const pets = [...group, ...Array(3 - group.length).fill(group[0])].map(pet => codeById.get(pet.id));
@@ -236,11 +263,11 @@ async function online(canvasId, mode) {
       pet.health + level - 1, level, [0, 2, 5][level - 1]]);
     const market = [round, tier, 10, 0, 0, group.length, ...pets, 0, 0, ...units, ...Array(30 - units.length).fill(0)];
     if (duel) {
-      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, round, 0, false, false, 0, version, version,
+      api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, round, battling ? 3 : 0, battling, false, 0, version, version,
         0, 0, 30, 0, 5, 5, 0], 'Player1');
       api.sendPlaySignal(session, 'AP_DuelMarket', [round, version, market], 'Player1');
     } else {
-      api.sendPlaySignal(session, 'AP_RoomView', [version, 2, round, 1, version, count, 0, false, Array(8).fill(5),
+      api.sendPlaySignal(session, 'AP_RoomView', [version, battling ? 3 : 2, round, 1, version, count, 0, battling, Array(8).fill(5),
         Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), market, 0, 42], 'Player1');
     }
   }
@@ -276,12 +303,33 @@ async function online(canvasId, mode) {
       }
     }
     assert.equal(new Set(entries.map(entry => `${entry.id}:${entry.level}`)).size, 180);
+    publish(tiers.at(-1).slice(0, 3), 11, 1, true);
+    if (duel) {
+      api.sendPlaySignal(session, 'AP_DuelReplay', [11, replaySeed, replayOutcome,
+        ...replayTeams.map(team => team.flatMap(unit => unit.slice(0, 5)))], 'Player1');
+    } else {
+      api.sendPlaySignal(session, 'AP_RoomReplay', [11, 1, 2, replayOutcome, replaySeed,
+        ...replayTeams.map(team => [5, ...team.flat()])], 'Player1');
+    }
+    const replay = snapshot();
+    const replayBoard = duel ? 'Duel/ReplayBoard' : 'Room/Match/Replay';
+    for (const [side, team] of replayTeams.entries()) {
+      for (const [index, [code]] of team.entries()) {
+        const pet = catalog[code - 1];
+        const slot = `${replayBoard}/${side ? 'Enemy' : 'Own'}${index + 1}`;
+        assert.equal(text(replay, slot).split('\n')[0], pet.name);
+        const portrait = (side ? shelfPortraits : teamPortraits)[index];
+        portraitLayers(replay, portrait, pet.id);
+        if (build.artPreview?.animals[pet.id]) assert.equal(portrait.localScaleX, side ? -1 : 1, pet.id);
+      }
+    }
+    await capture(`${onlineMode}-five-v-five-fixture`, replay);
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     assert.ok([...teamPortraits, ...shelfPortraits].every(root =>
       root.children.every(child => child.name !== 'FittedPortraitLayers')));
     await capture(`${onlineMode}-return-fixture`);
     results.push({ mode: onlineMode, canvasId, clients: count, inputSource: 'pointer input against client wire fixtures',
-      presses: view.presses, entries });
+      presses: view.presses, entries, replay: { seed: replaySeed, outcome: oracle, teams: replayTeams }, ...view.measurements() });
   } finally {
     api.stopPlay(session);
   }
