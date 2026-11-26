@@ -195,7 +195,9 @@ local function render_market()
         if picked then
             local x = team_labels[picked]:GetAnchoredPosition()
             for _, name in ipairs({"Sell", "SellFace", "SellLabel"}) do
-                child(name):SetAnchoredPosition(x, 43)
+                local action = child(name)
+                local _, y = action:GetAnchoredPosition()
+                action:SetAnchoredPosition(x, y)
             end
         end
         show_action("Reward", "RewardLabel", preparing and count > 0)
@@ -469,8 +471,8 @@ end
 -- These controls belong to the reward shelf during preparation. In the unified
 -- view they can be reused when the shelf is hidden, without adding hit areas.
 local replay_controls = {
-    {name = "Reward", caption = "下一条", x = -413},
-    {name = "RewardNext", caption = "跳过回放", x = -230},
+    {name = "Reward", x = 0},
+    {name = "RewardNext", x = 164},
 }
 local function show_replay_controls(enabled)
     if offers == root then return end
@@ -478,13 +480,14 @@ local function show_replay_controls(enabled)
         local caption = child(button.name .. "Label")
         if enabled and not button.positions then
             button.positions = {}
+            button.shop_caption = caption.text
             for _, suffix in ipairs({"", "Face", "Label"}) do
                 local control = child(button.name .. suffix)
                 local x, y = control:GetAnchoredPosition()
                 local width, height = control:GetSizeDelta()
                 button.positions[suffix] = {x, y, width, height}
-                control:SetAnchoredPosition(button.x, -234)
-                control:SetSizeDelta(166, 82)
+                control:SetAnchoredPosition(button.x, 218)
+                control:SetSizeDelta(144, 82)
             end
         elseif not enabled and button.positions then
             for suffix, position in pairs(button.positions) do
@@ -492,9 +495,13 @@ local function show_replay_controls(enabled)
                 control:SetAnchoredPosition(position[1], position[2])
                 control:SetSizeDelta(position[3], position[4])
             end
+            if caption.text == button.battle_caption then caption.text = button.shop_caption end
             button.positions = nil
         end
-        if enabled then caption.text = button.caption end
+        if enabled then
+            button.battle_caption = button.name == "Reward" and replay_view.speed_caption(playback.speed) or "跳过"
+            caption.text = button.battle_caption
+        end
         show_action(button.name, button.name .. "Label", enabled or preparing)
     end
 end
@@ -531,8 +538,8 @@ local function show_replay()
         end
     end
     if not playback then
-        replay_status.text = "等待战斗回放"
-        replay_label.text = "回放"
+        replay_status.text = portrait and "战斗即将开始" or "等待战斗回放"
+        replay_label.text = portrait and "继续" or "回放"
         return
     end
     local event = replay_view.event(playback.events, playback.position, native_catalog)
@@ -548,7 +555,7 @@ local function show_replay()
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                 if badges then
-                    display = definition.name .. ((unit.shield or 0) > 0 and ("\n盾 " .. unit.shield) or "")
+                    display = definition.name .. "\n" .. pet_presentation.level(unit)
                 elseif portrait then
                     display = replay_view.stats(definition.name, unit.attack, unit.health, unit.shield)
                 else
@@ -559,16 +566,21 @@ local function show_replay()
             end
             local path = (side == 1 and "Own" or "Enemy") .. slot
             board_root:GetChild(path).text = display
-            if replay_badges then badges.paint((side - 1) * rules.team_size + slot, unit and unit.attack, unit and unit.health) end
+            if replay_badges then
+                badges.paint((side - 1) * rules.team_size + slot, unit and unit.attack, unit and unit.health,
+                    nil, false, unit and unit.shield)
+            end
             if portrait then
                 local attacking = unit and event.type == "attack" and event.uid == unit.uid and event.side == key
                 portrait.replay(path, unit and unit.id, side == 2, attacking, true)
             end
         end
     end
-    replay_status.text = string.format("第 %d 轮  %d/%d  %s", playback.round,
-        playback.position, #playback.events, replay_view.describe(event, native_catalog))
-    replay_label.text = playback.playing and "暂停" or playback.position == #playback.events and "重播" or "继续"
+    local description = replay_view.describe(event, native_catalog)
+    replay_status.text = portrait and description or string.format("第 %d 轮  %d/%d  %s",
+        playback.round, playback.position, #playback.events, description)
+    replay_label.text = portrait and replay_view.toggle_caption(playback.playing, playback.position == #playback.events)
+        or playback.playing and "暂停" or playback.position == #playback.events and "重播" or "继续"
 end
 
 local function decode_formation(wire)
@@ -591,18 +603,18 @@ local function receive_replay(_, parameters)
     local ok, result = pcall(battle.resolve, left, right, seed, native_catalog)
     local codes = {win = 1, loss = 2, draw = 3}
     if not ok or result.status ~= "resolved" or codes[result.outcome] ~= outcome then
-        replay_status.text = "回放校验失败"
+        replay_status.text = portrait and "暂时无法显示本轮战斗" or "回放校验失败"
         print(string.format("AUTO_PETS_M2 replay_mismatch round=%d", battle_round))
         return
     end
-    playback = {round = battle_round, events = result.events, position = 1, elapsed = 0, playing = true}
+    playback = {round = battle_round, events = result.events, position = 1, elapsed = 0, playing = true, speed = 1}
     print(string.format("AUTO_PETS_M2 replay round=%d events=%d outcome=%d", battle_round, #result.events, outcome))
     show_replay()
 end
 
-local function seek_replay(to_end)
+local function skip_battle()
     if not playback or preparing or offers == root then return end
-    playback.position = to_end and #playback.events or math.min(playback.position + 1, #playback.events)
+    playback.position = #playback.events
     playback.elapsed, playback.playing = 0, false
     show_replay()
 end
@@ -650,10 +662,14 @@ bind("Merge", function()
     end
 end)
 bind("Reward", function()
-    if preparing then acquire(reward_index, true) else seek_replay(false) end
+    if preparing then acquire(reward_index, true)
+    elseif playback and offers ~= root and playback.position < #playback.events then
+        playback.speed = replay_view.next_speed(playback.speed)
+        show_replay()
+    end
 end, nil, "reward", function() return reward_index end)
 bind("RewardNext", function()
-    if not preparing then seek_replay(true); return end
+    if not preparing then skip_battle(); return end
     local view = editable_market()
     if view and #view.rewards > 1 then
         reward_index = reward_index % #view.rewards + 1
@@ -709,9 +725,10 @@ draw_status = function()
     local message = status_message
     if awaiting_settlement and playback and playback.round == round then
         if playback.position == #playback.events then
-            message = "回放结束 · 等待结算"
+            message = portrait and "战斗结束 · 等待结算" or "回放结束 · 等待结算"
         else
-            message = playback.playing and "正在播放本轮战斗" or "本轮回放已暂停"
+            message = portrait and (playback.playing and "战斗中" or "已暂停")
+                or (playback.playing and "正在播放本轮战斗" or "本轮回放已暂停")
         end
     end
     local suffix = seconds and string.format(" · 余 %d 秒", math.ceil(seconds)) or ""
@@ -752,7 +769,7 @@ local function receive_snapshot(_, parameters)
         if phase == 0 then
             message = is_ready and "已准备，等待对手" or "双方已入场"
         elseif phase == 3 then
-            message = "双方已锁定 · 战斗计算中"
+            message = portrait and "战斗即将开始" or "双方已锁定 · 战斗计算中"
         else
             local round_result = outcome == 3 and "本轮平局" or outcome == seat and "本轮获胜" or "本轮失利"
             message = round_result .. (continued and " · 已确认" or " · 确认下一轮")
@@ -828,10 +845,10 @@ function OnUpdate(dt)
         draw_status()
     end
     if not playback or not playback.playing then return end
-    playback.elapsed = playback.elapsed + dt
-    if playback.elapsed < replay_view.duration(playback.events[playback.position]) then return end
-    playback.elapsed = 0
-    playback.position = playback.position + 1
+    local old_position = playback.position
+    playback.position, playback.elapsed = replay_view.advance_clock(old_position, playback.elapsed, dt,
+        playback.speed, #playback.events, function(index) return replay_view.duration(playback.events[index]) end)
+    if playback.position == old_position then return end
     if playback.position == #playback.events then playback.playing = false end
     show_replay()
 end

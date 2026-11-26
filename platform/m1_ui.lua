@@ -158,6 +158,40 @@ local function card_stats(path, attack, health, boosted)
     end
 end
 
+local combat_guard_layouts = {}
+local function paint_combat_guard(path, visible)
+    if not shared_portraits then return end
+    local track = control(path .. "/HealthTrack")
+    local life = control(path .. "/LifeValue")
+    local layout = combat_guard_layouts[path]
+    if not layout then
+        local x, y = life:GetAnchoredPosition()
+        local width, height = life:GetSizeDelta()
+        layout = {x = x, y = y, width = width, height = height, enabled = false, track_colour = track.imageColor}
+        combat_guard_layouts[path] = layout
+    end
+    if layout.enabled == visible then return end
+    layout.enabled = visible
+    track:SetImage(Enum.ImageSource.StaticReference, visible and 102036 or 100001)
+    track.imageColor = visible and colour(0x315a6d) or layout.track_colour
+    track:SetAnchoredPosition(visible and layout.x - 20 or 0, -71)
+    track:SetSizeDelta(visible and 19 or 88, visible and 19 or 4)
+    life:SetAnchoredPosition(layout.x, visible and layout.y - 9 or layout.y)
+    life:SetSizeDelta(layout.width, visible and 54 or layout.height)
+end
+
+local function combat_level(unit, mirrored)
+    local side = mirrored and "enemy" or "player"
+    local team = mirrored and state.opponent and state.opponent.team or state.shop.team
+    for slot, original in ipairs(team) do
+        local uid = original.uid and (side .. ":" .. original.uid) or (side .. ":slot:" .. slot)
+        if uid == unit.uid and original.id == unit.id and original.level == unit.level then
+            return pet_presentation.level(original, rules.level_xp)
+        end
+    end
+    return pet_presentation.level(unit)
+end
+
 local function team_card(path, unit, selected, effect)
     local mirrored = selected == nil
     local preparing = state.phase == "preparation"
@@ -165,8 +199,10 @@ local function team_card(path, unit, selected, effect)
     local rim = selected and 0xa86214 or not unit and 0xa28654 or mirrored and 0x976b43 or 0x819254
     if effect then background, rim = effect.face, effect.ink end
     local health_path = path .. "/Health"
+    local shielding = shared_portraits and not preparing and unit ~= nil and (unit.shield or 0) > 0
+    paint_combat_guard(path, shielding)
     show(path .. "/HealthTrack", unit ~= nil and not preparing)
-    show(health_path, unit ~= nil and unit.health > 0 and not preparing)
+    show(health_path, unit ~= nil and unit.health > 0 and not preparing and not shielding)
     if not mirrored then
         show(path .. "/XPPaper", preparing and unit ~= nil)
         if preparing and unit then
@@ -190,8 +226,14 @@ local function team_card(path, unit, selected, effect)
     local pet = rules_data.pet_by_id[unit.id] or rules_data.token_by_id[unit.id]
     card(path, pet.name, selected, unit.id, background, rim, mirrored)
     card_stats(path, unit.attack, unit.health)
-    local tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield
-        or (not preparing and "L" .. unit.level or ""))
+    local tag
+    if shared_portraits and not preparing then
+        tag = combat_level(unit, mirrored)
+        if shielding then text(path .. "/LifeValue", string.format("%d\n<size=14>%d</size>", unit.health, unit.shield)) end
+    else
+        tag = effect and effect.label or ((unit.shield or 0) > 0 and "盾 " .. unit.shield
+            or (not preparing and "L" .. unit.level or ""))
+    end
     text(path .. "/Tag", tag, effect and effect.ink or 0x315a6d)
 
     local maximum = unit.max_health or unit.health
@@ -482,6 +524,8 @@ local function draw(refresh)
     end
     draw_battle_cue(event, elapsed, first_cue)
     local title = primary[state.phase]
+    local replaying = not preparing and replay_pending()
+    show("Primary", not shared_portraits or not replaying)
     local hint = "拖动商品或队员到阵容，也可点击选择"
     if preparing then
         if #state.shop.team == 0 then
@@ -513,32 +557,52 @@ local function draw(refresh)
             show("Shop/RewardNext", #state.shop.rewards > 1)
             if selling then
                 local x = control("Team" .. picked.index):GetAnchoredPosition()
-                control("Shop/Sell"):SetAnchoredPosition(x, 146)
+                local control = control("Shop/Sell")
+                local _, y = control:GetAnchoredPosition()
+                control:SetAnchoredPosition(x, y)
             end
             if freezing then
                 local x = control("Shop/" .. (picked.kind == "pet" and "Pet" or "Food") .. picked.index):GetAnchoredPosition()
-                control("Shop/Freeze"):SetAnchoredPosition(x, -118)
+                local bubble = control("Shop/Freeze")
+                local _, y = bubble:GetAnchoredPosition()
+                bubble:SetAnchoredPosition(x, y)
                 text("Shop/Freeze/Title", freezing.frozen and "解冻" or "冻结")
+            end
+            if buying then
+                local is_reward = picked.kind == "reward"
+                local x = control(is_reward and "Shop/Reward" or "Shop/Pet" .. picked.index):GetAnchoredPosition()
+                local button = control("Shop/Buy")
+                local _, y = button:GetAnchoredPosition()
+                button:SetAnchoredPosition(x + (is_reward and -176 or 176), y)
             end
         end
     else
-        local replaying = replay_pending()
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
         local accent = replaying and 0x286452 or accents[battle.outcome]
-        text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
-        text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events,
-            replay_view.describe(event, rules_data, battle_sides)))
-        text("Battle/Auto/Title", playing and "暂停回放" or "继续回放")
-        text("Battle/Fast/Title", string.format("速度：%d 倍", replay_speed))
+        local description = replay_view.describe(event, rules_data, battle_sides)
+        if shared_portraits then
+            text("Battle/Outcome", replaying and (playing and "战斗中" or "已暂停") or headline, accent)
+            text("Battle/Event", description)
+            text("Battle/Auto/Title", replay_view.toggle_caption(playing, false))
+            text("Battle/Replay/Title", "跳过")
+            text("Battle/Rewatch/Title", "重看")
+        else
+            text("Battle/Outcome", replaying and "战斗回放" or headline, accent)
+            text("Battle/Event", string.format("%d / %d   %s", event_index, #battle.events, description))
+            text("Battle/Auto/Title", playing and "暂停回放" or "继续回放")
+        end
+        text("Battle/Fast/Title", replay_view.speed_caption(replay_speed))
         show("Battle/Replay", replaying)
         show("Battle/Auto", replaying)
         show("Battle/Fast", replaying)
         show("Battle/Rewatch", replay_complete and not reviewing)
         show("Battle/NewSeed", state.phase == "ended" and not reviewing)
-        control("Battle/Rewatch"):SetAnchoredPosition(state.phase == "ended" and -111 or 0, -33)
+        local rewatch = control("Battle/Rewatch")
+        local _, y = rewatch:GetAnchoredPosition()
+        rewatch:SetAnchoredPosition(state.phase == "ended" and -111 or 0, y)
         if replaying then
             title = "跳过回放"
-            hint = "可暂停、调整速度或跳到本轮结果"
+            hint = shared_portraits and "" or "可暂停、调整速度或跳到本轮结果"
         elseif state.phase == "ended" then
             hint = "可重看最后一场战斗，或开始新一局"
         else
@@ -751,7 +815,7 @@ end
 
 local function toggle_speed()
     if not replay_pending() then return end
-    replay_speed = replay_speed == 1 and 3 or 1
+    replay_speed = replay_view.next_speed(replay_speed)
     draw(false)
 end
 
@@ -880,16 +944,17 @@ function OnUpdate(dt)
     if not view_enabled or not playing or menu_open then return end
     local battle = state.battle
     local event = replay_view.event(battle.events, event_index, rules_data)
-    local delay = replay_view.duration(event)
-    elapsed = elapsed + dt * replay_speed
-    if elapsed < delay then
+    local position
+    position, elapsed = replay_view.advance_clock(event_index, elapsed, dt, replay_speed, #battle.events,
+        function(index) return replay_view.duration(battle.events[index]) end)
+    if position == event_index then
         if event.type == "attack" or event.type == "damage" or event.type == "shield" then
             local cue = replay_view.cues(event, replay_view.board(battle.events, event_index))
             draw_battle_cue(event, elapsed, cue)
         end
         return
     end
-    event_index, elapsed = event_index + 1, 0
+    event_index = position
     local upcoming = replay_view.event(battle.events, event_index, rules_data)
     if upcoming.type == "damage" then
         if (upcoming.health_loss or upcoming.amount) > 0 then play_sound(50936)
@@ -1017,6 +1082,7 @@ local function release_view()
     root, session, state = nil, nil, nil
     press, selection, message, pending_drop, hovered = nil, nil, nil, nil, nil
     listeners, controls, portrait = {}, {}, nil
+    combat_guard_layouts = {}
     drop_targets = {}
     visibility, displayed_text, displayed_colour = {}, {}, {}
     preparing_layout, lunging = nil, nil
@@ -1052,7 +1118,7 @@ function OnStart(view_root, back_to_game_menu)
     bind_button("Shop/Merge", merge)
     bind_button("Shop/Reroll", function() command("reroll") end)
     bind_button("Shop/RewardNext", next_reward)
-    bind_button("Battle/Replay", replay)
+    bind_button("Battle/Replay", shared_portraits and function() advance() end or replay)
     bind_button("Battle/Auto", toggle_replay)
     bind_button("Battle/Fast", toggle_speed)
     bind_button("Battle/Rewatch", rewatch)

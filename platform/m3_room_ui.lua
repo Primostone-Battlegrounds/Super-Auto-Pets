@@ -15,7 +15,7 @@ local render_standings, panel, portrait, badges, unified_layout
 local shop_drag
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
-local replay_playing, replay_elapsed = false, 0
+local replay_playing, replay_elapsed, replay_speed = false, 0, 1
 local token = 0
 local source_ready = false
 
@@ -207,7 +207,9 @@ local function paint_shop()
         visible("Shop/Sell", not match.ready and picked ~= nil)
         if picked then
             local x = object("Shop/Team" .. picked):GetAnchoredPosition()
-            object("Shop/Sell"):SetAnchoredPosition(x, 39)
+            local action = object("Shop/Sell")
+            local _, y = action:GetAnchoredPosition()
+            action:SetAnchoredPosition(x, y)
         end
         text("Shop/Reroll/Text", shop_drag.waiting() and "取消拖放"
             or string.format("刷新 · %d 金 · %s", native_catalog.rules.reroll_cost, pet_presentation.tier(preview.tier)))
@@ -217,17 +219,28 @@ end
 local function paint_battle()
     local frame = frame_round == match.round and frames[frame_index]
     local has_frame = frame and (frame.left == match.seat or frame.right == match.seat) or false
-    for _, name in ipairs({"Previous", "Forward", "Follow", "Ally", "Enemy"}) do
+    local canonical = has_frame and frame.event ~= nil
+    local in_progress = canonical and frame_index < #frames
+    for _, name in ipairs({"Ally", "Enemy"}) do
         visible("Replay/" .. name, has_frame)
     end
-    visible("Replay/Auto", has_frame and frame.event ~= nil)
+    visible("Replay/Previous", has_frame and not unified_layout)
+    visible("Replay/Forward", has_frame and (not unified_layout or in_progress))
+    visible("Replay/Follow", has_frame and (not unified_layout or in_progress))
+    visible("Replay/Auto", canonical)
     if badges then
         visible("Replay/OwnFront", has_frame)
         visible("Replay/EnemyFront", has_frame)
     end
-    if has_frame and frame.event then
-        text("Replay/Auto/Text", replay_playing and "暂停" or frame_index == #frames and "重播" or "继续")
-        text("Replay/Follow/Text", frame.event and "跳过回放" or "追到最新")
+    if canonical then
+        if unified_layout then
+            text("Replay/Auto/Text", replay_view.toggle_caption(replay_playing, not in_progress))
+            text("Replay/Forward/Text", replay_view.speed_caption(replay_speed))
+            text("Replay/Follow/Text", "跳过")
+        else
+            text("Replay/Auto/Text", replay_playing and "暂停" or frame_index == #frames and "重播" or "继续")
+            text("Replay/Follow/Text", "跳过回放")
+        end
     end
     if not has_frame then
         if badges then badges.hide() end
@@ -239,7 +252,7 @@ local function paint_battle()
             elseif match.phase == 5 then result = "本局已结束"
             elseif match.phase == 6 then result = "计算名次"
             elseif opponent == 0 then result = "本轮轮空"
-            else result = "等待服务端战斗画面" end
+            else result = unified_layout and "战斗即将开始" or "等待服务端战斗画面" end
         end
         text("Replay/RoundText", result)
         for slot = 1, 5 do
@@ -270,16 +283,16 @@ local function paint_battle()
         for side = 0, 1 do
             local name = side == allied_side and "Own" or "Enemy"
             local display, id, attacking = badges and "" or "空位", nil, false
-            local attack, life
+            local attack, life, shield
             if frame.teams then
                 local key = side == 0 and "player" or "enemy"
                 local unit = frame.teams[key][slot]
                 if unit then
-                    id, attack, life = unit.id, unit.attack, unit.health
+                    id, attack, life, shield = unit.id, unit.attack, unit.health, unit.shield
                     local def = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                     local event = frame.event
                     if portrait then
-                        display = badges and def.name .. ((unit.shield or 0) > 0 and ("\n盾 " .. unit.shield) or "")
+                        display = badges and def.name .. "\n" .. pet_presentation.level(unit)
                             or replay_view.stats(def.name, unit.attack, unit.health, unit.shield)
                         attacking = event and event.type == "attack" and event.uid == unit.uid and event.side == key
                     else
@@ -292,9 +305,9 @@ local function paint_battle()
                 local offset = (side * 5 + (head + slot - 1) % 5) * 6 + 1
                 local item = fighters[board[offset]] or pets[board[offset]]
                 if item then
-                    id, attack, life = item.id, board[offset + 1], board[offset + 2]
+                    id, attack, life, shield = item.id, board[offset + 1], board[offset + 2], board[offset + 4]
                     if badges then
-                        display = item.name .. (board[offset + 4] > 0 and ("\n盾 " .. board[offset + 4]) or "")
+                        display = item.name .. "\n" .. pet_presentation.level({level = board[offset + 3]})
                     elseif portrait then
                         display = replay_view.stats(item.name, board[offset + 1], board[offset + 2], board[offset + 4])
                     else
@@ -304,12 +317,13 @@ local function paint_battle()
                 end
             end
             text("Replay/" .. name .. slot, display)
-            if badges then badges.paint(name == "Own" and slot or 5 + slot, attack, life) end
+            if badges then badges.paint(name == "Own" and slot or 5 + slot, attack, life, nil, false, shield) end
             if portrait then portrait.replay(name .. slot, id, name == "Enemy", attacking, true) end
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
-    text("Replay/Event", frame.event and replay_view.describe(frame.event, native_catalog, sides) or "服务端战斗快照")
+    text("Replay/Event", frame.event and replay_view.describe(frame.event, native_catalog, sides)
+        or unified_layout and "" or "服务端战斗快照")
     local result
     if frame.outcome == 1 or frame.outcome == 2 then
         result = frame.outcome == allied_side + 1 and "本轮获胜" or "本轮落败"
@@ -318,12 +332,20 @@ local function paint_battle()
     else
         result = "自动战斗"
     end
-    text("Replay/RoundText", string.format("%s · 对手席位 %d\n回放 %d / %d",
-        result, opposing_seat, frame_index, #frames))
+    if unified_layout then
+        if in_progress then result = replay_playing and "战斗中" or "已暂停"
+        elseif frame.outcome == 0 then result = "战斗中"
+        elseif frame.outcome == 4 then result = "本轮中止" end
+        text("Replay/RoundText", string.format("%s · 对手席位 %d", result, opposing_seat))
+    else
+        text("Replay/RoundText", string.format("%s · 对手席位 %d\n回放 %d / %d",
+            result, opposing_seat, frame_index, #frames))
+    end
 end
 
 local function draw_status()
     local label = phase_names[match.phase] or "等待房间"
+    if unified_layout and match.phase == 3 then label = "战斗中" end
     if match.round > 0 then label = label .. (" · 第 " .. match.round .. " 轮") end
     if seconds then label = label .. string.format(" · 余 %d 秒", math.ceil(seconds)) end
     text("Status", label)
@@ -465,7 +487,7 @@ local function receive_replay(_, values)
             teams = board, event = event}
     end
     frames, frame_round, frame_index, following, canonical_round = resolved, round, 1, false, round
-    replay_playing, replay_elapsed = #resolved > 1, 0
+    replay_playing, replay_elapsed, replay_speed = #resolved > 1, 0, 1
     print(string.format("AUTO_PETS_M3 replay round=%d events=%d outcome=%d", round, #result.events, outcome))
     if match.round == round and match.phase >= 3 then paint_battle() end
 end
@@ -561,7 +583,7 @@ end
 
 local function scrub(offset)
     if not match or frame_round ~= match.round or #frames == 0 then return end
-    replay_playing, replay_elapsed = false, 0
+    replay_playing, replay_elapsed, replay_speed = false, 0, 1
     following = offset == 0
     frame_index = following and #frames or math.min(#frames, math.max(1, frame_index + offset))
 end
@@ -655,7 +677,14 @@ function OnStart(view_root, painter, badge_pool)
         if editable() and #preview.rewards > 1 then reward = reward % #preview.rewards + 1 end
     end)
     button("Replay/Previous", function() scrub(-1) end)
-    button("Replay/Forward", function() scrub(1) end)
+    button("Replay/Forward", function()
+        if unified_layout then
+            local frame = frames[frame_index]
+            if frame and frame.event and frame_index < #frames then replay_speed = replay_view.next_speed(replay_speed) end
+        else
+            scrub(1)
+        end
+    end)
     button("Replay/Auto", function()
         local frame = frames[frame_index]
         if not match or frame_round ~= match.round or not frame or not frame.event then return end
@@ -688,10 +717,11 @@ function OnUpdate(dt)
     if not replay_playing or not match or match.phase < 3 or frame_round ~= match.round then return end
     local frame = frames[frame_index]
     if not frame or not frame.event then return end
-    replay_elapsed = replay_elapsed + dt
-    if replay_elapsed < replay_view.duration(frame.event) then return end
-    replay_elapsed = 0
-    frame_index = math.min(#frames, frame_index + 1)
+    local position
+    position, replay_elapsed = replay_view.advance_clock(frame_index, replay_elapsed, dt,
+        replay_speed, #frames, function(index) return replay_view.duration(frames[index].event) end)
+    if position == frame_index then return end
+    frame_index = position
     replay_playing = frame_index < #frames
     paint_battle()
 end
