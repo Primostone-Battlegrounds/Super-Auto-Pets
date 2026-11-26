@@ -6,21 +6,21 @@ local function number(text)
     return text and math.tointeger(tonumber(text))
 end
 
-local seed, difficulty, use_release
+local seed, difficulty, profile
 for _, option in ipairs(arg) do
-    if option == "--release" and not use_release then
-        use_release = true
+    if (option == "--release" or option == "--expanded") and not profile then
+        profile = option:sub(3)
     elseif option == "--beginner" and not difficulty then
         difficulty = "beginner"
     elseif not seed and number(option) then
         seed = number(option)
     else
-        io.stderr:write("用法  lua scripts/play.lua [整数种子] [--release] [--beginner]\n")
+        io.stderr:write("用法  lua scripts/play.lua [整数种子] [--release|--expanded] [--beginner]\n")
         os.exit(1)
     end
 end
 
-local data = use_release and require("autopets.release_data") or require("autopets.data")
+local data = require("autopets.catalog")(profile)
 local rules = data.rules
 local game = run.new(seed or os.time(), difficulty, data)
 

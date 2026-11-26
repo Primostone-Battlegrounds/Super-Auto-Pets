@@ -12,7 +12,7 @@
 
 ## 开发入口
 
-- 从仓库根目录运行 `lua5.4 scripts/play.lua 7 --release --beginner` 进入六阶练习，输入 `help` 查看操作。省略选项可进入兼容目录和默认难度。
+- 从仓库根目录运行 `lua5.4 scripts/play.lua 7 --expanded --beginner` 进入 60 只六阶练习，输入 `help` 查看操作。 [统一候选](platform/EXPANDED-GAME.md)
 - 安装 Backlog.md 1.53.0 后运行 `LUA=lua5.4 sh scripts/check.sh` 进行回归。
 - 用 `lua5.4 -E scripts/audit-room.lua 32 release host` 复验八席六阶权威宿主。覆盖 1 至 8 个真人席位，按输出报告核对排名、回放和消息数。[八席负载记录](docs/design/ROOM-LOAD.md)
 

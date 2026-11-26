@@ -9,6 +9,7 @@ const identityKeys = [
   'sourceRevision', 'sha256', 'gameVersion', 'designVersion', 'designFingerprint',
   'originalVersion', 'originalVersionVerification',
 ];
+const launchPetTierCounts = [10, 10, 10, 10, 10, 10];
 const requiredEvidence = {
   rules: ['dual-lua-run'],
   reference: ['source-trajectory', 'design-review'],
@@ -28,10 +29,12 @@ const pending = {
 };
 
 function identity(build) {
-  return Object.fromEntries(identityKeys.map(key => {
+  const candidate = Object.fromEntries(identityKeys.map(key => {
     assert.ok(Object.hasOwn(build, key), `Missing acceptance identity: ${key}`);
     return [key, build[key]];
   }));
+  if (Object.hasOwn(build, 'petTierCounts')) candidate.petTierCounts = build.petTierCounts;
+  return candidate;
 }
 
 function sha256(bytes) {
@@ -94,6 +97,12 @@ export function checkAcceptance(packageDir, build, report, { requireGo = false }
   }
 
   if (build.designStatus !== 'Active') unsatisfied.unshift('designActivation');
+  if (build.artPreview) unsatisfied.unshift('artPreview');
+  const { petTierCounts } = build;
+  if (!Array.isArray(petTierCounts) || petTierCounts.length !== launchPetTierCounts.length ||
+      !launchPetTierCounts.every((count, index) => petTierCounts[index] === count)) {
+    unsatisfied.unshift('launchPetPool');
+  }
   if (requireGo) assert.deepEqual(unsatisfied, [], 'Candidate still has unsatisfied gate layers');
   return { verdict: unsatisfied.length ? 'NO-GO' : 'GO', unsatisfied };
 }

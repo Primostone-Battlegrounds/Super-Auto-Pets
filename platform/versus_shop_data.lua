@@ -2,8 +2,7 @@ package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
 local profile = arg[2] or "compatibility"
-assert(profile == "compatibility" or profile == "release", "unknown shop profile")
-local data = profile == "release" and require("autopets.release_data") or require("autopets.data")
+local data = require("autopets.catalog")(profile)
 local duel = require("autopets.duel")
 local rng = require("autopets.rng")
 local shop = require("autopets.shop")
@@ -147,7 +146,7 @@ local function apply(reference, action, from, to, flag)
     row("apply", action, from, to, flag, accepted, packed(reference))
 end
 
-if profile == "release" then
+if profile ~= "compatibility" then
     -- Start the native release sample with a legal tier-six shelf and three pets.
     local function stocked(seed)
         local candidate = shop.new(seed, data)

@@ -89,6 +89,13 @@ local function arrange_portraits(preparing)
     lunging = nil
 end
 
+local function clear_fitted_practice()
+    if not fitted_portrait_template then return end
+    for index = 1, rules.team_size do clear_fitted_portrait(control("Team" .. index .. "/Portrait")) end
+    for _, path in ipairs(shared_portrait_homes) do clear_fitted_portrait(control(path .. "/Portrait")) end
+    clear_fitted_portrait(control("Shop/Reward/Portrait"))
+end
+
 local function clear_drag()
     if not drag then return end
     local picture, parent = drag.picture, drag.parent
@@ -148,7 +155,7 @@ local function card(path, title, selected, id, face, rim, mirrored)
     control(path .. "/Rim").imageColor = colour(rim)
     if drag and drag.parent == control(path) then title = "拖动中" end
     if title then text(path .. "/Name", title) else show(path .. "/Name", false) end
-    portrait(path .. "/Portrait", id, mirrored)
+    portrait(path .. "/Portrait", id, mirrored, path:match("^Shop/") and 1.5 or 1)
     if selected ~= nil then show(path .. "/Selected", selected) end
 end
 
@@ -968,6 +975,7 @@ local function release_view()
     view_enabled = false
     clear_drag()
     restore_portraits()
+    clear_fitted_practice()
     set_playing(false)
     stop_sound()
     for hit, bound in pairs(listeners) do
@@ -988,14 +996,14 @@ function OnStart(view_root, back_to_game_menu)
     if session then release_view() end
     root, view_enabled = view_root or script.object, true
     if not view_root then set_visual_plates(root) end
-    shared_portraits = view_root ~= nil
+    shared_portraits = view_root ~= nil or fitted_portraits
     portrait = bind_portrait(portrait_control, 1.68)
     menu_open, has_started, confirming_restart = true, false, nil
     difficulty = "standard"
     muted, replay_speed = false, 1
     reset_view()
     for id, layers in pairs(art) do
-        assert(#layers <= portrait_layers, "portrait exceeds the native pool: " .. id)
+        assert(#layers <= fitted_portrait_limit, "portrait exceeds the native pool: " .. id)
     end
     local seed = assert(math.tointeger(script:GetParam("seed")), "seed must be an integer")
     session = run.new(seed, difficulty, rules_data)
@@ -1059,6 +1067,7 @@ function OnDisable()
     view_enabled = false
     clear_drag()
     restore_portraits()
+    clear_fitted_practice()
     preparing_layout = nil
     press, pending_drop = nil, nil
     sync_updates()

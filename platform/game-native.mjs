@@ -73,10 +73,22 @@ function gated(source, anchors, mode) {
   return source;
 }
 
-export function nativeGame(lua53, lua54, parse, ids) {
-  const profile = 'release';
+export function nativeGame(lua53, lua54, parse, ids, artPreview, profile = 'release') {
+  assert.ok(profile === 'release' || profile === 'expanded');
   const shop = nativeShop(lua53, lua54, profile);
   const battle = nativeBattle(lua53, lua54, parse, profile);
+  const tiers = shop.petTierCounts.flatMap((count, index) => Array(count).fill(index + 1));
+  assert.equal(shop.catalog.pet.length, tiers.length);
+  const catalog = shop.catalog.pet.map((pet, index) => {
+    const id = battle.ids[index];
+    assert.ok(id);
+    const name = artPreview?.animals[id]?.name ?? artPreview?.commonNames.pet_by_id?.[id] ?? pet.name;
+    return { ...pet, id, name, tier: tiers[index] };
+  });
+  assert.equal(new Set(catalog.map(pet => pet.id)).size, catalog.length);
+  if (artPreview) {
+    artPreview = { ...artPreview, catalog };
+  }
   const room = nativeRoom(lua53, lua54, parse, ids.room, ids.roomFight, 1n, 1, undefined, profile);
   const [duel, duelFight] = duelGraphs(shop, battle, ids.duel, ids.duelFight, room.settings.STARTING_LIVES, true);
   const roomSource = gated(room.roomSource, [
@@ -87,7 +99,7 @@ export function nativeGame(lua53, lua54, parse, ids) {
   ], 2);
   const lobbySource = read('./game_lobby.ts').replace('id: 1073741825,', `id: ${ids.lobby},`);
   const clientLayout = layout(shop.rules);
-  const source = bundleRun(parse, true, convert => {
+  const source = bundleRun(parse, profile, convert => {
     const wrap = (name, code, callbacks, argument = '') => [
       `local function ${name}(${argument})`,
       `local ${Object.values(callbacks).join(', ')}`,
@@ -101,15 +113,22 @@ export function nativeGame(lua53, lua54, parse, ids) {
     const duelUi = duelClientSource(convert('./m2_probe.lua'), shop)
       .replace('local root, offers = script.object, script.object',
         'local root, offers = view_root, view_root:GetChild("MarketOffers")');
-    const duel = wrap('duel_view', duelUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot' }, 'view_root');
+    const duel = wrap('duel_view', duelUi, {
+      start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot', redraw: 'redraw',
+    }, 'view_root');
     const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
-    const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
+    const versus = wrap('room_view', roomUi, {
+      start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh', redraw: 'redraw',
+    });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
-  }, clientLayout);
+  }, clientLayout, artPreview);
+  assert.ok(Buffer.byteLength(source) <= 400_000, 'Client Lua exceeds GIL authoring limit');
   parse(source, { luaVersion: '5.3' });
   return {
-    layout: clientLayout, source, roomSettings: room.settings,
+    layout: clientLayout, source, roomSettings: room.settings, artPreview, profile,
+    ...(profile === 'expanded' && { expanded: { catalog, tokenCount: battle.ids.length - catalog.length } }),
     shopRules: shop.rules, shopLevelThresholds: shop.levelThresholds, stockBaseLength: shop.start[0].length,
+    petTierCounts: shop.petTierCounts,
     graphs: [
       { graphId: ids.lobby, code: lobbySource }, { graphId: ids.duel, code: duelSource },
       { graphId: ids.duelFight, code: duelFight }, { graphId: ids.room, code: roomSource },

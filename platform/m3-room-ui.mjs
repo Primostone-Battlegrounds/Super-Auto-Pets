@@ -145,28 +145,17 @@ function roomLayout(unified) {
 export const m3RoomLayout = roomLayout(false);
 export const unifiedRoomLayout = roomLayout(true);
 
-function catalogLua(items) {
-  return Object.entries(items).map(([rawCode, value]) => {
-    const code = Array.isArray(items) ? Number(rawCode) + 1 : Number(rawCode);
-    assert.ok(Number.isInteger(code) && code > 0 && code < 10000);
-    const name = typeof value === 'string' ? value : value.name;
-    assert.ok(/^[\p{L}\p{N}_ ·（）-]+$/u.test(name));
-    const attack = value.attack ?? 0;
-    const health = value.health ?? 0;
-    assert.ok(Number.isSafeInteger(attack) && Number.isSafeInteger(health));
-    if (value.id) assert.match(value.id, /^[a-z][a-z0-9_]*$/);
-    const id = value.id ? `,id="${value.id}"` : '';
-    return `[${code}]={name="${name}",attack=${attack},health=${health}${id}}`;
+export function roomClientSource(template, { battle }) {
+  // Raw worker frames use the server's order, including battle-only tokens.
+  const fighterIds = battle.map(({ id }) => {
+    assert.match(id, /^[a-z][a-z0-9_]*$/);
+    return JSON.stringify(id);
   }).join(',');
-}
-
-export function roomClientSource(template, { pet, food, battle = pet }) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
     onlineBadgeSource,
     `local standings = (function()\n${shared}\nend)()`,
-    `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,
-    `local fighters = {${catalogLua(battle)}}`, template,
+    `local fighter_ids = {${fighterIds}}`, template,
   ].join('\n\n');
 }
 

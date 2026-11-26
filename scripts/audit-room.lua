@@ -7,9 +7,8 @@ local seeds = math.tointeger(tonumber(arg[1] or 128))
 local profile = arg[2] or "compatibility"
 local transport = arg[3] or "model"
 assert(seeds and seeds > 0, "seed count must be a positive integer")
-assert(profile == "compatibility" or profile == "release", "unknown content profile")
 assert(transport == "model" or transport == "host", "unknown transport")
-local catalog = profile == "release" and require("autopets.release_data") or nil
+local catalog = require("autopets.catalog")(profile)
 local room_host = transport == "host" and require("autopets.room_host") or nil
 local styles = {"guardian", "striker", "swarm"}
 
@@ -275,6 +274,7 @@ local function run_match(seed, humans, totals)
 end
 
 local suffix = (profile == "compatibility" and transport == "model") and "" or (" | " .. profile .. " | " .. transport)
+if profile == "expanded" then suffix = suffix .. " | " .. catalog.rules_hash end
 print(("eight-seat Lua audit | %d seeds per human count%s"):format(seeds, suffix))
 for humans = 1, 8 do
     collectgarbage("collect")

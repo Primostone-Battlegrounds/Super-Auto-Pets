@@ -6,8 +6,9 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { bindFaintColumns, faintArguments, nativeBattle } from '../../platform/m3-battle-opening.mjs';
+import { bindFaintColumns, bindOpeningColumns, faintArguments, nativeBattle, openingArguments } from '../../platform/m3-battle-opening.mjs';
 import { nativeShop } from '../../platform/versus-shop.mjs';
+import { gilListAudit, listLimit } from './gil-list-limits.mjs';
 
 const [checkoutArg, scratch, lua53, lua54, outputArg, profile = 'compatibility'] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua53 && lua54,
@@ -24,12 +25,14 @@ const load = createRequire(path.join(checkout, 'package.json'));
 const readTool = name => import(pathToFileURL(path.join(checkout, 'src', name)).href);
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const parse = load('luaparse').parse;
+const fullBattle = profile !== 'compatibility';
+const expanded = profile === 'expanded';
 const battle = nativeBattle(lua53, lua54, parse, profile);
 const shop = nativeShop(lua53, lua54);
 const kernel = [shop.source, battle.source].join('\n');
 
 const oracle = lua => execFileSync(lua, ['-E', 'tests/native/m3-opening-oracle.lua', profile], {
-  cwd: project, encoding: 'utf8', timeout: 10_000,
+  cwd: project, encoding: 'utf8', timeout: 10_000, maxBuffer: 16 * 1024 * 1024,
 });
 const expected = oracle(lua53);
 assert.equal(expected, oracle(lua54));
@@ -42,6 +45,8 @@ for (const row of expected.trimEnd().split('\n')) {
   else if (kind === 'case') {
     current = { seed: BigInt(fields[0]), events: [], strikes: [], strikeEvents: [] };
     fixtures.push(current);
+  } else if (kind === 'level_case') {
+    current.subject = { code: BigInt(fields[0]), level: BigInt(fields[1]), trigger: fields[2] };
   } else if (kind === 'event') {
     current.events.push([fields[0], ...fields.slice(1).map(BigInt)]);
   } else if (kind === 'input' || kind === 'board') current[kind] = fields.map(BigInt);
@@ -54,10 +59,15 @@ for (const row of expected.trimEnd().split('\n')) {
   else assert.fail(kind);
 }
 const columns = Object.values(battle.faintMetadata);
+const openingColumns = Object.values(battle.openingMetadata);
 assert.deepEqual(faintCatalog, faintCatalog.map((_, index) => columns.map(column => column[index])));
-assert.ok(columns.every(column => column.length === faintCatalog.length));
-assert.equal(faintCatalog.length, battle.openingMetadata.length / 3);
-assert.equal(fixtures.length, profile === 'release' ? 339 : 329);
+assert.ok([...columns, ...openingColumns].every(column => column.length === faintCatalog.length));
+assert.equal(fixtures.length, expanded ? 519 : fullBattle ? 339 : 329);
+const subjects = fixtures.flatMap(fixture => fixture.subject ? [fixture.subject] : []);
+const coveredLevels = subjects.map(({ code, level }) => `${code}:${level}`);
+assert.deepEqual(coveredLevels, expanded
+  ? Array.from({ length: 60 }, (_, index) => [1, 2, 3].map(level => `${index + 1}:${level}`)).flat()
+  : []);
 
 const ts = load('typescript');
 const loader = ts.transpileModule(`${kernel}\nexports.open = gstsServerOpeningState; exports.step = gstsServerOpeningStep;\n`
@@ -116,6 +126,12 @@ function eventsFromLog(log) {
 }
 for (const fixture of fixtures) {
   const board = fixture.input.slice();
+  if (fixture.subject) {
+    const { code, level, trigger } = fixture.subject;
+    const slot = trigger === 'summon' ? 6 : 0;
+    assert.equal(board[slot], code);
+    assert.equal(board[slot + 5], level);
+  }
   board[64] = -1n;
   const printed = [];
   let calls = 0;
@@ -126,7 +142,7 @@ for (const fixture of fixtures) {
   let done = false;
   for (let step = 0; !done && step < 10; step += 1) {
     calls = 0;
-    done = exports.step(tracked, board, ...columns, battle.openingMetadata, state, true);
+    done = exports.step(tracked, board, ...columns, ...openingColumns, state, true);
     peakCalls = Math.max(peakCalls, calls);
   }
   assert.ok(done);
@@ -144,7 +160,7 @@ for (const fixture of fixtures) {
       assert.equal(outcome, 0n);
       printed.length = 0;
       calls = 0;
-      outcome = exports.collide(tracked, board, ...columns, battle.openingMetadata, state, true);
+      outcome = exports.collide(tracked, board, ...columns, ...openingColumns.slice(0, 2), state, true);
       peakCollisionCalls = Math.max(peakCollisionCalls, calls);
       assert.deepEqual(active(board), active(strike.board), `strike board, seed ${fixture.seed}`);
       const events = eventsFromLog(printed);
@@ -159,7 +175,7 @@ for (const fixture of fixtures) {
   }
 }
 assert.deepEqual(eventKinds, new Set(['skill', 'damage', 'shield', 'faint', 'buff', 'summon']));
-if (profile === 'release') assert.deepEqual(reactionKinds, new Set([5n, 6n, 7n]));
+if (fullBattle) assert.deepEqual(reactionKinds, new Set([5n, 6n, 7n]));
 
 const fixture = path.join(checkout, 'tests/fixtures/editor-2026-10-26-shapes.gil');
 const fixtureHash = 'b8aa63c8e6c5c24964784842329a37adeb60d50c2f56272f6cc512907baf3706';
@@ -175,21 +191,43 @@ const service = new Service({ workspace, saveRoots: [], allowLive: false });
 const config = setPlayerCount({ mapPath: input, min: 1, max: 1 }, workspace);
 const graph = addGraph({ mapPath: config.mapPath, name: 'AP_OpeningProbe', attachTo: 'stage' }, workspace);
 const literal = values => '[' + values.map(value => value + 'n').join(', ') + ']';
-const release = profile === 'release';
-const probe = release ? fixtures.find(({ seed }) => seed === 31n) : fixtures[0];
-const probeBoard = probe.input.slice();
+const probe = fullBattle ? fixtures.find(({ seed }) => seed === 31n) : fixtures[0];
+// Exercise the same independently checked battle at high codes. The legacy release
+// probe reserves at least 60 purchase codes and five token codes without adding
+// any game content. The former interleaved list would exceed the GIL limit.
+const codeOffset = fullBattle ? Math.max(0, 65 - battle.ids.length) : 0;
+const shiftCode = code => code === 0n ? 0n : code + BigInt(codeOffset);
+function shiftBoard(source) {
+  const board = source.slice();
+  for (let index = 0; index < 60; index += 6) board[index] = shiftCode(board[index]);
+  return board;
+}
+function padColumns(metadata) {
+  return Object.fromEntries(Object.entries(metadata).map(([name, values]) => [name,
+    [...Array(codeOffset).fill(0n), ...values],
+  ]));
+}
+const probeFaints = padColumns(battle.faintMetadata);
+probeFaints.faintTarget = probeFaints.faintTarget.map((target, index) =>
+  probeFaints.faintEffect[index] === 2n ? shiftCode(target) : target);
+const probeOpening = padColumns(battle.openingMetadata);
+if (fullBattle) {
+  assert.ok(Object.values(probeOpening).every(column => column.length >= 65 && column.length <= listLimit));
+  assert.ok(Object.values(probeOpening).flat().length > listLimit);
+}
+const probeBoard = shiftBoard(probe.input);
 probeBoard[64] = -1n;
-const probeEvents = [...probe.events, ...probe.strikes.flatMap(strike => strike.events)];
-if (release) {
+const probeEvents = [...probe.events, ...probe.strikes.flatMap(strike => strike.events)]
+  .map(([kind, side, slot, code, amount]) => [kind, side, slot, shiftCode(code), amount]);
+if (fullBattle) {
   const effects = probeEvents.filter(([kind]) => kind === 'skill').map(([, , , , effect]) => effect);
   assert.ok([5n, 6n, 7n].every(effect => effects.includes(effect)));
 }
-const settle = release ? `
+const settle = fullBattle ? `
   if (f.get('colliding')) {
     const board = f.get('board');
     const opening = f.get('opening');
-    const metadata = f.get('metadata');
-    const outcome = ${battle.collisionFunction}(f, board, ${faintArguments}, metadata, opening, true);
+    const outcome = ${battle.collisionFunction}(f, board, ${faintArguments}, openingEffect, openingPower, opening, true);
     f.set('board', board);
     f.set('opening', opening);
     if (outcome !== 0n) {
@@ -200,20 +238,20 @@ const settle = release ? `
     }
     return;
   }` : '';
-const finishOpening = release ? "if (done) f.set('colliding', true);"
+const finishOpening = fullBattle ? "if (done) f.set('colliding', true);"
   : `if (done) {
     f.set('finished', true);
     f.stopTimer(event.eventSourceEntity, 'AP_OpeningProbe');
   }`;
-const source = bindFaintColumns(`import { g } from 'genshin-ts/runtime/core';
+const template = `import { g } from 'genshin-ts/runtime/core';
 ${kernel}
 g.server({
   id: ${graph.graphId},
   name: '_GSTS_AP_OpeningProbe',
   variables: {
-    board: ${literal(probeBoard)}, opening: [0n], finished: false,${release ? ' colliding: false,' : ''}
+    board: ${literal(probeBoard)}, opening: [0n], finished: false,${fullBattle ? ' colliding: false,' : ''}
     // AP_FAINT_DEFAULTS
-    metadata: ${literal(battle.openingMetadata)},
+    // AP_OPENING_DEFAULTS
   },
 })
 .on('whenEntityIsCreated', (event, f) => {
@@ -225,16 +263,17 @@ g.server({
 })
 .on('whenTimerIsTriggered', (event, f) => {
   if (event.timerName !== 'AP_OpeningProbe' || f.get('finished')) return;
-  // AP_FAINT_READS${settle}
+  // AP_FAINT_READS
+  // AP_OPENING_READS${settle}
   const board = f.get('board');
   const opening = f.get('opening');
-  const metadata = f.get('metadata');
-  const done = gstsServerOpeningStep(f, board, ${faintArguments}, metadata, opening, true);
+  const done = gstsServerOpeningStep(f, board, ${faintArguments}, ${openingArguments}, opening, true);
   f.set('board', board);
   f.set('opening', opening);
   ${finishOpening}
 });
-`, battle.faintMetadata);
+`;
+const source = bindOpeningColumns(bindFaintColumns(template, probeFaints), probeOpening);
 const handlers = new Map();
 let variables;
 const stage = {
@@ -294,7 +333,7 @@ const expectedLog = probeEvents.flatMap(event => event.map(String));
 if (probe.outcome) expectedLog.push('outcome', String(probe.outcome));
 assert.deepEqual(probeLog, expectedLog);
 const finalBoard = probe.strikes.at(-1)?.board ?? probe.board;
-assert.deepEqual(active(variables.board), active(finalBoard));
+assert.deepEqual(active(variables.board), active(shiftBoard(finalBoard)));
 
 const tool = toolRegistry(service).find(entry => entry.name === 'write_graphs');
 const result = await tool.method(tool.schema.parse({ mapPath: graph.mapPath, graphs: [{ graphId: graph.graphId, code: source }] }));
@@ -305,6 +344,9 @@ const { players } = listRespawnPoints({ mapPath });
 assert.deepEqual(players, { min: 1, max: 1 });
 assert.ok(listComponents({ mapPath, entity: 'stage' }).found.some(entry => entry.graphs.includes(graph.graphId)));
 const inspected = service.inspectMap({ mapPath });
+const nativeLists = (await gilListAudit(load))(fs.readFileSync(mapPath));
+const probeLists = nativeLists.find(entry => entry.id === graph.graphId);
+assert.ok(probeLists && probeLists.defaults.max >= Object.values(probeOpening)[0].length);
 const compiled = inspected.graphs.find(entry => entry.id === graph.graphId);
 assert.ok(compiled.nodeCount > 0 && compiled.editorCount < 3000);
 assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
@@ -312,6 +354,7 @@ assert.equal(sha256(fs.readFileSync(input)), fixtureHash);
 const evidence = {
   sourceRevision, toolRevision, fixtureHash, players, profile,
   fixtures: fixtures.length, examinedEvents: examined, checkedStrikes, checkedStrikeEvents,
+  ...(expanded ? { petLevelCases: coveredLevels.length } : {}),
   peakSimulatedCalls: peakCalls, peakCollisionCalls,
   probeSeed: String(probe.seed), probeTicks, probeEvents: probeEvents.map(event => event.map(String)),
   ...(probe.outcome ? { probeOutcome: String(probe.outcome) } : {}),

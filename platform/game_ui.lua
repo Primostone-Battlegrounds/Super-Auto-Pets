@@ -5,6 +5,7 @@ local elapsed, loading, confirm_fill = 0, nil, false
 local pending, pending_time
 local bindings = {}
 local borrowed_portraits = {}
+local online_painter
 local online_modes = {[2] = "好友 1v1", [8] = "八人吃鸡"}
 local refusal = {
     [1] = "等待好友进入关卡，两人到齐后再开局。",
@@ -49,6 +50,7 @@ local function show_section(next_section)
 end
 
 local function main_menu()
+    if online_painter then online_painter.clear() end
     show_section("Lobby")
     elapsed, confirm_fill = 0, false
     pending = nil
@@ -103,15 +105,17 @@ local function online_portraits(duel)
         end
     end
 
-    local view, draw
+    local view, draw, suspended
     local function select(next_view)
-        if view == next_view then return end
+        if suspended or view == next_view then return end
         view = next_view
         draw = bind_portrait(function(path)
-            local slot, layer = path:match("^([^/]+)/([^/]+)$")
-            return pictures[tonumber(slot)].control:GetChild(layer)
+            local slot, layer = path:match("^(%d+)/?(.*)$")
+            local picture = pictures[tonumber(slot)].control
+            return layer == "" and picture or picture:GetChild(layer)
         end, view == "shop" and (duel and 1.50 or 1.47) or 1.78)
         for _, picture in ipairs(pictures) do
+            clear_fitted_portrait(picture.control)
             set_visible(picture.control, false)
             picture.shown, picture.recess, picture.lunge = false, false, 0
             local target = picture[view]
@@ -134,6 +138,10 @@ local function online_portraits(duel)
         if recess and not picture.recess then
             draw(tostring(slot), nil, mirrored)
             local plate = picture.control:GetChild("Layer1")
+            if fitted_portraits then
+                picture.control:SetLocalScale(1, 1, 1)
+                plate:SetLocalRotation(0, 0, 0)
+            end
             plate:SetImage(Enum.ImageSource.StaticReference, 106053)
             plate.imageType = Enum.ImageType.Basic
             plate:SetAnchoredPosition(0, duel and -32 or -30)
@@ -141,7 +149,10 @@ local function online_portraits(duel)
             plate.imageColor = mirrored and Color(118, 80, 59, 255) or Color(75, 98, 59, 255)
             set_visible(plate, true)
         elseif id ~= nil then
-            draw(tostring(slot), id, mirrored)
+            local fitted_scale = view == "shop" and slot > 5 and 1.5 or 1
+            draw(tostring(slot), id, mirrored, fitted_scale)
+        elseif fitted_portrait_template then
+            draw(tostring(slot), nil, false)
         end
         picture.recess = recess
         local lunge = attacking and (mirrored and -15 or 15) or 0
@@ -155,6 +166,12 @@ local function online_portraits(duel)
     select("replay")
     return {
         view = select,
+        clear = function()
+            if not fitted_portrait_template then return end
+            for _, picture in ipairs(pictures) do clear_fitted_portrait(picture.control) end
+            view, suspended = nil, true
+        end,
+        resume = function() suspended = false end,
         shop = function(slot, id) if view == "shop" then paint(slot, id, false, false) end end,
         replay = function(slot, id, mirrored, attacking, show_empty)
             if view == "replay" then paint(replay_slots[slot], id, mirrored, attacking, show_empty) end
@@ -166,10 +183,18 @@ local function show_online()
     local duel = mode == 2
     local board = duel and "Duel" or "Room"
     show_section(board)
-    if online then online.refresh(); return end
+    if online then
+        if fitted_portrait_template then
+            online_painter.resume()
+            online.redraw()
+        end
+        online.refresh()
+        return
+    end
     online = (duel and duel_view or room_view)(root:GetChild(board))
     local badges = root:FindChild("Duel/ReplayBoard/BadgePool")
-    online.start(root:GetChild(board), online_portraits(duel), badges)
+    online_painter = online_portraits(duel)
+    online.start(root:GetChild(board), online_painter, badges)
 end
 
 local function receive_lobby(_, values)
@@ -290,6 +315,7 @@ end
 function OnDestroy()
     script:UnregisterServerSignalHandler("AP_GameLobby")
     if online then online.destroy() end
+    if online_painter then online_painter.clear(); online_painter = nil end
     for _, entry in ipairs(borrowed_portraits) do
         if entry.picture.alive and entry.parent.alive then
             entry.picture.parent = entry.parent

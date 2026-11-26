@@ -13,7 +13,7 @@ const roomMaxRounds = 40n; // AP_ROOM_MAX_ROUNDS
 const roomStartingLives = 5n; // AP_ROOM_STARTING_LIVES
 const roomRecoveryTime = 15n; // AP_ROOM_RECOVERY
 const roomCompatibilityTier = 0n; // AP_ROOM_COMPATIBILITY_TIER
-const roomCompatibilityPets = 0n; // AP_ROOM_COMPATIBILITY_PETS
+const roomEarlyPetLimit = 0n; // AP_ROOM_EARLY_PET_LIMIT
 
 const lobby = 0n;
 const opening = 1n;
@@ -74,7 +74,7 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
       const slot = (seat + attempt + probe) % shopPetSlots;
       const offer = f.getCorrespondingValueFromList(stock, shopPetsAt + slot);
       if (offer !== 0n) {
-        const upgraded = preferRelease && (offer > roomCompatibilityPets || offer < 0n - roomCompatibilityPets);
+        const upgraded = preferRelease && (offer > roomEarlyPetLimit || offer < 0n - roomEarlyPetLimit);
         if (teamCount < shopTeamSize) {
           if (action === 1n || upgraded) {
             action = 11n;
@@ -86,7 +86,7 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
             for (let index = 0n; index < teamCount; index += 1n) {
               const target = teamCount - 1n - index;
               const position = shopTeamAt + target * shopUnitSize;
-              if (f.getCorrespondingValueFromList(stock, position) <= roomCompatibilityPets
+              if (f.getCorrespondingValueFromList(stock, position) <= roomEarlyPetLimit
                   && f.getCorrespondingValueFromList(stock, position + 4n) === 1n) {
                 action = 13n;
                 to = target + 1n;
@@ -124,6 +124,7 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
   if (action === 1n && attempt < 4n && gold >= shopRerollCost) action = 10n;
   if (action === 1n && teamCount > 1n && attempt <= roomBotLimit) {
     const weights = f.assemblyList([0n], 'int'); // AP_ROOM_BOT_WEIGHTS
+    // AP_ROOM_FRONT_AFFINITIES
     const style = seat % (f.getListLength(weights) / 2n) * 2n;
     const attackWeight = f.getCorrespondingValueFromList(weights, style);
     const healthWeight = f.getCorrespondingValueFromList(weights, style + 1n);
@@ -132,7 +133,7 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
     for (let slot = 0n; slot < teamCount; slot += 1n) {
       const at = shopTeamAt + slot * shopUnitSize;
       const score = f.getCorrespondingValueFromList(stock, at + 2n) * attackWeight
-        + f.getCorrespondingValueFromList(stock, at + 3n) * healthWeight;
+        + f.getCorrespondingValueFromList(stock, at + 3n) * healthWeight /* AP_ROOM_FRONT_SCORE */;
       if (score > best) {
         best = score;
         front = slot;

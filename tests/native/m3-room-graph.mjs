@@ -257,6 +257,7 @@ function read(rows, target) {
 }
 
 function checkRounds(run, settings, receiptChecks = [], positionChecks = []) {
+  const earlyLimit = BigInt(settings.EARLY_PET_LIMIT);
   const { controller: state, worker, stage, enrolled } = run;
   let round = 0n;
   let firstBuy = 0n;
@@ -328,7 +329,7 @@ function checkRounds(run, settings, receiptChecks = [], positionChecks = []) {
         }
         assert.equal(view.seat, BigInt(index + 1));
         assert.equal(view.humans, BigInt(enrolled.length));
-        const releaseOffer = view.market.slice(6, 9).findIndex(code => code > 9n || code < -9n);
+        const releaseOffer = view.market.slice(6, 9).findIndex(code => code > earlyLimit || code < -earlyLimit);
         if (releaseOffer >= 0 && view.market[5] === 5n) {
           view = read(run.request(actor, 13n, round, view.sequence, 0n, 5n), actor);
           assert.equal(view.market[5], 4n);
@@ -376,13 +377,36 @@ function checkRounds(run, settings, receiptChecks = [], positionChecks = []) {
   receiptChecks.push(...run.completed);
   positionChecks.push(...run.positions);
   const releaseBattles = run.completed.filter(([, , , first, second]) =>
-    [first, second].some(team => team.some((code, at) => at % 6 === 1 && code > 9n))).length;
+    [first, second].some(team => team.some((code, at) => at % 6 === 1 && code > earlyLimit))).length;
   return {
     humans: enrolled.length, botEliminations, humanDepartures, timeouts, byes, frames: replayFrames, replays,
     completedBattles: run.completed.length, releaseBattles, highestTier, positioningMoves: run.positions.length,
     round: Number(state.round), winner: Number(state.winner), places: state.table.slice(8, 16).map(Number),
     clock: Number(run.clock()), ticks, peakExplicitCalls: run.peak(), messages: run.messages, transcript,
   };
+}
+
+export function verifyExpandedBotTier(source, ts) {
+  const exported = {};
+  const graph = { on: () => graph, onSignal: () => graph };
+  const runtime = { defineSignal: () => ({}), g: { server: () => graph } };
+  const program = ts.transpileModule(`${source}\nexports.botPlan = gstsServerRoomBotPlan;`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  vm.runInNewContext(program, { exports: exported, require: () => runtime, list: () => [], dict: () => new Map() });
+
+  function plan(offers, team) {
+    const stock = Array(41).fill(0n);
+    stock.splice(0, 9, 7n, 4n, 10n, 0n, 1n, BigInt(team.length), ...offers);
+    for (const [index, [code, level]] of team.entries()) {
+      stock.splice(11 + index * 6, 6, code, BigInt(index + 1), 4n, 6n, level, 0n);
+    }
+    return Array.from(exported.botPlan(shopFlow, stock, 0n, 0n));
+  }
+  assert.deepEqual(plan([30n, -31n, 0n], []), [11n, 2n, 0n], 'prefer a frozen tier-four offer over tier three');
+  const full = [[1n, 1n], [28n, 2n], [29n, 1n], [30n, 3n], [33n, 1n]];
+  assert.deepEqual(plan([-30n, 31n, 0n], full), [13n, 0n, 3n], 'sell the last eligible early-tier pet for tier four');
+  assert.deepEqual(plan([27n, -26n, 0n], full), [10n, 0n, 0n], 'keep the team when only early tiers are offered');
 }
 
 export function verifyRoom(sources, ts, settings, receiptChecks, positionChecks) {

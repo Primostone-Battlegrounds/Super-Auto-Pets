@@ -14,6 +14,23 @@ assert.equal(revision(mcp),lock.mcp.commit,'MCP revision differs from toolchain 
 assert.equal(revision(sim),lock.simulator.commit,'Simulator revision differs from toolchain lock');
 for(const directory of [mcp,sim]){const changed=execFileSync('git',['-C',directory,'diff','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(Boolean);assert.ok(changed.every(file=>file==='npm-shrinkwrap.json'),'Tracked tool source changed: '+changed.join(','));}
 const {save,receipt}=await nativeSimulatorSave(mcp,gil,process.env.SIMULATOR_UI??'AutoPetsGame');
+const buildPath=path.join(path.dirname(gil),'BUILD.json');
+const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
+if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
+const fittedAnimals = build.artPreview?.animals;
+const fittedSpecies = { reed_turtle: '乌龟', cottontail_rabbit: '兔子', sunset_cat: '猫咪' };
+if (fittedAnimals) {
+  assert.deepEqual(Object.keys(fittedAnimals).sort(), Object.keys(fittedSpecies).sort());
+  for (const [id, name] of Object.entries(fittedSpecies)) {
+    assert.equal(fittedAnimals[id].name, name);
+    assert.ok(fittedAnimals[id].layers.length > 16);
+  }
+  assert.ok(receipt.controls - 1 <= 1000, 'Authored layout exceeds the native control limit');
+}
+const turtleName = fittedAnimals?.reed_turtle.name ?? '芦纹龟';
+const swiftName = fittedAnimals ? '雨燕' : '烟尾雨燕';
+const deerName = fittedAnimals ? '麝' : '岩釉麝';
+const narwhalName = fittedAnimals ? '独角鲸' : '汐角鲸';
 fs.writeFileSync(path.join(output,'native.save.json'),JSON.stringify(save));
 const api=await import(pathToFileURL(path.join(sim,'studio/play/session.js')));
 const {renderPaintPng}=await import(pathToFileURL(path.join(sim,'studio/host-png.js')));
@@ -46,7 +63,8 @@ if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
 }
 for(const {canvasId,playerCount,mode} of configurations) {
   const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
-  const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,canvasId,playerCount,language:'zh-CN'});
+  const session=api.startPlay(save.assets.server,{scripts:save.assets.scripts,
+    templatesProject: fittedAnimals ? save.assets.client : undefined,canvasId,playerCount,language:'zh-CN'});
   const inputs=[],playButtons=[];
   const control = trail => {
     let node = session.runtime.roots[0];
@@ -85,6 +103,43 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(item?.textLayout?.fits && item.textLayout.visibleLineCount > 0, `Missing or clipped text: ${trail}`);
     assert.match(item.text, expected, trail);
   };
+  const artChecks = [];
+  let peakRuntimeControls = 0;
+  const borrowedArtSlots = ['Team1', 'Team2', 'Team3', 'Team4', 'Team5', 'Shop/Pet1', 'Shop/Pet2', 'Shop/Pet3',
+    'Shop/Food1', 'Shop/Food2'];
+  function countRuntimeControls(node) {
+    return 1 + node.children.reduce((count, child) => count + countRuntimeControls(child), 0);
+  }
+  function requireArt(frame, portrait, id, mirrored = false, scale = 1) {
+    assert.ok(portrait, `Missing portrait for ${id}`);
+    const painted = new Set(frame.paint.map(item => item.id));
+    const detail = portrait.children.find(child => child.name === 'FittedPortraitLayers');
+    const fitted = fittedAnimals[id];
+    const layers = [...portrait.children, ...(detail?.children ?? [])]
+      .filter(child => /^Layer\d+$/u.test(child.name) && painted.has(child.Id));
+    assert.ok(layers.length > 0, `${id} has no visible art`);
+    if (fitted) {
+      assert.equal(layers.length, fitted.layers.length, id);
+      assert.equal(portrait.localScaleX, mirrored ? -1 : 1, id);
+      for (const layer of layers) {
+        const row = fitted.layers[Number(layer.name.slice(5)) - 1];
+        assert.equal(layer.imageId, row[0], `${id}/${layer.name}`);
+        assert.ok(Math.abs(layer.sizeDeltaX - row[3] * scale) < 1e-5 &&
+          Math.abs(layer.sizeDeltaY - row[4] * scale) < 1e-5, `${id}/${layer.name}`);
+        for (const [axis, angle] of [['X', row[8]], ['Y', row[9]], ['Z', row[10]]]) {
+          assert.ok(Math.abs((layer['localRotation' + axis] ?? 0) - (angle ?? 0)) < 1e-5, `${id}/${layer.name}`);
+        }
+      }
+    } else {
+      assert.ok(layers.length <= 16 && !detail, `Unfitted ${id} inherited fitted layers`);
+    }
+    peakRuntimeControls = Math.max(peakRuntimeControls, countRuntimeControls(session.runtime.roots[0]));
+    artChecks.push({ id, fitted: !!fitted, layers: layers.length, mirrored, scale });
+  }
+  function requireNoFittedLayers(node = session.runtime.roots[0]) {
+    assert.notEqual(node.name, 'FittedPortraitLayers', 'Returning to the lobby must release the fitted portrait controls');
+    for (const child of node.children) requireNoFittedLayers(child);
+  }
   try {
   await capture('startup');
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
@@ -125,6 +180,16 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText('Practice/Lives/Value', /^5 \/ 5$/u);
     const press=name=>click('Practice/'+name+'/Hit');
     for(const [roundIndex,round] of practiceRounds.entries()) {
+      if (fittedAnimals && (roundIndex === 2 || roundIndex === 4)) {
+        const frame = await capture(`practice-fitted-shelf-${roundIndex + 1}`);
+        const ids = roundIndex === 2 ? ['reed_turtle', 'ember_swift', 'cottontail_rabbit']
+          : ['sunset_cat', 'ember_swift', 'ember_swift'];
+        for (const [index, id] of ids.entries()) {
+          const trail = `Practice/Shop/Pet${index + 1}`;
+          requireText(`${trail}/Name`, new RegExp(`^${fittedAnimals[id]?.name ?? swiftName}$`, 'u'));
+          requireArt(frame, control(`${trail}/Portrait`), id, false, 1.5);
+        }
+      }
       for(const [action,from,to] of round.slice(1)) {
         if(action==='buy'||action==='combine'){press('Shop/Pet'+from);press(to?'Team'+to:'Shop/Buy');}
         else if(action==='feed'){press('Shop/Food'+from);press('Team'+to);}
@@ -134,6 +199,21 @@ for(const {canvasId,playerCount,mode} of configurations) {
       }
       if(roundIndex===10)await capture('practice-tier-six');
       press('Primary');
+      if (fittedAnimals && roundIndex === 3) {
+        const frame = await capture('practice-fitted-five-v-five');
+        const formations = {
+          Team: ['reed_turtle', 'ember_swift', 'reed_turtle', 'ember_swift', 'ember_swift'],
+          Enemy: ['cottontail_rabbit', 'slate_muskdeer', 'reed_turtle', 'sunset_cat', 'ember_swift'],
+        };
+        for (const [side, ids] of Object.entries(formations)) {
+          for (const [index, id] of ids.entries()) {
+            const trail = `Practice/${side}${index + 1}`;
+            const expected = fittedAnimals[id]?.name ?? (id === 'ember_swift' ? swiftName : deerName);
+            requireText(`${trail}/Name`, new RegExp(`^${expected}$`, 'u'));
+            requireArt(frame, control(`${trail}/Portrait`), id, side === 'Enemy');
+          }
+        }
+      }
       if (roundIndex === 0) {
         const battle = await capture('practice-battle');
         assert.ok(battle.paint.some(item => item.id === control('Practice/Enemy1/Portrait/Layer1').Id));
@@ -160,7 +240,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const readOfferNames = () => [1, 2, 3].map(slot => visibleText(`Practice/Shop/Pet${slot}/Name`).text);
     const beforeReroll = readOfferNames();
     press('Shop/Pet1');await capture('practice-offer-detail');
-    requireText('Practice/Tooltip/Heading', /芦纹龟/u);
+    requireText('Practice/Tooltip/Heading', new RegExp(turtleName, 'u'));
     press('Shop/Freeze');press('Shop/Reroll');
     await capture('practice-frozen-reroll');
     requireText('Practice/Money/Value', /^9$/u);
@@ -263,8 +343,15 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText(`${team}/XP`, /^L1/u);
     requireText('Practice/OpponentCaption', /下一位电脑对手/u);
     assert.ok(!visibleText(`${team}/DropLabel`));
+    if (fittedAnimals) {
+      press('OpenMenu');
+      press('Menu/Back');
+      await capture('practice-fitted-return');
+      requireNoFittedLayers();
+    }
   }
   if(mode) {
+    const artHosts = fittedAnimals && borrowedArtSlots.map(trail => control(`Practice/${trail}/Portrait`));
     const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
     const foodPortrait = control('Practice/Shop/Food1/Portrait/Layer1').Id;
     const priceId = control('Duel/ReplayBoard/BadgePool/Price1').Id;
@@ -304,17 +391,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText(`${shopBadges}/Price1`, /^3 金$/u);
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
-    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);
+    requireText(`${shop}/AbilityTitle`, new RegExp(`${swiftName}.*L1.*烟羽`, 'su'));
     requireText(`${shop}/AbilityBody`, /开场.*随机.*1 伤/u);
     click(duel ? `${shop}/TeamInspection/InspectTeam1` : `${shop}/InspectTeam1/Hit`);
     await capture('client-1-inspect-team');
-    requireText(`${shop}/AbilityTitle`, /芦纹龟.*L2.*芦盾/su);
+    requireText(`${shop}/AbilityTitle`, new RegExp(`${turtleName}.*L2.*芦盾`, 'su'));
     requireText(`${shop}/AbilityBody`, /开场.*前排.*2 盾/u);
     requireText(`${shop}/AbilityBody`, /经验 1/u);
     requireText(`${shopBadges}/Attack1`, /^攻3$/u);
     requireText(`${shopBadges}/Life1`, /^命2$/u);
     if (!duel) {
-      requireText(`${shop}/Team1/Text`, /^芦纹龟 L2$/u);
+      requireText(`${shop}/Team1/Text`, new RegExp(`^${turtleName} L2$`, 'u'));
       assert.equal(visibleText(`${shop}/Team1/Text`).textLayout.visibleLineCount, 1);
     }
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
@@ -345,9 +432,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const eventId = control(eventTrail).Id;
     const renderedEvent = () => api.playSnapshot(session, { paint: true }).paint.find(item => item.id === eventId)?.text;
     const expectEvents = [
-      ['attack', /芦纹龟.*出击.*烟尾雨燕/u],
-      ['damage', /烟尾雨燕.*-5命.*余0命/u],
-      ['faint', /烟尾雨燕.*退场/u],
+      ['attack', new RegExp(`${turtleName}.*出击.*${swiftName}`, 'u')],
+      ['damage', new RegExp(`${swiftName}.*-5命.*余0命`, 'u')],
+      ['faint', new RegExp(`${swiftName}.*退场`, 'u')],
       ['result', /战斗结束|本轮获胜/u],
     ];
     for (let frame = 0; frame < 200 && expectEvents.length; frame++) {
@@ -402,6 +489,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const returned = await capture('client-1-return');
     assert.ok(!returned.paint.some(item => shopPortraits.includes(item.id) || item.id === priceId),
       'Pooled portraits and prices must be hidden in the lobby');
+    if (fittedAnimals) requireNoFittedLayers();
     requirePlayButton('Lobby/Continue/Hit', ['Lobby/Title', 'Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     requireText('Lobby/Continue/Title', mode === 2 ? /回到好友 1v1/u : /回到八人吃鸡/u);
     click('Lobby/Continue/Hit');
@@ -456,14 +544,98 @@ for(const {canvasId,playerCount,mode} of configurations) {
         assert.match(measurement.lines[0], expected);
       }
     }
+    if (fittedAnimals) {
+      // These deterministic wire cases check client art identity and lifetime.
+      // They are not game-authority evidence. The client resolves the replay
+      // itself from these starting teams and rejects a mismatched outcome.
+      const species = new Map([
+        [1, ['reed_turtle', turtleName]], [3, ['cottontail_rabbit', '兔子']], [8, ['sunset_cat', '猫咪']],
+        [2, ['ember_swift', swiftName]], [7, ['slate_muskdeer', deerName]], [18, ['tidal_narwhal', narwhalName]],
+      ]);
+      const own = [1, 3, 8, 2, 7].map((code, index) => [code, 21 + index, 22, 20, 1, 0]);
+      const enemy = [8, 3, 1, 18, 2].map((code, index) => [code, 31 + index, 1, 2, 1, 0]);
+      const publish = (version, offers, battling = false, round = 5) => {
+        const tier = Math.min(6, (round + 1) >> 1);
+        const packed = [round, tier, 10, 0, 0, 5, ...offers, 1, -2, ...own.flat()];
+        if (duel) {
+          api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, round, battling ? 3 : 0, battling, false, 3, version,
+            version, 0, 0, 30, 0, 5, 4, 0], 'Player1');
+          api.sendPlaySignal(session, 'AP_DuelMarket', [round, version, packed], 'Player1');
+        } else {
+          api.sendPlaySignal(session, 'AP_RoomView', [version, battling ? 3 : 2, round, 1, version, playerCount, 0, battling,
+            Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), packed, 0, 42], 'Player1');
+        }
+      };
+      const shelf = [1, 3, 8];
+      publish(20, shelf);
+      const artShop = await capture('client-1-fitted-shelf-fixture');
+      for (const [index, code] of shelf.entries()) {
+        const [id, name] = species.get(code);
+        requireText(duel ? `${shop}/MarketOffers/OfferLabel${index + 1}` : `${shop}/Offer${index + 1}/Text`,
+          new RegExp(`^${name}$`, 'u'));
+        requireArt(artShop, artHosts[5 + index], id, false, 1.5);
+      }
+      for (const [index, [code]] of own.entries()) {
+        requireArt(artShop, artHosts[index], species.get(code)[0], false, 1);
+      }
+      const beforeAbility = requests();
+      const abilityPatterns = [/开场.*1 盾/u, /退场.*兔宝宝/u, /开场.*随机 2 名对手各受 2 伤/u];
+      for (const [index, code] of shelf.entries()) {
+        click(duel ? `${shop}/MarketOffers/InspectPet${index + 1}` : `${shop}/InspectOffer${index + 1}/Hit`);
+        await capture(`client-1-fitted-inspect-${index + 1}-fixture`);
+        requireText(`${shop}/AbilityTitle`, new RegExp(species.get(code)[1] + '.*L1', 'su'));
+        requireText(`${shop}/AbilityBody`, abilityPatterns[index]);
+      }
+      assert.equal(requests(), beforeAbility, 'Inspecting fitted portraits must not send shop actions');
+      publish(21, [2, 3, 8]);
+      const replaced = await capture('client-1-fitted-replacement-fixture');
+      requireArt(replaced, artHosts[5], 'ember_swift', false, 1.5);
+      publish(22, shelf, true);
+      api.sendPlaySignal(session, replaySignal, duel
+        ? [5, 42, 1, own.flatMap(unit => unit.slice(0, 5)), enemy.flatMap(unit => unit.slice(0, 5))]
+        : [5, 1, 2, 1, 42, [5, ...own.flat()], [5, ...enemy.flat()]], 'Player1');
+      const full = await capture('client-1-fitted-five-v-five-fixture');
+      const replay = duel ? `${shop}/ReplayBoard` : 'Room/Match/Replay';
+      for (const [side, team] of [['Own', own], ['Enemy', enemy]]) {
+        for (const [index, [code]] of team.entries()) {
+          const [id, name] = species.get(code);
+          requireText(`${replay}/${side}${index + 1}`, new RegExp(`^${name}(?:$|\\n)`, 'u'));
+          requireArt(full, artHosts[index + (side === 'Own' ? 0 : 5)], id, side === 'Enemy');
+        }
+      }
+      click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
+      await capture('client-1-fitted-return-fixture');
+      requireNoFittedLayers();
+      publish(23, shelf);
+      await capture('client-1-fitted-lobby-update-fixture');
+      requireNoFittedLayers();
+      click('Lobby/Continue/Hit');
+      const resumed = await capture('client-1-fitted-resume-fixture');
+      for (const [index, code] of shelf.entries()) requireArt(resumed, artHosts[5 + index], species.get(code)[0], false, 1.5);
+
+      const catalog = build.artPreview.catalog;
+      assert.equal(catalog.length, build.petTierCounts.reduce((sum, count) => sum + count, 0));
+      for (let offset = 0; offset < catalog.length; offset += 3) {
+        const entries = catalog.slice(offset, offset + 3);
+        const codes = entries.map((_, index) => offset + index + 1);
+        while (codes.length < 3) codes.push(0);
+        const sequence = offset / 3 + 1;
+        publish(23 + sequence, codes, false, 11);
+        const frame = await capture(`client-1-catalog-shelf-${sequence}-fixture`);
+        for (const [index, pet] of entries.entries()) {
+          requireText(duel ? `${shop}/MarketOffers/OfferLabel${index + 1}` : `${shop}/Offer${index + 1}/Text`,
+            new RegExp(`^${pet.name}$`, 'u'));
+          requireArt(frame, artHosts[5 + index], pet.id, false, 1.5);
+        }
+      }
+    }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
-  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,playButtons,frames,
+    ...(fittedAnimals ? { artSource: mode ? 'client wire fixture' : 'played practice', artChecks, peakRuntimeControls } : {}),
+    history:api.playSnapshot(session).history});api.stopPlay(session);
 }
-const buildPath=path.join(path.dirname(gil),'BUILD.json');
-const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
-if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
 const textDefects = results.flatMap(result => result.frames.flatMap(frame => frame.visibleTexts
   .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))
   .map(text => ({ canvasId: result.canvasId, frame: frame.name, path: text.path, text: text.text,

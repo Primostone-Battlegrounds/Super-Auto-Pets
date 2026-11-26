@@ -4,7 +4,7 @@ import { checkRuntimeListCall } from './gil-list-limits.mjs';
 import { shopFlow } from './versus-shop-parity.mjs';
 
 export function verifyGraph(graphSource, buttonSource, combatSource, registeredButtons, ts, marketFixture, checkReplay) {
-  const { gold, price, teamSize, offerSlots, foodSlots, shelves, startingLives, release, gated } = marketFixture;
+  const { gold, price, teamSize, offerSlots, foodSlots, shelves, startingLives, release, expandedCatalog, gated } = marketFixture;
   const ids = new Map(registeredButtons.map(({ id, key }) => [Number(key), BigInt(id)]));
   assert.equal(ids.size, 7);
   assert.ok(gold >= price * offerSlots);
@@ -238,6 +238,19 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   }
   const buy = (source, from, round, sequence, token) => request(source, 11n, round, sequence, token, from);
   const shop = (source, action, from, to, flag) => request(source, action, undefined, undefined, 0n, from, to, flag);
+  function mergeOfferSlots() {
+    for (;;) {
+      const market = markets.get('A');
+      const second = market.offers.findIndex((code, index) => market.offers.indexOf(code) < index);
+      if (second >= 0) {
+        const code = market.offers[second];
+        const different = market.offers.findIndex(offer => offer !== code);
+        if (different >= 0) return [market.offers.indexOf(code), second, different].map(index => BigInt(index + 1));
+      }
+      assert.ok(market.gold > BigInt(2 * price), 'fixture needs an affordable duplicate and a different species');
+      assert.deepEqual(shop('A', 10n, 0n, 0n), ['A', 'B']);
+    }
+  }
   function tick(time, name = 'AP_DuelClock') {
     assert.ok(BigInt(time) >= now);
     now = BigInt(time);
@@ -470,19 +483,21 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   reset();
   players.push('B');
   tick(1);
-  assert.deepEqual(buy('A', 1n), ['A', 'B']);
-  assert.deepEqual(buy('A', 3n), ['A', 'B']);
+  const [mergeFirst, mergeSecond, different] = mergeOfferSlots();
+  assert.deepEqual(buy('A', mergeFirst), ['A', 'B']);
+  assert.deepEqual(buy('A', mergeSecond), ['A', 'B']);
   assert.deepEqual(shop('A', 14n, 1n, 2n), ['A', 'B']);
   assert.deepEqual(shop('A', 15n, 1n, 2n), ['A', 'B']);
   assert.equal(markets.get('A').raw[5], 1n);
   assert.equal(markets.get('A').raw[16], 1n);
-  assert.deepEqual(shop('A', 12n, 2n, 1n), ['A']); // Different species cannot combine.
+  assert.deepEqual(shop('A', 12n, different, 1n), ['A']); // Different species cannot combine.
 
   reset();
   players.push('B');
   tick(1);
-  assert.deepEqual(buy('A', 1n), ['A', 'B']);
-  assert.deepEqual(shop('A', 12n, 3n, 1n), ['A', 'B']);
+  const [combineFirst, combineSecond] = mergeOfferSlots();
+  assert.deepEqual(buy('A', combineFirst), ['A', 'B']);
+  assert.deepEqual(shop('A', 12n, combineSecond, 1n), ['A', 'B']);
   assert.equal(markets.get('A').raw[16], 1n);
 
   reset();
@@ -574,36 +589,53 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
     }
     assert.equal(views.get('A').round, 11n);
     assert.equal(markets.get('A').raw[1], 6n);
-    assert.deepEqual(buy('A', 1n), ['A', 'B']);
-    assert.deepEqual(press('A', 7), ['A', 'B']);
-    assert.deepEqual(buy('A', 3n), ['A', 'B']);
-    assert.deepEqual(buy('A', 2n), ['A', 'B']);
-    assert.deepEqual(buy('B', 3n), ['A', 'B']);
-    assert.deepEqual(buy('B', 1n), ['A', 'B']);
-    const neighborAttack = 6 + offerSlots + foodSlots + 6 + 2;
-    const before = markets.get('B').raw;
-    assert.deepEqual(shop('B', 16n, 2n, 1n), ['A', 'B']);
-    assert.equal(markets.get('B').raw[neighborAttack], before[neighborAttack] + 1n);
-    assert.equal(markets.get('B').raw[neighborAttack + 1], before[neighborAttack + 1] + 1n);
+    if (expandedCatalog) {
+      for (const actor of players) {
+        const offers = markets.get(actor).offers;
+        const sorted = offers.map((code, slot) => ({ slot, tier: expandedCatalog[Number(code) - 1].tier }))
+          .sort((left, right) => right.tier - left.tier);
+        for (const { slot } of sorted.slice(0, 2)) assert.deepEqual(buy(actor, BigInt(slot + 1)), ['A', 'B']);
+        assert.deepEqual(shop(actor, 16n, 1n, 1n), ['A', 'B']);
+        assert.equal(markets.get(actor).raw[5], 2n);
+      }
+      assert.ok(players.some(actor => markets.get(actor).team.some(code => code > 30n)), 'expanded duel must buy high tiers');
+    } else {
+      assert.deepEqual(buy('A', 1n), ['A', 'B']);
+      assert.deepEqual(press('A', 7), ['A', 'B']);
+      assert.deepEqual(buy('A', 3n), ['A', 'B']);
+      assert.deepEqual(buy('A', 2n), ['A', 'B']);
+      assert.deepEqual(buy('B', 3n), ['A', 'B']);
+      assert.deepEqual(buy('B', 1n), ['A', 'B']);
+      const neighborAttack = 6 + offerSlots + foodSlots + 6 + 2;
+      const before = markets.get('B').raw;
+      assert.deepEqual(shop('B', 16n, 2n, 1n), ['A', 'B']);
+      assert.equal(markets.get('B').raw[neighborAttack], before[neighborAttack] + 1n);
+      assert.equal(markets.get('B').raw[neighborAttack + 1], before[neighborAttack + 1] + 1n);
+    }
     press('A', 2);
     press('B', 2);
     resolveFight();
-    assert.equal(views.get('A').outcome, 1n);
-    assert.deepEqual(advancedSkills, ['cinder_caracal', 'dawn_tapir', 'fern_quail', 'mist_crane', 'mist_crane', 'tidal_narwhal']);
+    if (!expandedCatalog) {
+      assert.equal(views.get('A').outcome, 1n);
+      assert.deepEqual(advancedSkills, ['cinder_caracal', 'dawn_tapir', 'fern_quail', 'mist_crane', 'mist_crane', 'tidal_narwhal']);
+    }
     releaseBattle = { round: Number(views.get('A').round), skills: advancedSkills };
+    const loser = views.get('A').outcome === 2n ? 'A' : 'B';
+    const survivor = loser === 'A' ? 'B' : 'A';
+    const remaining = views.get(loser).lives;
     tick(variables.due);
-    assert.deepEqual(shop('B', 13n, 0n, 1n), ['A', 'B']);
-    assert.deepEqual(shop('B', 13n, 0n, 1n), ['A', 'B']);
-    assert.equal(markets.get('B').raw[5], 0n);
-    for (let life = BigInt(startingLives) - 2n; life >= 0n; life -= 1n) {
-      press('A', 2);
+    while (markets.get(loser).raw[5] > 0n) {
+      assert.deepEqual(shop(loser, 13n, 0n, 1n), ['A', 'B']);
+    }
+    for (let life = remaining - 1n; life >= 0n; life -= 1n) {
+      press(survivor, 2);
       tick(variables.due);
       resolveFight();
-      assert.equal(views.get('B').lives, life);
+      assert.equal(views.get(loser).lives, life);
       if (life > 0n) tick(variables.due);
     }
     assert.equal(views.get('A').phase, 2n);
-    assert.equal(views.get('A').winner, 1n);
+    assert.equal(views.get('A').winner, playerIds[survivor]);
     releaseBattle.terminalRound = Number(views.get('A').round);
   }
   return {

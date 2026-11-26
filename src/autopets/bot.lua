@@ -6,6 +6,7 @@ local shop = require("autopets.shop")
 local bot = {}
 local compatibility_policy = "shared-shop-v2"
 local release_policy = "shared-shop-six-tier-v1"
+local wider_pool_policy = "shared-shop-wide-pool-v1"
 local max_actions_per_turn = 20
 local default_budget = 32
 local styles = {"guardian", "striker", "swarm"}
@@ -15,6 +16,14 @@ local weights = {
     swarm = {attack = 8, health = 8},
 }
 
+local function policy_version(catalog)
+    if catalog == data then return compatibility_policy end
+    local rules = catalog.rules
+    -- Use a distinct replay policy when the average tier is wider than the shelf.
+    if #catalog.pets > rules.max_tier * rules.pet_shop_slots then return wider_pool_policy end
+    return release_policy
+end
+
 function bot.style_weights()
     local result = {}
     for index, style in ipairs(styles) do
@@ -22,6 +31,16 @@ function bot.style_weights()
         result[index] = {style = style, attack = weight.attack, health = weight.health}
     end
     return result
+end
+
+-- Use one signed coefficient per shop code in the bounded native controller.
+function bot.native_front_affinity(ability)
+    local effect, power = ability.effect, ability.power
+    if effect == "rally_summon" then return -12 * power end
+    if effect == "splash" then return 6 * power end
+    if effect == "shield_next" then return 4 * power end
+    if effect == "summon" then return 8 + 6 * power end
+    return ability.trigger == "faint" and 8 or 0
 end
 
 local function copy(value)
@@ -248,12 +267,13 @@ end
 
 -- Beginner develops weaker slots and waits for clearer reasons to trade up.
 -- Standard values level breakpoints, role combinations and stable formations.
-local function choose_action(state, style, actions_taken, beginner, catalog)
+local function choose_action(state, style, actions_taken, beginner, catalog, version)
     if actions_taken >= max_actions_per_turn then
         return nil, "action_limit"
     end
     local rules = catalog.rules
     local release = catalog ~= data
+    local prioritize_upgrades = not beginner and version == wider_pool_policy
     local rate_pet = recruit_value(state, style, catalog)
 
     local action, best_score
@@ -279,6 +299,10 @@ local function choose_action(state, style, actions_taken, beginner, catalog)
                     if unit.id == offer.id and unit.level < rules.max_level then
                         local levels_up = unit.xp + 1 >= rules.level_xp[unit.level + 1]
                         local score = 65 + (levels_up and 25 or 0) + (room and 0 or 12)
+                        if prioritize_upgrades then
+                            -- When copies are scarce, favor units with XP already invested.
+                            score = score + 8 * unit.xp
+                        end
                         if release and not beginner and levels_up then
                             local ability = definition.ability
                             score = score + math.min(25, ability.power * (ability.targets or 1) * 3)
@@ -400,7 +424,8 @@ function bot.choose_action(snapshot, style, actions_taken, difficulty, catalog)
     if snapshot.phase ~= "preparation" then
         return nil, "wrong_phase"
     end
-    return choose_action(snapshot, style, actions_taken, difficulty == "beginner", catalog or data)
+    catalog = catalog or data
+    return choose_action(snapshot, style, actions_taken, difficulty == "beginner", catalog, policy_version(catalog))
 end
 
 local function open_turn(pool)
@@ -417,13 +442,15 @@ function bot.new_pool(seed, requested_style, difficulty, catalog)
     assert(math.type(seed) == "integer", "seed must be a Lua integer")
     assert(requested_style == nil or weights[requested_style], "unknown bot style")
     assert(difficulty == nil or difficulty == "standard" or difficulty == "beginner", "unknown bot difficulty")
+    catalog = catalog or data
     local selector = rng.salted(seed, 0x424f54, 0x504f4f4c) -- BOTPOOL
     local selected = selector:int(1, 2)
     local style_index = selector:int(1, #styles)
     local style = requested_style or styles[style_index]
     local pool = {
         seed = seed,
-        catalog = catalog or data,
+        catalog = catalog,
+        policy_version = policy_version(catalog),
         requested_style = requested_style,
         difficulty = difficulty == "beginner" and difficulty or nil,
         selected = selected,
@@ -445,7 +472,8 @@ local function prepare_step(pool, expected)
     local session, frame = pool.sessions[index], pool.turn.sessions[index]
     local store = session.store
     local state = store:snapshot()
-    local command, stop = bot.choose_action(state, session.style, #frame.commands, pool.difficulty, pool.catalog)
+    local command, stop = choose_action(state, session.style, #frame.commands, pool.difficulty == "beginner",
+        pool.catalog, pool.policy_version)
     if expected then
         local recorded = expected.sessions[index].commands[#frame.commands + 1]
         assert(equal(command, recorded and recorded.command), "command_mismatch")
@@ -529,7 +557,7 @@ function bot.trace(pool)
         return nil, "opponent_not_ready"
     end
     local trace = {
-        policy_version = pool.catalog == data and compatibility_policy or release_policy,
+        policy_version = pool.policy_version,
         rules_hash = assert(pool.catalog.rules_hash),
         seed = pool.seed,
         requested_style = pool.requested_style,
@@ -551,6 +579,7 @@ end
 
 local function replay(trace, catalog)
     local pool = bot.new_pool(trace.seed, trace.requested_style, trace.difficulty, catalog)
+    pool.policy_version = trace.policy_version
     for index, frame in ipairs(trace.rounds) do
         while pool.phase == "prepare" do
             step(pool, frame)
@@ -566,8 +595,12 @@ end
 
 function bot.replay(trace, catalog)
     catalog = catalog or data
-    local version = catalog == data and compatibility_policy or release_policy
-    if type(trace) ~= "table" or trace.rules_hash ~= catalog.rules_hash or trace.policy_version ~= version then
+    if type(trace) ~= "table" or trace.rules_hash ~= catalog.rules_hash then
+        return nil, "trace_version_mismatch"
+    end
+    local version = policy_version(catalog)
+    local legacy_wide = version == wider_pool_policy and trace.policy_version == release_policy
+    if trace.policy_version ~= version and not legacy_wide then
         return nil, "trace_version_mismatch"
     end
     local ok, opponent = pcall(replay, trace, catalog)

@@ -3,7 +3,8 @@ package.path = "src/?.lua;" .. package.path
 local battle = require("autopets.battle")
 local rng = require("autopets.rng")
 local profile = arg[1] or "compatibility"
-local data = require(profile == "release" and "autopets.release_data" or "autopets.data")
+local data = require("autopets.catalog")(profile)
+local full_battle = profile ~= "compatibility"
 
 local definitions, codes = {}, {}
 local function add(definition)
@@ -53,7 +54,7 @@ local function describe_event(label, event)
         local effect = data.pet_by_id[event.id].ability.effect
         if event.trigger == "start" then
             amount = assert(start_effect[effect])
-        elseif profile == "release" then
+        elseif full_battle then
             amount = event.trigger == "faint" and 7 + assert(faint_effect[effect]) or assert(reactive_effect[effect])
         end
     elseif event.type == "damage" or event.type == "shield" or event.type == "buff" then
@@ -68,12 +69,24 @@ local function describe_event(label, event)
     end
 end
 
-local function test(seed, left, right, record_strikes)
+local function test(seed, left, right, record_strikes, expected)
     local resolved = battle.resolve(left, right, seed, data)
     local start = resolved.events[1]
     local first = side[start.first_side]
     local final = start.board
     print("case", seed)
+    if expected then
+        local fired = false
+        for _, event in ipairs(resolved.events) do
+            if event.type == "skill" and event.side == "player" and event.id == expected.id
+                and event.trigger == expected.trigger then
+                fired = true
+                break
+            end
+        end
+        assert(fired, expected.id .. ":" .. expected.trigger .. ":" .. expected.level)
+        print("level_case", codes[expected.id], expected.level, expected.trigger)
+    end
     print("input", encode(start.board, first))
     for _, event in ipairs(resolved.events) do
         if event.strike > 0 then break end
@@ -112,7 +125,7 @@ test(2147483647, {unit("sunset_cat", 3, 2)}, {unit("reed_turtle", 1), unit("embe
 test(math.mininteger, sweep, opponents)
 test(math.maxinteger, opponents, sweep)
 
-if profile == "release" then
+if full_battle then
     local frontline = {unit("cinder_caracal", 10, 3), unit("frost_muskox", 10, 2), unit("night_pangolin", 5, 3)}
     local flank = {unit("moon_yak", 2, 3), unit("fern_quail", 3, 2), unit("tidal_narwhal", 4, 3)}
     test(13, frontline, flank, true)
@@ -138,7 +151,7 @@ local fixtures = rng.new(117)
 local supported = {}
 for _, definition in ipairs(data.pets) do
     local trigger = definition.ability.trigger
-    if profile == "release" or trigger == "start" or trigger == "faint" then supported[#supported + 1] = definition end
+    if full_battle or trigger == "start" or trigger == "faint" then supported[#supported + 1] = definition end
 end
 local function team()
     local lineup = {}
@@ -150,6 +163,23 @@ local function team()
 end
 for seed = 1, 160 do
     local left, right = team(), team()
-    test(seed, left, right, profile == "release")
-    test(seed, right, left, profile == "release")
+    test(seed, left, right, full_battle)
+    test(seed, right, left, full_battle)
+end
+
+if profile == "expanded" then
+    for index, definition in ipairs(data.pets) do
+        local trigger = definition.ability.trigger
+        for level = 1, data.rules.max_level do
+            local subject = unit(definition.id, trigger == "faint" and 1 or 40, level)
+            local ally = unit("reed_turtle", 35)
+            if definition.id == ally.id then ally = unit("alder_marmot", 35) end
+            local left = {subject, ally}
+            if trigger == "summon" then left = {unit("cottontail_rabbit", 1), subject, ally} end
+            local right = {unit("river_otter", 45), unit("slate_muskdeer", 35)}
+            test(10000 + 3 * index + level, left, right, true, {
+                id = definition.id, trigger = trigger, level = level,
+            })
+        end
+    end
 end

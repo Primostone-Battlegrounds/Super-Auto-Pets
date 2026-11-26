@@ -1,7 +1,7 @@
 package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
-local data = require(arg[2] == "release" and "autopets.release_data" or "autopets.data")
+local data = require("autopets.catalog")(arg[2] or "compatibility")
 local outcomes = {win = 1, loss = 2, draw = 3}
 local codes, tokens = {}, {}
 for code, pet in ipairs(data.pets) do codes[pet.id] = code end
@@ -51,16 +51,32 @@ print(checked .. " native receipts match authoritative Lua terminal boards and o
 if arg[3] then
     local bot = require("autopets.bot")
     local weights = bot.style_weights()
-    local moves = 0
+    local moves, skill_changes = 0, 0
     for row in io.lines(arg[3]) do
         if #row > 0 then
             local seat, from, to, packed = row:match("^(%d+)\t(%d+)\t(%d+)\t(.+)$")
-            local style = weights[tonumber(seat) % #weights + 1].style
+            local weight = weights[tonumber(seat) % #weights + 1]
             local snapshot = {phase = "preparation", team = formation(packed), gold = 0, pets = {}, foods = {}, rewards = {}}
-            local move = assert(bot.choose_action(snapshot, style, 0, "beginner", data))
-            assert(move.action == "move" and move.from == tonumber(from) and move.to == tonumber(to), style)
+            local move = bot.choose_action(snapshot, weight.style, 0, "beginner", data)
+            if arg[2] == "expanded" then
+                local front, best = nil, -math.huge
+                for slot, unit in ipairs(snapshot.team) do
+                    local ability = data.pet_by_id[unit.id].ability
+                    local score = unit.attack * weight.attack + unit.health * weight.health
+                        + bot.native_front_affinity(ability) * unit.level
+                    if score > best then front, best = slot, score end
+                end
+                assert(front == tonumber(from) and to == "1", weight.style)
+                if not move or move.from ~= front then skill_changes = skill_changes + 1 end
+            else
+                assert(move and move.action == "move" and move.from == tonumber(from) and move.to == tonumber(to), weight.style)
+            end
             moves = moves + 1
         end
     end
-    print(moves .. " native placements match shared Lua beginner front-slot decisions")
+    if arg[2] == "expanded" then
+        print(moves .. " native placements match shared Lua skill-aware front-slot scores, " .. skill_changes .. " changed by skills")
+    else
+        print(moves .. " native placements match shared Lua beginner front-slot decisions")
+    end
 end

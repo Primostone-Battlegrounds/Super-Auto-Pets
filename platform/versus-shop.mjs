@@ -17,6 +17,7 @@ export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
   let source = fs.readFileSync(new URL('./versus_shop.ts', import.meta.url), 'utf8');
   const start = [];
   let levelThresholds;
+  let petTierCounts;
   const catalog = { pet: [], food: [] };
   const rules = {};
   const ints = values => {
@@ -35,6 +36,7 @@ export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
       source = source.replace(placeholder, replacement);
       if (kind === 'const') rules[key] = Number(values[0]);
       if (key === 'LEVEL_THRESHOLDS') levelThresholds = numbers.map(Number);
+      if (key === 'PET_LIMITS') petTierCounts = numbers.slice(1).map((limit, index) => Number(limit - numbers[index]));
     } else if (kind === 'start') {
       assert.equal(Number(key), start.length + 1);
       start.push(ints(values));
@@ -51,5 +53,5 @@ export function nativeShop(lua, lua54 = 'lua5.4', profile = 'compatibility') {
   assert.equal(start.length, 2);
   const packedSize = 6 + rules.PET_SLOTS + rules.FOOD_SLOTS + rules.TEAM_SIZE * 6;
   assert.ok(start.every(seat => seat.length === packedSize));
-  return { source, start, catalog, rules, definition, levelThresholds };
+  return { source, start, catalog, rules, definition, levelThresholds, petTierCounts };
 }
