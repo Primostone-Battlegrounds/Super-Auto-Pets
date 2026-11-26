@@ -6,6 +6,7 @@ local shop = require("autopets.shop")
 local bot = {}
 local compatibility_policy = "shared-shop-v2"
 local release_policy = "shared-shop-six-tier-v1"
+local wider_pool_policy = "shared-shop-wide-pool-v1"
 local max_actions_per_turn = 20
 local default_budget = 32
 local styles = {"guardian", "striker", "swarm"}
@@ -14,6 +15,14 @@ local weights = {
     striker = {attack = 10, health = 7},
     swarm = {attack = 8, health = 8},
 }
+
+local function policy_version(catalog)
+    if catalog == data then return compatibility_policy end
+    local rules = catalog.rules
+    -- Use a distinct replay policy when the average tier is wider than the shelf.
+    if #catalog.pets > rules.max_tier * rules.pet_shop_slots then return wider_pool_policy end
+    return release_policy
+end
 
 function bot.style_weights()
     local result = {}
@@ -254,6 +263,7 @@ local function choose_action(state, style, actions_taken, beginner, catalog)
     end
     local rules = catalog.rules
     local release = catalog ~= data
+    local prioritize_upgrades = not beginner and policy_version(catalog) == wider_pool_policy
     local rate_pet = recruit_value(state, style, catalog)
 
     local action, best_score
@@ -279,6 +289,10 @@ local function choose_action(state, style, actions_taken, beginner, catalog)
                     if unit.id == offer.id and unit.level < rules.max_level then
                         local levels_up = unit.xp + 1 >= rules.level_xp[unit.level + 1]
                         local score = 65 + (levels_up and 25 or 0) + (room and 0 or 12)
+                        if prioritize_upgrades then
+                            -- When copies are scarce, favor units with XP already invested.
+                            score = score + 8 * unit.xp
+                        end
                         if release and not beginner and levels_up then
                             local ability = definition.ability
                             score = score + math.min(25, ability.power * (ability.targets or 1) * 3)
@@ -529,7 +543,7 @@ function bot.trace(pool)
         return nil, "opponent_not_ready"
     end
     local trace = {
-        policy_version = pool.catalog == data and compatibility_policy or release_policy,
+        policy_version = policy_version(pool.catalog),
         rules_hash = assert(pool.catalog.rules_hash),
         seed = pool.seed,
         requested_style = pool.requested_style,
@@ -566,7 +580,7 @@ end
 
 function bot.replay(trace, catalog)
     catalog = catalog or data
-    local version = catalog == data and compatibility_policy or release_policy
+    local version = policy_version(catalog)
     if type(trace) ~= "table" or trace.rules_hash ~= catalog.rules_hash or trace.policy_version ~= version then
         return nil, "trace_version_mismatch"
     end
