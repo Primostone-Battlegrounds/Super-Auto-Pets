@@ -89,6 +89,7 @@ if (profile) {
   const template = fittedTemplate(preview.layersPerSlot);
   const { templateIndex } = await stage('scene_add_client_template', { template });
   preview.templateIndex = templateIndex;
+  preview.templateName = template.name;
   const readback = await call('scene_get_client_ui', { template: fittedTemplateName });
   assert.equal(readback.templateIndex, templateIndex);
   assert.equal(readback.template.kind, 'container');

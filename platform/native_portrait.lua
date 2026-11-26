@@ -15,7 +15,7 @@ return function(control, scale)
             local picture = control(path)
             picture:SetLocalScale(mirrored and -1 or 1, 1, 1)
             if fitted_portrait_template then
-                extra = picture:FindChild("FittedPortraitLayers")
+                extra = picture:FindChild(fitted_portrait_name)
                 if #layers > portrait_layers and not extra then
                     extra = assert(game.InstantiateClientUIControl(fitted_portrait_template, picture))
                     extra:SetAsLastSibling()
