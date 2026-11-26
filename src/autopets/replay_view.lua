@@ -21,6 +21,31 @@ end
 function M.duration(event)
     return event and event_seconds[event.type] or 0.4
 end
+
+function M.speed_caption(speed)
+    return "倍速 x" .. speed
+end
+
+function M.next_speed(speed)
+    return speed == 1 and 2 or 1
+end
+
+function M.toggle_caption(playing, ended)
+    return playing and "暂停" or ended and "重看" or "继续"
+end
+
+-- Keep the next event visible for at least one render at low frame rates. The
+-- fractional time carried at ordinary frame rates keeps x1 and x2 accurate.
+function M.advance_clock(position, elapsed, dt, speed, count, duration_at)
+    if position >= count then return position, 0 end
+    local passed = elapsed + dt * speed
+    local duration = duration_at(position)
+    if passed < duration then return position, passed end
+    position = position + 1
+    if position == count then return position, 0 end
+    return position, math.min(passed - duration, 1 / 30)
+end
+
 function M.board(events, position)
     for index = position, 1, -1 do
         if events[index].board then return events[index].board end
