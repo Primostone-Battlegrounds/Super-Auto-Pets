@@ -80,7 +80,7 @@ local function bind_online_badges(pool)
             icon:SetImage(Enum.ImageSource.StaticReference, 102036)
             icon.imageColor, caption.fontColor = colour(0x315a6d), colour(0x315a6d)
             icon:SetSizeDelta(19, 19)
-            caption:SetSizeDelta(36, 26)
+            caption:SetSizeDelta(36, 32)
             icon:SetVisible(false)
             icon:SetActive(false)
             set(caption, nil)
@@ -152,7 +152,7 @@ local function bind_online_badges(pool)
             local controls = shields[slot]
             local icon, caption = controls.icon.control, controls.caption.control
             local visible = (shield or 0) > 0
-            local y = field.y - (stacked and 62 or 30)
+            local y = field.y - (stacked and 66 or 34)
             icon:SetAnchoredPosition(field.x - 14, y)
             caption:SetAnchoredPosition(field.x + 12, y)
             if visible then icon:SetActive(true) end
