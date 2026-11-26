@@ -3,14 +3,14 @@ local bind_portrait = require("autopets.native_portrait")
 local root, active, section, mode, practice, online, lobby
 local elapsed, confirm_fill = 0, false
 local request_id, last_view = 0, 0
-local availability, snapshot_age, pending, saw_lobby
+local availability, snapshot_age, pending, saw_lobby, guide_open
 local bindings = {}
 local borrowed_portraits = {}
 local online_modes = {[2] = "好友 1v1", [8] = "八人吃鸡"}
 local entry_labels = {[2] = "房间", [3] = "匹配"}
 local refusal = {
     [1] = "等待好友进入关卡，两人到齐后再开局。",
-    [2] = "好友 1v1 需要恰好两名玩家，请调整千星房间人数。",
+    [2] = "好友 1v1 需要恰好两名玩家，请调整房间人数。",
     [3] = "部分玩家仍在加载，可以等待或确认机器人补位。",
     [4] = "关卡已有对局，可从主菜单回到本局。",
     [5] = "当前人数无法开始这场对局。",
@@ -45,9 +45,26 @@ local function feedback(message)
     lobby:GetChild("Feedback").text = message
 end
 
+local function draw_lobby()
+    local menu = not guide_open
+    local waiting = menu and pending ~= nil
+    set_visible(lobby:GetChild("Choices"), menu and mode == 0)
+    set_visible(lobby:GetChild("Continue"), menu and mode ~= 0)
+    set_visible(lobby:GetChild("Status"), menu)
+    set_visible(lobby:GetChild("Feedback"), menu)
+    set_visible(lobby:GetChild("Help"), guide_open)
+    local cancel = lobby:GetChild("Cancel")
+    set_visible(cancel, waiting)
+    local guide = lobby:GetChild("Guide")
+    local cancel_x = cancel:GetAnchoredPosition()
+    local _, guide_y = guide:GetAnchoredPosition()
+    guide:SetAnchoredPosition(waiting and -cancel_x or 0, guide_y)
+    guide:GetChild("Title").text = guide_open and "返回主菜单" or "玩法说明"
+end
+
 local function clear_pending()
     pending = nil
-    set_visible(lobby:GetChild("Cancel"), false)
+    draw_lobby()
 end
 
 local function reset_fill()
@@ -58,7 +75,7 @@ end
 local function start_online(choice)
     if pending then return end
     if not availability then
-        feedback("千星关卡状态未同步。可以稍后重试，或先开始 AI 练习。")
+        feedback("正在确认玩家人数，请稍候。也可以先开始 AI 练习。")
         return
     end
     local reason = availability[choice]
@@ -76,7 +93,7 @@ local function start_online(choice)
     end
     local token = next_request()
     pending = {choice = choice, token = token, elapsed = 0}
-    set_visible(lobby:GetChild("Cancel"), true)
+    draw_lobby()
     feedback("正在发起" .. online_modes[choice] .. "…")
     print("AUTO_PETS_LOBBY mode_request " .. choice)
     send_request(choice, fill, token)
@@ -95,9 +112,10 @@ end
 local function main_menu()
     show_section("Lobby")
     elapsed, availability, snapshot_age, last_view = 0, nil, 0, request_id
+    guide_open = false
     clear_pending()
     reset_fill()
-    if mode == 0 then lobby:GetChild("Status").text = "正在连接千星关卡" end
+    if mode == 0 then lobby:GetChild("Status").text = "同步中…" end
     feedback("")
     query_lobby()
 end
@@ -247,16 +265,12 @@ local function receive_lobby(_, values)
     mode = selected
     availability, snapshot_age = {[2] = duel_reason, [8] = room_reason, waiting = waiting}, 0
     if label or matched then clear_pending() end
-    set_visible(lobby:GetChild("Choices"), label == nil)
-    set_visible(lobby:GetChild("Continue"), label ~= nil)
+    draw_lobby()
     lobby:FindChild("Continue/Title").text = label and ("回到" .. label) or ""
     local count = string.format("已进入 %d 人", present)
     if waiting > 0 then count = count .. string.format(" · %d 人加载中", waiting) end
     if entry_labels[entry] then count = entry_labels[entry] .. " · " .. count end
     lobby:GetChild("Status").text = label and ("当前对局 · " .. label) or count
-    lobby:GetChild("Help").text = label and "联机重开请使用千星房间的「重新挑战」。"
-        or duel_reason == 6 and "等待关卡内的发起者开局。你可以先开始 AI 练习。"
-        or "好友 1v1 请先通过千星好友房间邀请好友，两人进入后即可开始。"
     if label then
         if matched then print("AUTO_PETS_LOBBY mode_accepted " .. selected) end
         feedback("")
@@ -266,7 +280,7 @@ local function receive_lobby(_, values)
     elseif duel_reason == 0 and lobby:GetChild("Feedback").text == refusal[1] then
         feedback("两位玩家已到齐，点好友 1v1 开局。")
     end
-    if entering and section == "Lobby" then show_online() end
+    if entering and section == "Lobby" and not guide_open then show_online() end
 end
 
 local function bind(container, path, callback)
@@ -299,10 +313,9 @@ function OnStart()
         clear_pending()
         feedback("已停止等待。若关卡已开局，可从主菜单进入。")
     end)
-    bind(lobby, "Exit/Hit", function()
-        clear_pending()
-        reset_fill()
-        feedback("从千星左上角菜单或 Esc 打开试玩控制，选择退出。")
+    bind(lobby, "Guide/Hit", function()
+        guide_open = not guide_open
+        draw_lobby()
     end)
     bind(lobby, "Continue/Hit", show_online)
     bind(root, "Duel/Back/Hit", main_menu)
@@ -340,7 +353,7 @@ function OnUpdate(dt)
                 clear_pending()
                 elapsed = 0
                 print("AUTO_PETS_LOBBY mode_timeout")
-                feedback("尚未收到关卡回应，可以重试。")
+                feedback("等待超时，可以重试。")
                 query_lobby()
             end
         end
@@ -348,7 +361,7 @@ function OnUpdate(dt)
         if snapshot_age >= 6 and snapshot_age - dt < 6 then
             availability = nil
             reset_fill()
-            lobby:GetChild("Status").text = "等待关卡状态同步"
+            lobby:GetChild("Status").text = "同步中…"
         end
         if elapsed >= 2 then
             elapsed = 0
@@ -384,4 +397,5 @@ function OnDestroy()
     bindings = {}
     active, section, practice, online = false, nil, nil, nil
     request_id, last_view, availability, saw_lobby = 0, 0, nil, nil
+    guide_open = false
 end
