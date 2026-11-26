@@ -4,6 +4,7 @@ local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到
 local battle = require("autopets.battle")
 local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
+local pets, foods = native_catalog.pets, native_catalog.foods
 local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
@@ -86,7 +87,7 @@ local function paint_ability()
         local shelf = preview and (picked.kind == "reward" and preview.rewards or preview.pets)
         code, level = shelf and shelf[picked.slot], 1
     end
-    local pet = code and native_catalog.pets[math.abs(code)]
+    local pet = code and pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
     if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
     if badges and experience then body = body .. " · 经验 " .. experience end
@@ -114,8 +115,7 @@ local function paint_shop()
         local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
         local item = (is_pet and pets or foods)[math.abs(code)]
         if portrait then
-            local definition = (is_pet and native_catalog.pets or native_catalog.foods)[math.abs(code)]
-            portrait.shop(5 + slot, definition and definition.id)
+            portrait.shop(5 + slot, item and item.id)
         end
         local offer = "售罄"
         if badges then
@@ -132,11 +132,11 @@ local function paint_shop()
         text("Shop/Offer" .. slot .. "/Text", offer)
         text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
         local unit = preview.team[slot]
+        local pet = unit and pets[unit.code]
         if portrait then
-            local definition = unit and native_catalog.pets[unit.code]
-            portrait.shop(slot, definition and definition.id)
+            portrait.shop(slot, pet and pet.id)
         end
-        local name = unit and pets[unit.code] and pets[unit.code].name or "空位 " .. slot
+        local name = pet and pet.name or "空位 " .. slot
         local stats = ""
         if badges then
             visible("Shop/InspectTeam" .. slot, unit ~= nil)
@@ -236,7 +236,8 @@ local function paint_battle()
             elseif slot <= board[61 + side] then
                 local head = board[63 + side]
                 local offset = (side * 5 + (head + slot - 1) % 5) * 6 + 1
-                local item = fighters[board[offset]] or pets[board[offset]]
+                local fighter = fighter_ids[board[offset]]
+                local item = native_catalog.pet_by_id[fighter] or native_catalog.token_by_id[fighter]
                 if item then
                     id, attack, life = item.id, board[offset + 1], board[offset + 2]
                     if badges then
@@ -379,7 +380,7 @@ local function decode_formation(wire)
         or #wire ~= 1 + count * 6 then return nil end
     local team = {}
     for at = 2, #wire, 6 do
-        local definition = native_catalog.pets[wire[at]]
+        local definition = pets[wire[at]]
         if not definition then return nil end
         team[#team + 1] = {id = definition.id, uid = wire[at + 1], attack = wire[at + 2],
             health = wire[at + 3], level = wire[at + 4]}

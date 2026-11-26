@@ -16,12 +16,7 @@ local click = Enum.CursorEventType.CursorClick
 local battle = require("autopets.battle")
 local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
-local pets = {
-    -- AP_DUEL_PETS
-}
-local foods = {
-    -- AP_DUEL_FOODS
-}
+local pets, foods = native_catalog.pets, native_catalog.foods
 local rules = {
     -- AP_DUEL_RULES
 }
@@ -142,7 +137,7 @@ local function render_ability(view)
         local shelf = view and (picked.kind == "reward" and view.rewards or view.pets)
         code, level = shelf and shelf[picked.slot], 1
     end
-    local pet = code and native_catalog.pets[math.abs(code)]
+    local pet = code and pets[math.abs(code)]
     local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
     if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
     if badges and experience then body = body .. "\n经验 " .. experience end
@@ -224,8 +219,7 @@ local function render_market()
         local code = view.pets[slot]
         local pet = pets[math.abs(code)]
         if portrait then
-            local animal = native_catalog.pets[math.abs(code)]
-            portrait.shop(rules.team_size + slot, animal and animal.id)
+            portrait.shop(rules.team_size + slot, pet and pet.id)
             if shop_badges then badges.paint(rules.team_size + slot, pet and pet.attack, pet and pet.health, pet and rules.pet_cost) end
             label.text = pet and (badges and pet.name or string.format("%s\n%s\n%d金", pet.name,
                 replay_view.combat_values(pet.attack, pet.health), rules.pet_cost)) or "售罄"
@@ -238,8 +232,7 @@ local function render_market()
         local code = view.foods[slot]
         local food = foods[math.abs(code)]
         if portrait then
-            local item = native_catalog.foods[math.abs(code)]
-            portrait.shop(rules.team_size + rules.pet_slots + slot, item and item.id)
+            portrait.shop(rules.team_size + rules.pet_slots + slot, food and food.id)
             if shop_badges then
                 badges.paint(rules.team_size + rules.pet_slots + slot, food and food.attack, food and food.health,
                     food and rules.food_cost, true)
@@ -254,16 +247,15 @@ local function render_market()
     end
     for slot, label in ipairs(team_labels) do
         local unit = view.team[slot]
+        local pet = unit and pets[unit.code]
         if portrait then
-            local animal = unit and native_catalog.pets[unit.code]
-            portrait.shop(slot, animal and animal.id)
+            portrait.shop(slot, pet and pet.id)
             local face = slot == picked and Color(228, 176, 94, 255)
                 or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
             child("Team" .. slot .. "Face").imageColor = face
             if shop_badges then badges.paint(slot, unit and unit.attack, unit and unit.health) end
         end
         if unit then
-            local pet = pets[unit.code]
             local name = pet and pet.name or "动物"
             if badges then
                 label.text = string.format("%s\nL%d", name, unit.level)
@@ -438,7 +430,7 @@ local function decode_formation(wire)
     if #wire % 5 ~= 0 or #wire > 5 * rules.team_size then return nil end
     local team = {}
     for at = 1, #wire, 5 do
-        local definition = native_catalog.pets[wire[at]]
+        local definition = pets[wire[at]]
         if not definition then return nil end
         team[#team + 1] = {id = definition.id, uid = wire[at + 1], attack = wire[at + 2],
             health = wire[at + 3], level = wire[at + 4]}

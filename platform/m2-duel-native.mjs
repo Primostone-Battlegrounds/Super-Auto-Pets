@@ -204,14 +204,9 @@ export function duelLayout(rule, includeProbeButtons = false) {
 
 export function duelClientSource(template, resource) {
   const rule = resource.rules;
-  const catalogLua = entries => entries.map(({ name, attack, health }) =>
-    `{name = ${JSON.stringify(name)}, attack = ${attack}, health = ${health}},`).join('\n    ');
   const clientRules = ['PET_SLOTS', 'FOOD_SLOTS', 'TEAM_SIZE', 'PET_COST', 'FOOD_COST', 'MAX_LEVEL']
     .map(key => `${key.toLowerCase()} = ${rule[key]},`).join('\n    ');
-  const source = template
-    .replace('-- AP_DUEL_PETS', catalogLua(resource.catalog.pet))
-    .replace('-- AP_DUEL_FOODS', catalogLua(resource.catalog.food))
-    .replace('-- AP_DUEL_RULES', clientRules);
+  const source = template.replace('-- AP_DUEL_RULES', clientRules);
   assert.doesNotMatch(source, /-- AP_DUEL_/);
   return `${onlineBadgeSource}\n${source}`;
 }
