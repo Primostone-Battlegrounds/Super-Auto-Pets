@@ -1,11 +1,14 @@
 -- Shared catalog-driven wording for native animal inspection. No gameplay mutation.
 local triggers = {start = "开场", faint = "退场", hurt = "首次受伤存活", attack = "出击", summon = "友方召唤"}
-local function describe(catalog, pet, level, include_level)
+local full_triggers = {
+    start = "战斗开始时", faint = "晕厥时", hurt = "首次受到伤害且存活时", attack = "攻击时", summon = "友方召唤时",
+}
+local function describe(catalog, pet, level, include_level, full)
     local skill = assert(pet.ability, "animal ability required")
     level = assert(math.tointeger(level))
-    local heading = include_level and string.format("%s · L%d · %s", pet.name, level, skill.name)
+    local heading = include_level and string.format("%s · %s%d · %s", pet.name, full and "Lv." or "L", level, skill.name)
         or (pet.name .. " · " .. skill.name)
-    local trigger, power = assert(triggers[skill.trigger]), skill.power * level
+    local trigger, power = assert((full and full_triggers or triggers)[skill.trigger]), skill.power * level
     local effect
     if skill.effect == "shield_front" then effect = string.format("前排 %d 名队员各获得 %d 盾", skill.targets, power)
     elseif skill.effect == "hit_random" then effect = string.format("随机 %d 名对手各受 %d 伤", skill.targets, power)

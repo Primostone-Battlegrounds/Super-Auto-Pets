@@ -1,4 +1,5 @@
 local animal_ability = require("autopets.animal_ability")
+local pet_presentation = require("autopets.pet_presentation")
 local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
 local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
 local battle = require("autopets.battle")
@@ -9,7 +10,7 @@ local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
-local inspected
+local inspected, offer_pick
 local render_standings, panel, portrait, badges, unified_layout
 local shop_drag
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
@@ -79,26 +80,34 @@ end
 
 local function paint_ability()
     local picked = inspected or {kind = "pet", slot = 1}
-    local code, level, experience
+    local code, level, experience, unit
     if picked.kind == "team" then
-        local unit = preview and preview.team[picked.slot]
+        unit = preview and preview.team[picked.slot]
         code, level = unit and unit.code, unit and unit.level
         experience = unit and unit.xp
     else
-        local shelf = preview and (picked.kind == "reward" and preview.rewards or preview.pets)
+        local shelf = preview and (picked.kind == "reward" and preview.rewards
+            or picked.kind == "food" and preview.foods or preview.pets)
         code, level = shelf and shelf[picked.slot], 1
     end
-    local pet = code and native_catalog.pets[math.abs(code)]
-    local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
-    if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
-    if badges and experience then body = body .. " · 经验 " .. experience end
+    local food = picked.kind == "food"
+    local item = code and (food and native_catalog.foods or native_catalog.pets)[math.abs(code)]
+    local title, body = "选择一项商品或队员查看", "查看详情不会花费金币"
+    if item then
+        if unified_layout and food then title, body = pet_presentation.food(item)
+        elseif unified_layout then title, body = pet_presentation.animal(native_catalog, item, unit)
+        else title, body = animal_ability.describe(native_catalog, item, level, true) end
+    end
+    if unified_layout and unit then body = body .. " · " .. pet_presentation.level(unit, native_catalog.rules.level_xp)
+    elseif badges and experience then body = body .. " · 经验 " .. experience end
     text("Shop/AbilityTitle", title)
     text("Shop/AbilityBody", body)
 end
 
 local function paint_shop()
     if not preview or preview.round ~= match.round then return end
-    text("Shop/Money", string.format("金币 %d · %d 阶 · 阵容 %d / 5 · 右侧为前排", preview.gold, preview.tier, #preview.team))
+    text("Shop/Money", unified_layout and string.format("金币 %d", preview.gold)
+        or string.format("金币 %d · %d 阶 · 阵容 %d / 5 · 右侧为前排", preview.gold, preview.tier, #preview.team))
     paint_ability()
     local picked = chosen()
     if badges then
@@ -108,16 +117,25 @@ local function paint_shop()
             local card = object("Shop/" .. (team and ("Team" .. slot) or ("Offer" .. offer)))
             local x, y = card:GetAnchoredPosition()
             local tx, ty = card:GetChild("Text"):GetAnchoredPosition()
-            return x + tx, y + ty - (team and 28 or 25), x + (offer <= 3 and 42 or 47), y + 27
+            return x + tx, y + ty - (team and 28 or 25), x + 45, y + (unified_layout and 50 or 27)
         end)
     end
     for slot = 1, 5 do
         local is_pet = slot <= 3
         local code = is_pet and preview.pets[slot] or preview.foods[slot - 3]
         local item = (is_pet and pets or foods)[math.abs(code)]
+        local definition = (is_pet and native_catalog.pets or native_catalog.foods)[math.abs(code)]
         if portrait then
-            local definition = (is_pet and native_catalog.pets or native_catalog.foods)[math.abs(code)]
             portrait.shop(5 + slot, definition and definition.id)
+        end
+        if unified_layout then
+            if is_pet and definition then
+                text("Shop/InspectOffer" .. slot .. "/Text", pet_presentation.tier(definition))
+            elseif not is_pet then
+                local path = "Shop/OfferTier" .. slot
+                visible(path, definition ~= nil)
+                if definition then text(path, pet_presentation.tier(definition)) end
+            end
         end
         local offer = "售罄"
         if badges then
@@ -132,6 +150,10 @@ local function paint_shop()
             offer = detail:format(item.name, item.attack, item.health)
         end
         local kind, index = is_pet and "pet" or "food", is_pet and slot or slot - 3
+        if unified_layout then
+            visible("Shop/Freeze" .. slot, not match.ready and item ~= nil and inspected ~= nil
+                and inspected.kind == kind and inspected.slot == index)
+        end
         if shop_drag and shop_drag.source(kind, index) then offer = "拖动中" end
         text("Shop/Offer" .. slot .. "/Text", offer)
         text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
@@ -146,10 +168,22 @@ local function paint_shop()
             visible("Shop/InspectTeam" .. slot, unit ~= nil)
             badges.paint(slot, unit and unit.attack, unit and unit.health)
             local mark = shop_drag and shop_drag.mark(slot) or 0
+            local planned
+            if offer_pick then
+                planned = shop_input.plan(editable() and preview, native_catalog.rules, offer_pick.kind, offer_pick.slot, slot)
+            elseif unified_layout and picked then
+                planned = shop_input.plan(editable() and preview, native_catalog.rules, "team", picked, slot)
+            end
+            local combining = planned and (planned[1] == 15 or planned[1] == 12)
+            if unified_layout and unit then
+                text("Shop/InspectTeam" .. slot .. "/Text",
+                    (combining and "➜ " or "") .. pet_presentation.level(unit, native_catalog.rules.level_xp))
+            end
             object("Shop/Team" .. slot .. "/Surface").imageColor =
                 mark == 2 and Color(104, 194, 168, 255) or mark == 1 and Color(125, 168, 133, 255)
+                or combining and Color(206, 177, 94, 255)
                 or picked == slot and Color(228, 176, 94, 255) or unit and Color(117, 140, 93, 255) or Color(80, 107, 76, 255)
-            name = unit and (name .. " L" .. unit.level) or ""
+            name = unit and (unified_layout and name or (name .. " L" .. unit.level)) or ""
         elseif unit then
             local values = portrait and replay_view.combat_values(unit.attack, unit.health)
                 or string.format("%d攻 %d命", unit.attack, unit.health)
@@ -160,13 +194,23 @@ local function paint_shop()
     reward = math.min(reward, math.max(#preview.rewards, 1))
     local item = pets[preview.rewards[reward]]
     if badges then visible("Shop/InspectReward", item ~= nil) end
+    local reward_tier = unified_layout and item and pet_presentation.tier(native_catalog.pets[preview.rewards[reward]])
     text("Shop/Reward/Text", shop_drag and shop_drag.source("reward", reward) and "拖动中"
-        or item and string.format("%s %d/%d", item.name, reward, #preview.rewards)
+        or item and (reward_tier and (item.name .. " · " .. reward_tier)
+            or string.format("%s %d/%d", item.name, reward, #preview.rewards))
         or badges and "暂无奖励" or "暂无升级奖励")
     text("Shop/Merge/Text", merge and "取消合并" or "合并队员")
     if unified_layout then
+        visible("Shop/Merge", false)
+        visible("Shop/Reward", item ~= nil)
+        visible("Shop/RewardNext", #preview.rewards > 1)
+        visible("Shop/Sell", not match.ready and picked ~= nil)
+        if picked then
+            local x = object("Shop/Team" .. picked):GetAnchoredPosition()
+            object("Shop/Sell"):SetAnchoredPosition(x, 39)
+        end
         text("Shop/Reroll/Text", shop_drag.waiting() and "取消拖放"
-            or string.format("刷新 · %d 金", native_catalog.rules.reroll_cost))
+            or string.format("刷新 · %d 金 · %s", native_catalog.rules.reroll_cost, pet_presentation.tier(preview.tier)))
     end
 end
 
@@ -328,7 +372,7 @@ local function receive_view(_, values)
     end
     local transitioned = not match or round ~= match.round or phase ~= match.phase
     if transitioned then
-        selected, merge, reward, hint, inspected = nil, false, 1, nil, nil
+        selected, merge, reward, hint, inspected, offer_pick = nil, false, 1, nil, nil, nil
     elseif acknowledged and sequence == pending[3] then
         hint = "操作未生效，已同步服务端状态"
     else
@@ -338,12 +382,16 @@ local function receive_view(_, values)
         frames, frame_round, frame_index, following = {}, round, 0, true
         replay_playing, replay_elapsed = false, 0
     end
-    if transitioned or acknowledged or pending and sequence > pending[3] then pending = nil end
+    if transitioned or acknowledged or pending and sequence > pending[3] then pending, offer_pick = nil, nil end
     latest, forfeiting = revision, false
     match = {phase = phase, round = round, seat = seat, sequence = sequence, ready = ready, lives = lives,
         places = places, opponents = opponents, results = results}
     seconds = (phase == 2 or phase == 4) and remaining or nil
+    local before = preview
     preview = decode_shop(raw, shop_rules)
+    if unified_layout and preview then
+        hint = pet_presentation.level_up(before, preview, native_catalog) or hint
+    end
     local playing_seats = phase >= 1
     local view = {revision = revision, phase = phase == 0 and "lobby" or phase == 5 and "ended" or "preparation",
         phase_name = phase_names[phase], round = round, seat = seat, human_count = humans,
@@ -438,18 +486,34 @@ local function buy(slot, is_reward)
 end
 
 local function choose(slot)
+    if unified_layout and editable() and offer_pick then
+        shop_action(offer_pick.kind, offer_pick.slot, slot)
+        if pending then offer_pick = nil end
+        return
+    end
     inspected = {kind = "team", slot = slot}
     if not editable() or not preview.team[slot] then return end
     local picked = chosen()
     if not picked then selected = preview.team[slot].uid
     elseif picked == slot then selected = nil
     elseif unified_layout then
-        shop_action("team", picked, slot, merge)
+        shop_action("team", picked, slot)
         if pending then selected, merge = nil, false end
     else
         send(merge and 15 or 14, picked, slot)
         selected, merge = nil, false
     end
+end
+
+local function inspect_offer(kind, slot)
+    if unified_layout and offer_pick and offer_pick.kind == kind and offer_pick.slot == slot then
+        offer_pick, hint = nil, nil
+    elseif unified_layout and editable() then
+        offer_pick = {kind = kind, slot = slot}
+        selected = nil
+        hint = "点选阵位购买，同种动物将合并"
+    end
+    inspected = {kind = kind, slot = slot}
 end
 
 local function button(path, callback, kind, index)
@@ -513,7 +577,7 @@ function OnStart(view_root, painter, badge_pool)
     latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
     frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
     controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
-    inspected = nil
+    inspected, offer_pick = nil, nil
     source_ready = true
     if unified_layout then
         if game.GetUICanvasSize then
@@ -535,25 +599,36 @@ function OnStart(view_root, painter, badge_pool)
                 return shop_input.plan(editable() and preview, native_catalog.rules, kind, index, target)
             end,
             apply = function(action) send(table.unpack(action, 1, 4)) end,
+            inspect = function(kind, index)
+                if not offer_pick and preview then
+                    inspected = {kind = kind, slot = index}
+                    redraw()
+                end
+            end,
             changed = function(message) hint = message; redraw() end,
         })
     end
     replay_playing, replay_elapsed = false, 0
     visible("Ready", false)
     visible("Forfeit", false)
-    button("Shop/InspectReward", function() inspected = {kind = "reward", slot = reward} end)
+    button("Shop/InspectReward", function() inspect_offer("reward", reward) end)
     for slot = 1, 5 do
-        button("Shop/InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot} end)
+        button("Shop/InspectTeam" .. slot, function()
+            offer_pick = nil
+            inspected = {kind = "team", slot = slot}
+        end)
         if slot <= 3 then
-            button("Shop/InspectOffer" .. slot, function() inspected = {kind = "pet", slot = slot} end)
+            button("Shop/InspectOffer" .. slot, function() inspect_offer("pet", slot) end)
         end
         local kind, index = slot <= 3 and "pet" or "food", slot <= 3 and slot or slot - 3
         button("Shop/Offer" .. slot, function()
             if slot <= 3 then
                 buy(slot, false)
             elseif unified_layout then
+                inspected = {kind = "food", slot = slot - 3}
                 local target = chosen()
-                shop_action("food", slot - 3, target)
+                if target then shop_action("food", slot - 3, target)
+                elseif editable() and preview.foods[slot - 3] ~= 0 then offer_pick = inspected end
             elseif editable() then
                 local target = chosen()
                 if target and preview.foods[slot - 3] ~= 0 then send(16, slot - 3, target) end

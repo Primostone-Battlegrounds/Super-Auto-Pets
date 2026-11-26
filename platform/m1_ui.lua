@@ -3,6 +3,7 @@ local run = require("autopets.run")
 local art = require("autopets.art")
 local bind_portrait = require("autopets.native_portrait")
 local animal_ability = require("autopets.animal_ability")
+local pet_presentation = require("autopets.pet_presentation")
 local shop_input = require("autopets.shop_input")
 local replay_view = require("autopets.replay_view")
 local root
@@ -23,7 +24,7 @@ local errors = {
 }
 
 local session, state, selection, message
-local press, drag, pending_drop
+local press, drag, pending_drop, hovered
 local drop_targets = {}
 local menu_open, has_started = true, false
 local difficulty
@@ -169,9 +170,13 @@ local function team_card(path, unit, selected, effect)
     if not mirrored then
         show(path .. "/XPPaper", preparing and unit ~= nil)
         if preparing and unit then
-            local threshold = rules.level_xp[unit.level + 1]
-            local progress = threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满"
-            text(path .. "/XP", "L" .. unit.level .. "  " .. progress)
+            if shared_portraits then
+                text(path .. "/XP", pet_presentation.level(unit, rules.level_xp))
+            else
+                local threshold = rules.level_xp[unit.level + 1]
+                local progress = threshold and string.format("经验 %d/%d", unit.xp, threshold) or "经验已满"
+                text(path .. "/XP", "L" .. unit.level .. "  " .. progress)
+            end
         else
             show(path .. "/XP", false)
         end
@@ -213,7 +218,8 @@ end
 local function action_for_team(source, index, dropped)
     local unit = state.shop.team[index]
     if source.kind == "team" then
-        local same_species = dropped and unit and unit.id == state.shop.team[source.index].id
+        local member = state.shop.team[source.index]
+        local same_species = (dropped or shared_portraits) and unit and member and unit.id == member.id
         if dropped then
             index = math.min(index, #state.shop.team)
             if index == source.index then return end
@@ -232,7 +238,7 @@ local function drag_feedback(source)
     if not source then return end
     if not source.target then
         if source.kind == "food" then return "拖向一名队员喂食" end
-        if source.kind == "team" then return "拖到同种队员会合并，点击两个站位可换位" end
+        if source.kind == "team" then return "拖到同种队员合并，拖到其他站位换位" end
         return "拖向目标站位，空位表示队尾"
     end
     local action, index = action_for_team(source, source.target, true)
@@ -256,11 +262,11 @@ local function offer_card(path, kind, index)
     local face = selected and 0xfff4ce or 0xead19a
     local rim = selected and 0xa86214 or (item and item.frozen and 0x245f72 or 0xa16c39)
     show(path .. "/Frozen", item and item.frozen == true or false)
-    show(path .. "/Price", item ~= nil)
-    show(path .. "/PriceIcon", item ~= nil)
+    show(path .. "/Price", not not item)
+    show(path .. "/PriceIcon", not not item)
     local frozen = item and item.frozen == true
-    show(path .. "/Tag", frozen or (item ~= nil and kind == "reward"))
-    if frozen then text(path .. "/Tag", "已冻结") end
+    show(path .. "/Tag", not not item and (shared_portraits or frozen or kind == "reward"))
+    if frozen and not shared_portraits then text(path .. "/Tag", "已冻结") end
     if not item then
         card(path, kind == "reward" and "升级奖励" or "空商品", selected, nil, face, rim)
         card_stats(path)
@@ -269,7 +275,11 @@ local function offer_card(path, kind, index)
     local is_food = kind == "food"
     local definition = (is_food and rules_data.food_by_id or rules_data.pet_by_id)[item.id]
     local cost = is_food and rules.food_cost or rules.pet_cost
-    if kind == "reward" then text(path .. "/Tag", string.format("%d/%d", index, #state.shop.rewards)) end
+    if shared_portraits then
+        text(path .. "/Tag", pet_presentation.tier(definition))
+    elseif kind == "reward" then
+        text(path .. "/Tag", string.format("%d/%d", index, #state.shop.rewards))
+    end
     card(path, definition.name, selected, item.id, face, rim)
     text(path .. "/Price", string.format("%d金", cost))
     card_stats(path, definition.attack, definition.health, is_food)
@@ -279,11 +289,13 @@ local function selected_info(picked)
     local kind, index = picked.kind, picked.index
     if kind == "team" then
         local unit = state.shop.team[index]
+        if shared_portraits then return pet_presentation.animal(rules_data, rules_data.pet_by_id[unit.id], unit) end
         return animal_ability.describe(rules_data, rules_data.pet_by_id[unit.id], unit.level)
     end
     local item = offer(kind, index)
     if kind == "food" then
         local food = rules_data.food_by_id[item.id]
+        if shared_portraits then return pet_presentation.food(food) end
         if food.adjacent_attack or food.adjacent_health then
             return food.name .. " · 食物", string.format("目标 +%d攻 +%d命 · 邻位 +%d攻 +%d命",
                 food.attack, food.health, food.adjacent_attack or 0, food.adjacent_health or 0)
@@ -293,22 +305,23 @@ local function selected_info(picked)
         if food.health > 0 then stats[#stats + 1] = string.format("生命 +%d", food.health) end
         return food.name .. " · 食物", "一名队员获得 " .. table.concat(stats, "，")
     end
-    return animal_ability.describe(rules_data, rules_data.pet_by_id[item.id], 1)
+    local pet = rules_data.pet_by_id[item.id]
+    if shared_portraits then return pet_presentation.animal(rules_data, pet) end
+    return animal_ability.describe(rules_data, pet, 1)
 end
 
 local function draw_tooltip(preparing)
-    local picked = preparing and not menu_open and not confirming_restart and (drag or selection)
+    local picked = preparing and not menu_open and not confirming_restart and (drag or selection or hovered)
     show("Tooltip", not not picked)
-    local caption = control("Shop/Caption")
     if not picked then
-        caption:SetAnchoredPosition(-465, 106)
+        if not shared_portraits then control("Shop/Caption"):SetAnchoredPosition(-465, 106) end
         return
     end
     local parents = {team = "Team", pet = "Shop/Pet", food = "Shop/Food"}
     local path = picked.kind == "reward" and "Shop/Reward" or parents[picked.kind] .. picked.index
     local card_x, card_y = control(path):GetAnchoredPosition()
     local x = math.max(-370, math.min(370, card_x))
-    caption:SetAnchoredPosition(x < -150 and 452 or -465, 106)
+    if not shared_portraits then control("Shop/Caption"):SetAnchoredPosition(x < -150 and 452 or -465, 106) end
     local beside_team = picked.kind == "team"
     local tooltip = control("Tooltip")
     local _, tooltip_height = tooltip:GetSizeDelta()
@@ -335,7 +348,8 @@ local function arrange(preparing)
     for index = 1, rules.team_size do
         local x, y = 82 + (index - 1) * 112, 54
         local team_path = "Team" .. index
-        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and 82 or y)
+        local prep_y = shared_portraits and 145 or 82
+        control(team_path):SetAnchoredPosition(preparing and (3 - index) * 176 or -x, preparing and prep_y or y)
         show(team_path .. "/Hit", preparing)
         if preparing then show("Enemy" .. index, false) end
     end
@@ -384,6 +398,7 @@ end
 local function draw_menu()
     show("Menu", menu_open)
     if not menu_open then return end
+    if shared_portraits then text("Menu/Heading", has_started and "暂停" or "单人 AI 练习") end
     text("Menu/Continue/Title", has_started and "继续本局" or "单人练习")
     show("Menu/NewGame", has_started)
     show("Menu/Difficulty", not has_started)
@@ -414,7 +429,8 @@ local function draw(refresh)
     local drop_source = drag or pending_drop
     local drag_hint, drop_label = drag_feedback(drop_source)
     arrange(preparing)
-    text("Round/Value", string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
+    text("Round/Value", shared_portraits and preparing and tostring(state.round)
+        or string.format("第 %d 轮 · %s", state.round, phases[state.phase]))
     text("Money/Value", tostring(state.shop.gold))
     text("Wins/Value", string.format("%d / %d", state.wins, rules.wins_to_win))
     text("Lives/Value", string.format("%d / %d", state.lives, rules.start_lives), state.lives <= 1 and 0x9c3328 or 0x733b31)
@@ -433,19 +449,28 @@ local function draw(refresh)
         local path = "Team" .. index
         team_card(path, player[index], matches(drag or selection, "team", index), effect("player", index))
         local drop = drop_label and drop_source.target == index
-        local _, _, legal = drag_feedback(drag and {kind = drag.kind, index = drag.index, merge = drag.merge, target = index})
+        local origin = drag or shared_portraits and selection
+        local _, _, legal = drag_feedback(origin and {kind = origin.kind, index = origin.index, merge = origin.merge, target = index})
         show(path .. "/DropTarget", drop == true or legal ~= nil)
-        if drop or legal then control(path .. "/DropTarget").imageColor = colour(drop and 0x20655e or 0x508774) end
+        local action = drop and pending_drop and pending_drop.action or legal
+        local combining = action == "merge" or action == "combine"
+        if drop or legal then
+            control(path .. "/DropTarget").imageColor = colour(combining and 0x9f782a or drop and 0x20655e or 0x508774)
+        end
         if drop then
             show(path .. "/Name", false)
-            text(path .. "/DropLabel", pending_drop and ("确认" .. drop_label) or drop_label)
+            local caption = pending_drop and ("确认" .. drop_label) or drop_label
+            text(path .. "/DropLabel", shared_portraits and combining and ("➜ " .. caption) or caption)
+        elseif shared_portraits and combining then
+            text(path .. "/DropLabel", "➜ 合并")
         else
             show(path .. "/DropLabel", false)
         end
     end
     show("Shop", preparing)
     show("Battle", not preparing)
-    show("Reset", preparing)
+    show("Reset", preparing and not shared_portraits)
+    if shared_portraits then show("Heading", false) end
     draw_menu()
     show("Restart", confirming_restart ~= nil)
     if confirming_restart then
@@ -460,13 +485,15 @@ local function draw(refresh)
     local hint = "拖动商品或队员到阵容，也可点击选择"
     if preparing then
         if #state.shop.team == 0 then
-            hint = state.shop.gold < rules.pet_cost and "金币不足以招募。点“重开本局”恢复。"
+            hint = state.shop.gold < rules.pet_cost and (shared_portraits and "金币不足以招募。可从暂停菜单重开。"
+                or "金币不足以招募。点“重开本局”恢复。")
                 or "先招一只动物：拖到高亮站位，点一下确认。也可以点选动物后购买。"
         end
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
         text("Shop/Caption", string.format("商店 · %d 阶", state.shop.tier))
         text("Shop/Buy/Title", string.format("购买 · %d 金", rules.pet_cost))
-        text("Shop/Reroll/Title", pending_drop and "取消拖放" or string.format("刷新 · %d 金", rules.reroll_cost))
+        local reroll_tier = shared_portraits and (" · " .. pet_presentation.tier(state.shop.tier)) or ""
+        text("Shop/Reroll/Title", pending_drop and "取消拖放" or string.format("刷新 · %d 金", rules.reroll_cost) .. reroll_tier)
         local picked = drag or selection
         local selling = picked and picked.kind == "team" and state.shop.team[picked.index]
         local refund = selling and string.format("+%d 金", selling.level * rules.sell_gold_per_level)
@@ -475,6 +502,25 @@ local function draw(refresh)
         for index = 1, rules.pet_shop_slots do offer_card("Shop/Pet" .. index, "pet", index) end
         for index = 1, rules.food_shop_slots do offer_card("Shop/Food" .. index, "food", index) end
         offer_card("Shop/Reward", "reward", reward_index)
+        if shared_portraits then
+            local freezing = picked and (picked.kind == "pet" or picked.kind == "food") and offer(picked.kind, picked.index)
+            local buying = picked and (picked.kind == "pet" or picked.kind == "reward") and offer(picked.kind, picked.index)
+            show("Shop/Merge", false)
+            show("Shop/Buy", not not buying)
+            show("Shop/Sell", not not selling)
+            show("Shop/Freeze", not not freezing)
+            show("Shop/Reward", #state.shop.rewards > 0)
+            show("Shop/RewardNext", #state.shop.rewards > 1)
+            if selling then
+                local x = control("Team" .. picked.index):GetAnchoredPosition()
+                control("Shop/Sell"):SetAnchoredPosition(x, 146)
+            end
+            if freezing then
+                local x = control("Shop/" .. (picked.kind == "pet" and "Pet" or "Food") .. picked.index):GetAnchoredPosition()
+                control("Shop/Freeze"):SetAnchoredPosition(x, -118)
+                text("Shop/Freeze/Title", freezing.frozen and "解冻" or "冻结")
+            end
+        end
     else
         local replaying = replay_pending()
         local headline = state.final and "单局" .. outcomes[state.final] or "本轮" .. outcomes[battle.outcome]
@@ -516,13 +562,16 @@ local function command(action, ...)
     clear_drag()
     local ok, error_code = session:shop_action(action, ...)
     if ok then
-        message = nil
+        local before = state.shop
+        state = session:snapshot()
+        hovered = nil
+        message = shared_portraits and pet_presentation.level_up(before, state.shop, rules_data) or nil
         if action ~= "freeze" then selection = nil end
         play_sound(action_sounds[action])
     else
         message = errors[error_code] or error_code
     end
-    draw()
+    draw(false)
 end
 
 local function choose_offer(kind, index)
@@ -547,7 +596,7 @@ local function choose_team(index)
     local unit = state.shop.team[index]
     if not selection or matches(selection, "team", index) then
         selection = not selection and unit and {kind = "team", index = index} or nil
-        message = selection and "选择另一个站位移动，或点击合并队员、出售" or nil
+        message = selection and (shared_portraits and "选择同种队员合并，其他站位换位" or "选择另一个站位移动，或点击合并队员、出售") or nil
         draw()
         return
     end
@@ -719,7 +768,7 @@ end
 
 local function reset_view()
     clear_drag()
-    press, selection, message, pending_drop = nil, nil, nil, nil
+    press, selection, message, pending_drop, hovered = nil, nil, nil, nil, nil
     reward_index, event_index, elapsed = 1, 1, 0
     replay_complete, reviewing = false, false
     set_playing(false)
@@ -861,7 +910,7 @@ local function pressed_here(path, event)
     return event and press and press.touch == event.touchId and press.path == path
 end
 
-local function bind(path, callback, on_drag)
+local function bind(path, callback, on_drag, kind, index)
     local hit = control(path .. "/Hit")
     hit:SetActive(true)
     hit:SetVisible(true)
@@ -890,6 +939,20 @@ local function bind(path, callback, on_drag)
             end
         end,
     }
+    if shared_portraits and kind and Enum.CursorEventType.CursorEnter and Enum.CursorEventType.CursorExit then
+        bound[Enum.CursorEventType.CursorEnter] = function()
+            if not allows_input(path) or state.phase ~= "preparation" then return end
+            local item = kind == "team" and state.shop.team[index()] or kind ~= "team" and offer(kind, index())
+            hovered = item and {kind = kind, index = index()} or nil
+            draw_tooltip(true)
+        end
+        bound[Enum.CursorEventType.CursorExit] = function()
+            if hovered and matches(hovered, kind, index()) then
+                hovered = nil
+                draw_tooltip(state.phase == "preparation")
+            end
+        end
+    end
     if on_drag then
         bound[Enum.CursorEventType.CursorBeginDrag] = function(event)
             if not allows_input(path) or not pressed_here(path, event) then return end
@@ -914,7 +977,8 @@ end
 local function bind_card(path, kind, index)
     bind(path, function()
         if kind == "team" then choose_team(index) else choose_offer(kind, index or reward_index) end
-    end, function(event) begin_drag(event, path, kind, index or reward_index) end)
+    end, function(event) begin_drag(event, path, kind, index or reward_index) end, kind,
+        function() return index or reward_index end)
 end
 
 local function bind_button(path, callback)
@@ -951,7 +1015,7 @@ local function release_view()
     local old_portrait = lunging and controls[lunging .. "/Portrait"]
     if old_portrait and old_portrait.alive then old_portrait:SetAnchoredPosition(0, 27) end
     root, session, state = nil, nil, nil
-    press, selection, message, pending_drop = nil, nil, nil, nil
+    press, selection, message, pending_drop, hovered = nil, nil, nil, nil, nil
     listeners, controls, portrait = {}, {}, nil
     drop_targets = {}
     visibility, displayed_text, displayed_colour = {}, {}, {}
