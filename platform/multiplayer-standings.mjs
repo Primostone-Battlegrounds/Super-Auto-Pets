@@ -45,10 +45,13 @@ local function bind_online_badges(pool)
         fields[slot] = {pool:GetChild("Attack" .. slot), pool:GetChild("Life" .. slot),
             slot > 5 and pool:GetChild("Price" .. (slot - 5)) or nil}
     end
-    local impact = fields[6][3]
+    local cues = {fields[6][3], fields[7][3], fields[8][3]}
+    local function colour(rgb)
+        return Color((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255)
+    end
     local function hide()
         if state then
-            set(impact, nil)
+            for _, control in ipairs(cues) do set(control, nil) end
             pool:SetVisible(false)
             pool:SetActive(false)
             state = nil
@@ -78,8 +81,10 @@ local function bind_online_badges(pool)
             for _, control in ipairs(field) do set(control, nil) end
         end
         if phase == "shop" then
-            impact:SetSizeDelta(52, 32)
-            impact.bgColor, impact.fontColor = Color(250, 224, 162, 255), Color(105, 67, 33, 255)
+            for _, control in ipairs(cues) do
+                control:SetSizeDelta(52, 32)
+                control.bgColor, control.fontColor = Color(250, 224, 162, 255), Color(105, 67, 33, 255)
+            end
         end
         pool:SetActive(true)
         pool:SetVisible(true)
@@ -95,16 +100,20 @@ local function bind_online_badges(pool)
         set(field[2], life ~= nil and ("命" .. sign .. life) or nil)
         if state == "shop" and field[3] then set(field[3], price ~= nil and (price .. " 金") or nil) end
     end
-    local function feedback(slot, event)
-        local field = slot and fields[slot]
+    local function place_cue(control, cue, own_side)
+        if not cue then set(control, nil); return end
+        local field = fields[(cue.side == own_side and 0 or 5) + cue.slot]
+        control:SetSizeDelta(72, 28)
+        control:SetAnchoredPosition(field.cue_x, field.cue_y)
+        control.bgColor, control.fontColor = colour(cue.face), colour(cue.ink)
+        set(control, cue.label)
+    end
+    local function feedback(primary, target, own_side)
         if state ~= "replay" then return end
-        if not field or not event or event.type ~= "damage" then set(impact, nil); return end
-        local blocked = event.amount == 0
-        impact:SetSizeDelta(72, 32)
-        impact:SetAnchoredPosition(field.cue_x, field.cue_y)
-        impact.bgColor = blocked and Color(197, 222, 230, 255) or Color(251, 208, 150, 255)
-        impact.fontColor = blocked and Color(41, 72, 90, 255) or Color(116, 46, 35, 255)
-        set(impact, blocked and "格挡" or "-" .. event.amount)
+        local damage = primary and (primary.kind == "damage" or primary.kind == "guard")
+        place_cue(cues[1], damage and primary, own_side)
+        place_cue(cues[2], not damage and primary, own_side)
+        place_cue(cues[3], target, own_side)
     end
     return {select = select, hide = hide, paint = paint, feedback = feedback, restore = function()
         hide()

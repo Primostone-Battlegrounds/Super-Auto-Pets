@@ -22,13 +22,13 @@ OpenHarness 固定到 `aebb0c2255a5df275491009285c1a23d03f90771`，使用 cooper
 
 GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub 连接器核对 PR、当前 SHA 和 CI，通过同一 GitHub PR 完成集成。
 
-## 正式 CD 验收
+## 持续交付验收
 
-`Game delivery` 在 `develop` 更新后对该次提交构建、回读并核对 `SHA256SUMS`。每次成功运行发布一个 ZIP，解压后导入 `super-auto-pets.gil`。ZIP 同时含 `BUILD.json`、验收说明以及夹具许可。历史候选继续通过 PR 检查提供隔离验证。[固定下载入口](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
+`Game delivery` 在 `develop` 更新后对该次提交构建、回读并核对 `SHA256SUMS`。工作流上传原始 `super-auto-pets.gil`，优先通过 GitHub 的工件 ID 下载接口验证匿名下载。匿名下载失败时，使用 GitHub 授权下载。散列校验和原生回读通过后，Summary 提供一个链接并注明是否需要登录。同次运行的 `game-evidence-<short-sha>` 工件保留 `BUILD.json`、`ACCEPTANCE.json`、`SHA256SUMS`、下载回执 `DOWNLOAD.json`、各层验证记录和夹具许可。工程全量校验时，将同次运行下载的 GIL 放在工程证据目录根部，再运行 `sha256sum --strict -c SHA256SUMS`。涉及交付工作流或回下载检查的同仓 PR 会运行同一套传输验证。[固定下载入口](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
 
-首次托管交付提取自合入提交 `a23f1bef22a5595528ce7333c852892e77547cc9`。已从 GitHub 取回 ZIP，核对 GitHub 归档散列、五项根目录文件、包内四项校验和与 `BUILD.json` 的 Git SHA。[首次成功运行](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378)
+项目最早采用 ZIP 托管交付。合入提交 `a23f1bef22a5595528ce7333c852892e77547cc9` 的工件回下载后校验了 GitHub 归档散列、五项根目录文件、包内四项校验和与 `BUILD.json` 的 Git SHA。[首次成功运行](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378)
 
-同次运行的原生手动重跑也已成功。重跑按原始提交构建，并用新制品替换同名旧制品。已取回重跑 ZIP，确认该次运行仍只有一个制品，且提交和校验和均正确。当前默认分支为 `main`，网页新建 `workflow_dispatch` 运行需要在默认分支注册工作流。有 Actions 写权限的维护者可从已有运行手动重跑。[重跑记录](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378/attempts/2) · [GitHub 触发说明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)
+有 Actions 写权限的维护者可从已有运行手动重跑，按原始提交构建并以新工件替换同名旧工件。当前默认分支为 `main`，网页新建 `workflow_dispatch` 运行需要在默认分支注册工作流。[历史 ZIP 重跑记录](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378/attempts/2) · [GitHub 触发说明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)
 
 ## 多人和六阶复验
 

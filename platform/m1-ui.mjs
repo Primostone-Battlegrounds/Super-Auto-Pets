@@ -2,6 +2,10 @@ const plane = 100001;
 const disc = 106025;
 const fadedTeal = 107012;
 const ticket = 106053;
+const attackIcon = 102035;
+const lifeIcon = 102018;
+const priceIcon = 102040;
+const levelIcon = 101033;
 export const portraitLayers = 16;
 export const pigment = {
   edge: '#3a5541', canvas: '#fff0ce', ink: '#28352a', muted: '#40573d', cream: '#fff8e5',
@@ -50,24 +54,25 @@ function card(name, position, width, type, interactive = true, visible = true, f
   const badgeX = market ? 35 : 26;
   const children = [
     ...(type === 'player' ? [image('DropTarget', [0, 6], [104, 54], '#438d7e', { image: fadedTeal, visible: false })] : []),
-    ...(interactive ? [image('Selected', [0, 6], [102, 47], '#d19a3f', { image: 107015, visible: false })] : []),
+    ...(interactive && !market ? [image('Selected', [0, 6], [102, 47], '#d19a3f', { image: 107015, visible: false })] : []),
     roundedPlate('Rim', [0, 5], [90, 34], ticket, pigment.edge),
     roundedPlate('Face', [0, 9], [90, 34], ticket, pigment[type]),
     ...(front ? [image('Front', [type === 'enemy' ? -52 : 52, 7], [22, 22], '#6d4219',
       { image: type === 'enemy' ? 100104 : 100103 })] : []),
     portrait(),
     label('Name', [0, -18], [width - 4, 32], '', market ? 24 : 22),
-    image('StatsPaper', [-badgeX, -49], [badgeWidth, 34], '#e2edf6'),
-    terrain('LifePaper', [badgeX, -49], [badgeWidth, 36], '#f9d8ce'),
-    label('Detail', [-badgeX, -49], [badgeWidth, 35], '', 25, '#253e58'),
-    label('LifeValue', [badgeX, -49], [badgeWidth, 35], '', 25, '#813830'),
+    image('StatsPaper', [-badgeX - 12, -49], [20, 20], '#253e58', { image: attackIcon }),
+    image('LifePaper', [badgeX - 12, -49], [20, 20], '#813830', { image: lifeIcon }),
+    label('Detail', [-badgeX + 10, -49], [badgeWidth - 14, 35], '', 25, '#253e58'),
+    label('LifeValue', [badgeX + 9, -49], [badgeWidth - 14, 35], '', 25, '#813830'),
     label('Tag', [0, 61], [Math.min(width - 4, 90), 29], '', 18, market ? pigment.ice : '#58431f'),
   ];
   if (market) {
-    const price = label('Price', [55, 46], [54, 32], '', 21, '#634016');
+    const price = label('Price', [64, 46], [38, 32], '', 21, '#634016');
     Object.assign(price.text, { background: '#ffdc80', backgroundOpacity: 1 });
     children.push(
       price,
+      image('PriceIcon', [39, 46], [21, 21], '#754214', { image: priceIcon, visible: false }),
       image('Frozen', [-39, 61], [19, 19], pigment.ice, { image: 102004, visible: false }),
     );
   } else {
@@ -78,8 +83,8 @@ function card(name, position, width, type, interactive = true, visible = true, f
   }
   if (type === 'player') {
     children.push(
-      roundedPlate('XPPaper', [0, 63], [width - 8, 28], ticket, '#e1edcf'),
-      label('XP', [0, 63], [width - 8, 28], '', 17),
+      image('XPPaper', [-45, 63], [16, 16], '#986320', { image: levelIcon }),
+      label('XP', [8, 63], [width - 16, 28], '', 17),
       label('DropLabel', [0, -18], [width - 4, 32], '', 22, '#194f44'),
     );
   }
@@ -91,22 +96,25 @@ function card(name, position, width, type, interactive = true, visible = true, f
 
 export function button(name, position, size, title, primary = false, fontSize = primary ? 28 : 20) {
   const blue = ['Freeze', 'Auto', 'Fast'].includes(name);
+  const refresh = name === 'Reroll';
   const buttonSurface = primary ? roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], 107015, '#fff5da')
     : blue ? roundedPlate('Face', [0, 2], [size[0] - 6, size[1] - 8], fadedTeal, '#81a997')
     : terrain('Face', [0, 2], [size[0] - 4, size[1] - 7], '#fff3ce');
+  const rim = primary ? roundedPlate('Rim', [0, 0], size, 107015, '#a06339')
+    : blue ? roundedPlate('Rim', [0, 0], size, fadedTeal, '#3c634d') : terrain('Rim', [0, 0], size, '#776d49');
   return group(name, position, size, [
-    primary ? roundedPlate('Rim', [0, 0], size, 107015, '#a06339')
-      : blue ? roundedPlate('Rim', [0, 0], size, fadedTeal, '#3c634d') : terrain('Rim', [0, 0], size, '#776d49'),
-    buttonSurface,
-    label('Title', [0, 2], [size[0] - 20, size[1] - 10], title, fontSize, blue ? '#fffdf2' : '#39291b'),
+    ...(refresh ? [buttonSurface, image('Rim', [-76, 0], [27, 27], '#8c5723', { image: 101049 })] : [rim, buttonSurface]),
+    label('Title', [refresh ? 16 : 0, 2], [size[0] - (refresh ? 50 : 20), size[1] - 10], title,
+      fontSize, blue ? '#fffdf2' : '#39291b'),
     { name: 'Hit', kind: 'cursorArea', size },
   ]);
 }
 
 function stat(name, x, title, paper, number) {
+  const glyph = name === 'Money' ? disc : name === 'Lives' ? lifeIcon : null;
   return group(name, [x, 281], [152, 65], [
-    image('Surface', [0, 0], [152, 65], paper),
-    label('Label', [0, 18], [144, 28], title, 17, pigment.muted),
+    glyph ? image('Surface', [-35, 18], [18, 18], number, { image: glyph }) : image('Surface', [0, 0], [152, 65], paper),
+    label('Label', [glyph ? 11 : 0, 18], [glyph ? 120 : 144, 28], title, 17, pigment.muted),
     label('Value', [0, -15], [144, 35], '', name === 'Round' ? 23 : 28, number),
   ]);
 }
@@ -176,10 +184,10 @@ export const nativeRun = {
         ellipse('Glint', [0, 0], [52, 4], '#ffe7a4'),
         ellipse('Upper', [-9, 11], [29, 5], '#f8e1a1'),
       ], false),
-      group('Impact', [0, 0], [66, 50], [
+      group('Impact', [0, 0], [86, 60], [
         ellipse('Burst', [0, 0], [64, 41], '#f3c58a'),
         ellipse('Flash', [0, 0], [52, 33], '#fff2d6'),
-        ellipse('Spark', [30, 16], [5, 8], '#ad623c'),
+        image('Spark', [32, 18], [21, 21], '#315a6d', { image: 102036 }),
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),

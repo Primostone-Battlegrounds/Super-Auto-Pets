@@ -11,10 +11,12 @@ import { nativeShop } from './versus-shop.mjs';
 const read = name => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 
 export const stageVariables = ['AP_GameMode', 'AP_RoomTicket'];
-export const playerVariables = duelVariables;
+export const playerVariables = [...duelVariables, 'AP_LobbyRequest'];
 export const signals = {
-  AP_GameChooseMode: [{ name: 'mode', type: 'integer' }, { name: 'fill', type: 'boolean' }],
-  AP_GameLobby: ['mode', 'present', 'waiting', 'requested', 'reason'].map(name => ({ name, type: 'integer' })),
+  AP_GameChooseMode: [{ name: 'mode', type: 'integer' }, { name: 'fill', type: 'boolean' },
+    { name: 'requestId', type: 'integer' }],
+  AP_GameLobby: ['mode', 'present', 'waiting', 'requested', 'reason', 'requestId', 'entry', 'duelReason', 'roomReason',
+    'lastChoice'].map(name => ({ name, type: 'integer' })),
   ...roomSignals,
   ...Object.fromEntries(Object.entries(duelSignals).map(([name, fields]) =>
     [name, fields.map(([parameter, type]) => ({ name: parameter, type }))])),
@@ -25,10 +27,17 @@ export const gameInterface = 'AutoPetsGame';
 export const practiceSeed = 8;
 
 const back = (x, y) => button('Back', [x, y], [156, 48], '返回主菜单');
-const modeButton = (name, y, title, primary = false) => button(name, [0, y], [386, 82], title, primary, 24);
 const view = (name, controls) => ({ ...group(name, [0, 0], [1280, 720], controls, false), active: false });
 
+function lobbyButton(name, position, size, title, { primary = false, small = false, visible = true } = {}) {
+  const caption = label('Title', [0, 0], size, title, small ? 22 : 27, small ? pigment.cream : pigment.ink);
+  Object.assign(caption.text, { background: small ? '#3b604e' : primary ? '#ffe1a0' : '#fff3d9', backgroundOpacity: 1 });
+  return { ...group(name, position, size,
+    [caption, { name: 'Hit', kind: 'cursorArea', size }], visible), active: visible };
+}
+
 function layout(duelRules) {
+  const modeSize = [344, 112];
   const practice = nativeRun.controls.map(control => {
     if (/^Enemy[1-5]$/u.test(control.name)) {
       return { ...control, children: control.children.filter(child => child.name !== 'Portrait') };
@@ -44,18 +53,18 @@ function layout(duelRules) {
     controls: [
       { ...image('GameBackdrop', [0, 0], [1, 1], '#587454'), anchor: { min: [0, 0], max: [1, 1] } },
       group('Lobby', [0, 0], [1280, 720], [
-        image('Border', [0, 0], [652, 596], '#3c5140'),
-        image('Paper', [0, 4], [640, 580], '#fff3d9'),
-        label('Title', [0, 221], [560, 76], '小动物自走棋', 52),
-        label('Status', [0, 158], [560, 43], '正在连接千星关卡', 24, pigment.muted),
-        group('Choices', [0, -5], [396, 270], [
-          modeButton('Room', 92, '八人吃鸡', true),
-          modeButton('Duel', 0, '好友 1v1'),
-          modeButton('Practice', -92, '单人 AI 练习'),
+        label('Title', [0, 218], [1112, 88], '小动物自走棋', 61, pigment.cream),
+        label('Status', [0, 138], [1112, 52], '正在连接千星关卡', 27, pigment.cream),
+        group('Choices', [0, 31], [1112, 120], [
+          lobbyButton('Practice', [-376, 0], modeSize, '单人 AI 练习', { primary: true }),
+          lobbyButton('Duel', [0, 0], modeSize, '好友 1v1'),
+          lobbyButton('Room', [376, 0], modeSize, '八人吃鸡'),
         ]),
-        { ...modeButton('Continue', -5, '', true), visible: false, active: false },
-        label('Help', [0, -228], [586, 66], '好友 1v1 请先在千星好友房间邀请好友。', 20, pigment.muted),
-        label('Feedback', [0, -165], [586, 44], '', 19, pigment.gold),
+        lobbyButton('Continue', [0, 31], modeSize, '', { primary: true, visible: false }),
+        label('Feedback', [0, -76], [1112, 64], '', 24, '#ffe1a0'),
+        label('Help', [0, -157], [1034, 72], '好友 1v1 请先在千星好友房间邀请好友。', 22, pigment.cream),
+        lobbyButton('Cancel', [-116, -263], [198, 82], '取消等待', { small: true, visible: false }),
+        lobbyButton('Exit', [116, -263], [198, 82], '退出指引', { small: true }),
       ]),
       view('Practice', practice),
       view('Duel', [...duelLayout(duelRules).controls, back(221, 278)]),

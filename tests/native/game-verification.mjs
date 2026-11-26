@@ -14,71 +14,130 @@ export function verifyLobby(source, ts, id) {
   let mode = 0n;
   let field = ['A'];
   let expected = 1n;
+  const GameplayMode = { Play: 'test/play', RoomPlay: 'room', MatchPlay: 'match' };
+  let playMode = GameplayMode.Play;
+  const choices = new Map();
+  const variables = new Map();
   const replies = [];
+  const logs = [];
   const stage = Symbol('stage');
   const graph = { onSignal(name, callback) { assert.equal(name, 'AP_GameChooseMode'); receive = callback; } };
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
-  vm.runInNewContext(compiled, { exports: {}, require: () => ({
-    defineSignal: name => name, g: { server: () => graph },
-  }) });
+  vm.runInNewContext(compiled, {
+    exports: {}, list: (_, items) => Array.from(items),
+    require: module => module.endsWith('/enum') ? { GameplayMode } : {
+      defineSignal: name => name,
+      g: { server: ({ variables: initial }) => {
+        for (const [key, value] of Object.entries(initial)) variables.set(key, value);
+        return graph;
+      } },
+    },
+  });
   const flow = {
     getListOfPlayerEntitiesOnTheField: () => {
       assertListCapacity(id, 'runtime field players', field.length);
       return field;
     },
     equal: (a, b) => a === b,
+    enumerationsEqual: (a, b) => a === b,
     getListLength: list => BigInt(list.length),
-    queryGameModeAndPlayerNumber: () => ({ playerCount: expected }),
+    getCorrespondingValueFromList: (list, index) => list[Number(index)],
+    queryGameModeAndPlayerNumber: () => ({ playerCount: expected, playMode }),
+    queryIfEntityIsOnTheField: player => field.includes(player),
+    assemblyList: (players, type) => {
+      assert.equal(type, 'entity');
+      return Array.from(players);
+    },
+    get: key => variables.get(key),
+    set: (key, value) => variables.set(key, value),
     getSelfEntity: () => stage,
     getCustomVariable: (target, name) => ({ asType: () => {
-      assert.equal(target, stage);
-      assert.equal(name, 'AP_GameMode');
-      return mode;
+      if (target === stage) {
+        assert.equal(name, 'AP_GameMode');
+        return mode;
+      }
+      assert.equal(name, 'AP_LobbyRequest');
+      assert.ok(field.includes(target));
+      return choices.get(target) ?? 0n;
     } }),
     setCustomVariable(target, name, value, sync) {
-      assert.equal(target, stage);
-      assert.equal(name, 'AP_GameMode');
       assert.equal(sync, false);
-      mode = value;
+      if (target === stage) {
+        assert.equal(name, 'AP_GameMode');
+        assert.equal(mode, 0n);
+        mode = value;
+      } else {
+        assert.equal(name, 'AP_LobbyRequest');
+        assert.ok(field.includes(target));
+        choices.set(target, value);
+      }
     },
     sendSignal(name, target, ...values) {
       assert.equal(name, 'client:AP_GameLobby');
       assert.ok(field.includes(target));
       replies.push([target, ...values]);
     },
+    printString: message => logs.push(message),
   };
-  function choose(actor, requested, fill = false) {
-    receive({ signalSourceEntity: actor, params: { mode: requested, fill } }, flow);
+  function choose(actor, requested, requestId, fill = false) {
+    receive({ signalSourceEntity: actor, params: { mode: requested, fill, requestId } }, flow);
     return replies.splice(0);
   }
-  assert.deepEqual(choose('intruder', 8n), []);
-  assert.deepEqual(choose('A', 2n), [['A', 0n, 1n, 0n, 2n, 1n]]);
-  expected = 2n;
-  assert.deepEqual(choose('A', 8n), [['A', 0n, 1n, 1n, 8n, 3n]]);
-  field.push('B');
-  assert.deepEqual(choose('A', 2n), [['A', 2n, 2n, 0n, 2n, 0n], ['B', 2n, 2n, 0n, 2n, 0n]]);
-  assert.deepEqual(choose('B', 8n), [['B', 2n, 2n, 0n, 8n, 4n]]);
-  assert.deepEqual(choose('B', 0n), [['B', 2n, 2n, 0n, 0n, 0n]]);
-  assert.equal(mode, 2n, 'returning to lobby never resets active authority');
-  mode = 0n;
-  field = ['A'];
-  assert.deepEqual(choose('A', 8n, true), [['A', 8n, 1n, 1n, 8n, 0n]]);
-  for (let count = 1; count <= 8; count += 1) {
-    field = Array.from({ length: count }, (_, index) => `P${index + 1}`);
-    expected = BigInt(count);
+  function reset(players, configured = BigInt(players.length), method = GameplayMode.Play) {
     mode = 0n;
-    assert.deepEqual(choose('P1', 8n), field.map(player => [player, 8n, expected, 0n, 8n, 0n]));
+    field = players;
+    expected = configured;
+    playMode = method;
+    variables.set('starter', []);
+    variables.set('logged', false);
+    choices.clear();
+    logs.length = 0;
   }
-  mode = 0n;
-  assert.deepEqual(choose('P1', 2n), [['P1', 0n, 8n, 0n, 2n, 2n]]);
-  assert.deepEqual(choose('P1', 99n), [['P1', 0n, 8n, 0n, 99n, 5n]]);
-  assert.deepEqual(choose('P1', 0n), [['P1', 0n, 8n, 0n, 0n, 0n]]);
-  field = Array.from({ length: 9 }, (_, index) => `P${index + 1}`);
-  expected = 1n;
-  assert.deepEqual(choose('P1', 8n, true), [['P1', 0n, 9n, 0n, 8n, 5n]]);
-  return 'mode choice authenticates field membership, waits for loading, and locks one gameplay authority';
+
+  assert.deepEqual(choose('intruder', 8n, 1n), []);
+  assert.deepEqual(choose('A', 0n, 0n), []);
+  assert.deepEqual(choose('A', 8n, 1n), [['A', 0n, 1n, 0n, 8n, 6n, 1n, 1n, 6n, 6n, 1n]]);
+  assert.deepEqual(choose('A', 0n, 1n), [['A', 0n, 1n, 0n, 0n, 0n, 1n, 1n, 1n, 0n, 1n]]);
+  assert.deepEqual(choose('A', 2n, 2n), [['A', 0n, 1n, 0n, 2n, 1n, 2n, 1n, 1n, 0n, 2n]]);
+  expected = 2n;
+  playMode = GameplayMode.RoomPlay;
+  assert.deepEqual(choose('A', 8n, 3n), [['A', 0n, 1n, 1n, 8n, 3n, 3n, 2n, 1n, 3n, 3n]]);
+  field.push('B');
+  assert.deepEqual(choose('B', 0n, 1n), [['B', 0n, 2n, 0n, 0n, 0n, 1n, 2n, 6n, 6n, 0n]]);
+  assert.deepEqual(choose('B', 2n, 2n), [['B', 0n, 2n, 0n, 2n, 6n, 2n, 2n, 6n, 6n, 2n]]);
+  assert.deepEqual(choose('A', 2n, 3n), [['A', 0n, 2n, 0n, 2n, 7n, 3n, 2n, 0n, 0n, 3n]]);
+  assert.deepEqual(choose('A', 2n, 4n), [
+    ['A', 2n, 2n, 0n, 2n, 0n, 4n, 2n, 4n, 4n, 4n], ['B', 2n, 2n, 0n, 2n, 0n, 0n, 2n, 4n, 4n, 2n],
+  ]);
+  assert.deepEqual(choose('B', 8n, 3n), [['B', 2n, 2n, 0n, 8n, 4n, 3n, 2n, 4n, 4n, 3n]]);
+  assert.deepEqual(choose('B', 0n, 1n), [['B', 2n, 2n, 0n, 0n, 0n, 1n, 2n, 4n, 4n, 3n]]);
+  assert.equal(mode, 2n, 'returning to lobby never resets active authority');
+  assert.equal(logs.filter(message => message.endsWith('first_request')).length, 1);
+  assert.equal(logs.filter(message => message.endsWith('start_accepted')).length, 1);
+
+  reset(['A', 'B'], 2n, GameplayMode.RoomPlay);
+  choose('A', 0n, 1n);
+  field = ['B'];
+  assert.deepEqual(choose('B', 0n, 1n), [['B', 0n, 1n, 1n, 0n, 0n, 1n, 2n, 1n, 3n, 0n]]);
+  assert.deepEqual(choose('B', 8n, 2n, true), [['B', 8n, 1n, 1n, 8n, 0n, 2n, 2n, 4n, 4n, 2n]]);
+
+  for (let count = 1; count <= 8; count += 1) {
+    reset(Array.from({ length: count }, (_, index) => `P${index + 1}`));
+    choose('P1', 0n, 1n);
+    assert.deepEqual(choose('P1', 8n, 2n), field.map(player => {
+      const token = player === 'P1' ? 2n : 0n;
+      return [player, 8n, expected, 0n, 8n, 0n, token, 1n, 4n, 4n, token];
+    }));
+  }
+  reset(Array.from({ length: 8 }, (_, index) => `P${index + 1}`), 8n, GameplayMode.MatchPlay);
+  choose('P1', 0n, 1n);
+  assert.deepEqual(choose('P1', 2n, 2n), [['P1', 0n, 8n, 0n, 2n, 2n, 2n, 3n, 2n, 0n, 2n]]);
+  assert.deepEqual(choose('P1', 99n, 3n), [['P1', 0n, 8n, 0n, 99n, 5n, 3n, 3n, 2n, 0n, 3n]]);
+  field.push('P9');
+  assert.deepEqual(choose('P1', 8n, 4n, true), [['P1', 0n, 9n, 0n, 8n, 5n, 4n, 3n, 2n, 5n, 4n]]);
+  return 'lobby authenticates its starter, separates platform entry, rejects stale requests, and locks one mode for 1–8 seats';
 }
 
 export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings }) {

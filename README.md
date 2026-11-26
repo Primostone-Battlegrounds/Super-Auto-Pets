@@ -4,11 +4,11 @@
 
 ## 隔离候选下载
 
-在 [Game delivery](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop) 打开最新成功的 `develop` 运行，从 Summary 下载 `super-auto-pets-<short-sha>.zip`。解压后导入同一个 `super-auto-pets.gil`，可从主菜单进入八人吃鸡、好友 1v1 或单人 AI 练习。下载需要登录 GitHub，产物保留 30 天。校验、构建版本与官方双端操作见包内说明。[导入与验收](platform/GAME.md)
+在最新成功的 `develop` 运行的 Summary 中点「下载 super-auto-pets.gil」，将文件直接导入获授权的隔离存档。Summary 会注明下载是否需要 GitHub 登录。候选保留 30 天。[Game delivery](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
 
 有 Actions 写权限的维护者可在运行页面选择「Re-run all jobs」，按该次运行的原始提交手动重新交付。
 
-候选包用 `BUILD.json` 识别精确版本，用 `ACCEPTANCE.json` 核对各层状态。官方 PC、手机与多人联机按同一个 GIL 分别验收。尚未满足成品门禁的候选供隔离试玩。 [导入与验收](platform/GAME.md)
+运行 Summary 标明成品验收状态。同次运行的工程证据保留精确版本、各层验收结果和夹具许可。官方 PC、手机与多人联机按同一个 GIL 分别验收。[导入与验收](platform/GAME.md)
 
 ## 开发入口
 
