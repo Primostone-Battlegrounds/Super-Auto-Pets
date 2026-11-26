@@ -64,7 +64,7 @@ function card(name, position, width, type, interactive = true, visible = true, f
     image('StatsPaper', [-badgeX - 12, -49], [20, 20], '#253e58', { image: attackIcon }),
     image('LifePaper', [badgeX - 12, -49], [20, 20], '#813830', { image: lifeIcon }),
     label('Detail', [-badgeX + 10, -49], [badgeWidth - 14, 35], '', 25, '#253e58'),
-    label('LifeValue', [badgeX + 10, -49], [badgeWidth - 14, 35], '', 25, '#813830'),
+    label('LifeValue', [badgeX + 9, -49], [badgeWidth - 14, 35], '', 25, '#813830'),
     label('Tag', [0, 61], [Math.min(width - 4, 90), 29], '', 18, market ? pigment.ice : '#58431f'),
   ];
   if (market) {
