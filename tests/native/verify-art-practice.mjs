@@ -20,11 +20,18 @@ fs.mkdirSync(output, { recursive: true });
 const git = (directory, ...args) => execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8' }).trim();
 const project = new URL('../../', import.meta.url);
 const sourceRevision = git(project.pathname, 'rev-parse', 'HEAD');
+const requireCleanSource = () => assert.equal(git(project.pathname, 'status', '--porcelain', '--untracked-files=all'), '',
+  'Build and verify the art sample on a clean checkout');
+requireCleanSource();
 const lock = JSON.parse(fs.readFileSync(new URL('platform/toolchain-lock.json', project)));
 const mcpCommit = git(mcp, 'rev-parse', 'HEAD');
 const simulatorCommit = git(simulator, 'rev-parse', 'HEAD');
 assert.equal(mcpCommit, lock.mcp.commit);
 assert.equal(simulatorCommit, lock.simulator.commit);
+for (const directory of [mcp, simulator]) {
+  const changed = git(directory, 'diff', '--name-only', 'HEAD').split('\n').filter(Boolean);
+  assert.ok(changed.every(file => file === 'npm-shrinkwrap.json'), 'Tracked tool source changed: ' + changed.join(', '));
+}
 const load = (directory, file) => import(pathToFileURL(path.join(directory, file)).href);
 const [{ Service }, { toolRegistry }, api, { renderPaintPng }, { ImageAssetStore }, { LuaRuntime }] = await Promise.all([
   load(mcp, 'src/core.mjs'), load(mcp, 'src/tool-registry.mjs'), load(simulator, 'studio/play/session.js'),
@@ -245,6 +252,7 @@ for (const canvasId of ['pc-16-9', 'mobile-19.5-9']) {
   }
 }
 assert.equal(git(project.pathname, 'rev-parse', 'HEAD'), sourceRevision);
+requireCleanSource();
 const report = { status: 'executed', designVersion: 'v2.1.0', sourceRevision,
   rowsSha256: sha256(rows), inputSha256: sha256(input), mcpCommit, simulatorCommit, authoredControls: receipt.controls - 1,
   layersPerSlot, gilBytes: fs.statSync(gil).size, simulatorProcessRssBytes: process.memoryUsage.rss(),
