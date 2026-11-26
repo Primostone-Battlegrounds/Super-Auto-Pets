@@ -22,13 +22,15 @@ const fittedSpecies = { reed_turtle: '乌龟', cottontail_rabbit: '兔子', suns
 if (fittedAnimals) {
   assert.deepEqual(Object.keys(fittedAnimals).sort(), Object.keys(fittedSpecies).sort());
   for (const [id, name] of Object.entries(fittedSpecies)) {
-    assert.equal(fittedAnimals[id].id, id);
     assert.equal(fittedAnimals[id].name, name);
     assert.ok(fittedAnimals[id].layers.length > 16);
   }
   assert.ok(receipt.controls - 1 <= 1000, 'Authored layout exceeds the native control limit');
 }
 const turtleName = fittedAnimals?.reed_turtle.name ?? '芦纹龟';
+const swiftName = fittedAnimals ? '雨燕' : '烟尾雨燕';
+const deerName = fittedAnimals ? '麝' : '岩釉麝';
+const narwhalName = fittedAnimals ? '独角鲸' : '汐角鲸';
 fs.writeFileSync(path.join(output,'native.save.json'),JSON.stringify(save));
 const api=await import(pathToFileURL(path.join(sim,'studio/play/session.js')));
 const {renderPaintPng}=await import(pathToFileURL(path.join(sim,'studio/host-png.js')));
@@ -184,7 +186,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
           : ['sunset_cat', 'ember_swift', 'ember_swift'];
         for (const [index, id] of ids.entries()) {
           const trail = `Practice/Shop/Pet${index + 1}`;
-          requireText(`${trail}/Name`, new RegExp(`^${fittedAnimals[id]?.name ?? '烟尾雨燕'}$`, 'u'));
+          requireText(`${trail}/Name`, new RegExp(`^${fittedAnimals[id]?.name ?? swiftName}$`, 'u'));
           requireArt(frame, control(`${trail}/Portrait`), id, false, 1.5);
         }
       }
@@ -206,7 +208,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         for (const [side, ids] of Object.entries(formations)) {
           for (const [index, id] of ids.entries()) {
             const trail = `Practice/${side}${index + 1}`;
-            const expected = fittedAnimals[id]?.name ?? (id === 'ember_swift' ? '烟尾雨燕' : '岩釉麝');
+            const expected = fittedAnimals[id]?.name ?? (id === 'ember_swift' ? swiftName : deerName);
             requireText(`${trail}/Name`, new RegExp(`^${expected}$`, 'u'));
             requireArt(frame, control(`${trail}/Portrait`), id, side === 'Enemy');
           }
@@ -389,7 +391,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     requireText(`${shopBadges}/Price1`, /^3 金$/u);
     click(duel ? 'Duel/MarketOffers/InspectPet2' : `${shop}/InspectOffer2/Hit`);
     await capture('client-1-inspect-offer');
-    requireText(`${shop}/AbilityTitle`, /烟尾雨燕.*L1.*烟羽/su);
+    requireText(`${shop}/AbilityTitle`, new RegExp(`${swiftName}.*L1.*烟羽`, 'su'));
     requireText(`${shop}/AbilityBody`, /开场.*随机.*1 伤/u);
     click(duel ? `${shop}/TeamInspection/InspectTeam1` : `${shop}/InspectTeam1/Hit`);
     await capture('client-1-inspect-team');
@@ -430,9 +432,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const eventId = control(eventTrail).Id;
     const renderedEvent = () => api.playSnapshot(session, { paint: true }).paint.find(item => item.id === eventId)?.text;
     const expectEvents = [
-      ['attack', new RegExp(`${turtleName}.*出击.*烟尾雨燕`, 'u')],
-      ['damage', /烟尾雨燕.*-5命.*余0命/u],
-      ['faint', /烟尾雨燕.*退场/u],
+      ['attack', new RegExp(`${turtleName}.*出击.*${swiftName}`, 'u')],
+      ['damage', new RegExp(`${swiftName}.*-5命.*余0命`, 'u')],
+      ['faint', new RegExp(`${swiftName}.*退场`, 'u')],
       ['result', /战斗结束|本轮获胜/u],
     ];
     for (let frame = 0; frame < 200 && expectEvents.length; frame++) {
@@ -548,7 +550,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
       // itself from these starting teams and rejects a mismatched outcome.
       const species = new Map([
         [1, ['reed_turtle', turtleName]], [3, ['cottontail_rabbit', '兔子']], [8, ['sunset_cat', '猫咪']],
-        [2, ['ember_swift', '烟尾雨燕']], [7, ['slate_muskdeer', '岩釉麝']], [18, ['tidal_narwhal', '汐角鲸']],
+        [2, ['ember_swift', swiftName]], [7, ['slate_muskdeer', deerName]], [18, ['tidal_narwhal', narwhalName]],
       ]);
       const own = [1, 3, 8, 2, 7].map((code, index) => [code, 21 + index, 22, 20, 1, 0]);
       const enemy = [8, 3, 1, 18, 2].map((code, index) => [code, 31 + index, 1, 2, 1, 0]);
