@@ -19,7 +19,7 @@ print("config", "MAX_ROUNDS", settings.max_rounds)
 print("config", "STARTING_LIVES", settings.starting_lives)
 print("config", "RECOVERY", 15)
 print("config", "COMPATIBILITY_TIER", compatibility.rules.max_tier)
-print("config", "COMPATIBILITY_PETS", #compatibility.pets)
+print("config", "EARLY_PET_LIMIT", #data.pets_for_tier(compatibility.rules.max_tier))
 for index, weight in ipairs(bot.style_weights()) do print("weight", index, weight.attack, weight.health) end
 print("random", match.pairing_random.state, match.battle_random.state)
 assert(match:join("fixture", 0))

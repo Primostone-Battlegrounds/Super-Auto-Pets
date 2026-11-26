@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { nativeRoom, roomSignals } from '../../platform/m3-room-native.mjs';
-import { verifyRoom } from './m3-room-graph.mjs';
+import { verifyExpandedBotTier, verifyRoom } from './m3-room-graph.mjs';
 
 const [checkoutArg, scratch, lua, outputArg, seedArg = '1', cadenceArg = '1', waitArg] =
   process.argv.slice(2).filter(argument => argument !== '--headless' && argument !== '--release');
@@ -70,6 +70,20 @@ const controller = await stage('scene_add_graph', { name: 'AP_EightRoom', attach
 const worker = await stage('scene_add_graph', { name: 'AP_EightFight', attachTo: 'stage' });
 const native = nativeRoom(lua, lua54, requireTool('luaparse').parse, controller.graphId, worker.graphId, seed, cadence,
   waitArg === undefined ? undefined : Number(waitArg), profile);
+if (profile === 'release' && !headless) {
+  const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
+  const fixture = fileURLToPath(new URL('./m3-room-bot-catalog.lua', import.meta.url));
+  const fixtureLua = [lua, lua54].map((binary, index) => {
+    const wrapper = path.join(workspace, `bot-catalog-lua-${index}`);
+    fs.writeFileSync(wrapper, `#!/bin/sh\nexec ${quote(binary)} -E ${quote(fixture)} "$@"\n`, { mode: 0o700 });
+    return wrapper;
+  });
+  const expanded = nativeRoom(...fixtureLua, requireTool('luaparse').parse, controller.graphId, worker.graphId, seed, cadence,
+    waitArg === undefined ? undefined : Number(waitArg), profile);
+  assert.equal(expanded.shopCatalog.pet.length, 60);
+  assert.equal(expanded.settings.EARLY_PET_LIMIT, 30);
+  verifyExpandedBotTier(expanded.roomSource, requireTool('typescript'));
+}
 const graphs = [
   { graphId: controller.graphId, code: native.roomSource },
   { graphId: worker.graphId, code: native.fightSource },
