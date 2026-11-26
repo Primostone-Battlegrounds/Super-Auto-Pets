@@ -51,9 +51,9 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           package="$RUNNER_TEMP/game-package"
-          node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/game-validation" lua5.3 "$package"
+          node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/game-validation" lua5.3 "$package" --expanded
           node scripts/check-design.mjs delivery "$package"
-          node scripts/simulator-verify.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
+          node tests/simulator/expanded-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
             "$package/super-auto-pets.gil" "$RUNNER_TEMP/simulator-evidence"
           node scripts/record-acceptance.mjs "$package" "$RUNNER_TEMP/sap-rules.log" "$RUNNER_TEMP/simulator-evidence"
           gate=$(node scripts/acceptance-gate.mjs "$package")

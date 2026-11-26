@@ -86,7 +86,7 @@ for (const [key, name] of Object.entries({
 let preview;
 if (profile) {
   const rows = fs.readFileSync(new URL('../../docs/design/revisions/v2.1.0/prototype/rows-40.json', import.meta.url));
-  preview = { ...artPreview(JSON.parse(rows)), visualDesign: 'v2.1.0', rowsSha256: sha256(rows) };
+  preview = { ...artPreview(JSON.parse(rows), expanded), visualDesign: 'v2.1.0', rowsSha256: sha256(rows) };
   if (expanded) preview.commonNames = {};
   const template = fittedTemplate(preview.layersPerSlot);
   const { templateIndex } = await stage('scene_add_client_template', { template });

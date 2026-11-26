@@ -265,33 +265,33 @@ jobs:
         run: |
           node scripts/record-acceptance.mjs "$RUNNER_TEMP/verified-game" "$RUNNER_TEMP/sap-rules.log" "$RUNNER_TEMP/simulator-evidence"
           (cd "$RUNNER_TEMP/verified-game" && sha256sum --strict -c SHA256SUMS)
-      - name: Upload unified candidate
+      - name: Upload historical catalog regression evidence
         if: ${{ always() && steps.evidence.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: unified-candidate-${{ github.event.pull_request.head.sha }}
+          name: historical-catalog-regression-${{ github.event.pull_request.head.sha }}
           path: ${{ runner.temp }}/verified-game
           if-no-files-found: error
           retention-days: 30
-      - name: Verify fitted portraits across all three game modes
+      - name: Verify the sixty-animal game and all three modes
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
           SIMULATOR_REQUIRE_TEXT: '1'
         run: |
-          package="$RUNNER_TEMP/art-preview"
-          evidence="$RUNNER_TEMP/art-preview-simulator"
+          package="$RUNNER_TEMP/expanded-game"
+          evidence="$RUNNER_TEMP/expanded-simulator"
           node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" \
-            lua5.3 "$package" --art-preview
+            lua5.3 "$package" --expanded
           node tests/simulator/native-templates.test.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator"
           node tests/simulator/native.test.mjs "$RUNNER_TEMP/miliastra-mcp" "$package/super-auto-pets.gil"
-          node scripts/simulator-verify.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
+          node tests/simulator/expanded-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
             "$package/super-auto-pets.gil" "$evidence"
           node scripts/record-acceptance.mjs "$package" "$RUNNER_TEMP/sap-rules.log" "$evidence"
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
-      - name: Upload verified three-mode art preview
+      - name: Upload verified sixty-animal candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: art-preview-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/art-preview
+          name: unified-sixty-candidate-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/expanded-game
           if-no-files-found: error
           retention-days: 30

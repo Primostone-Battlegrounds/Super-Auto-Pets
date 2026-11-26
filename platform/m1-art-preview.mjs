@@ -6,6 +6,12 @@ const samples = {
   rabbit: ['cottontail_rabbit', '兔子'],
   cat: ['sunset_cat', '猫咪'],
 };
+const expandedSamples = {
+  ...samples,
+  penguin: ['penguin', '企鹅'],
+  giraffe: ['giraffe', '长颈鹿'],
+  whale: ['blue_whale', '蓝鲸'],
+};
 
 const commonNames = {
   pet_by_id: {
@@ -30,8 +36,8 @@ export function fittedTemplate(layersPerSlot) {
   return group(fittedTemplateName, [0, 0], [84, 84], children);
 }
 
-export function artPreview(rows) {
-  const animals = Object.fromEntries(Object.entries(samples).map(([key, [id, name]]) => {
+export function artPreview(rows, expanded) {
+  const animals = Object.fromEntries(Object.entries(expanded ? expandedSamples : samples).map(([key, [id, name]]) => {
     const layers = rows[key];
     assert.ok(Array.isArray(layers) && layers.length > 0 && layers.length <= 40, key);
     for (const layer of layers) {
