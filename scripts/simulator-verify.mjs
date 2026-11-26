@@ -281,7 +281,13 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const team = 'Practice/Team1';
     const food = 'Practice/Shop/Food1';
     const slot = box(`${team}/Hit`);
-    const outside = box('Practice/TeamCaption');
+    const outside = { centerX: 2, centerY: 2 };
+    for (const index of [1, 2, 3, 4, 5]) {
+      const target = box(`Practice/Team${index}/Hit`);
+      assert.ok(Math.abs(outside.centerX - target.centerX) > target.width / 2 ||
+        Math.abs(outside.centerY - target.centerY) > target.height / 2,
+        'The cancellation point must be outside every formation slot');
+    }
     function requireLiftedClearance(trail) {
       const lifted = box(trail);
       assert.ok(Math.abs(lifted.centerX - slot.centerX) <= slot.width, 'Dragged portrait should stay near the active slot');
@@ -295,6 +301,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const picture = control(`${pet}/Portrait`);
     const petHome = picture.parent;
     const petBefore = visibleText(`${pet}/Name`).text;
+    const beforeCancel = api.playSnapshot(session).server.inbound.length;
     pointer('down', box(`${pet}/Hit`));
     pointer('move', slot);
     await capture('practice-drag-pet-target');
@@ -311,6 +318,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.equal(picture.parent, petHome);
     assert.ok(!visibleText(`${team}/DropLabel`));
     assert.ok(!cancelled.paint.some(item => item.name === 'DropTarget'), 'Cancelling must clear all drop marks');
+    assert.equal(cancelled.server.inbound.length, beforeCancel, 'Cancelling a practice drag must send no requests');
 
     pointer('down', box(`${pet}/Hit`));
     pointer('move', slot);
@@ -499,7 +507,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     const replaySignal = duel ? 'AP_DuelReplay' : 'AP_RoomReplay';
     const sendReplay = (outcome, target = 'Player1') => api.sendPlaySignal(session, replaySignal, duel
       ? [1, 42, outcome, [1, 1, 5, 8, 1], [2, 2, 1, 4, 1]]
-      : [1, 1, 2, outcome, 42, [1, 1, 1, 5, 8, 1, 0], [1, 2, 2, 1, 4, 1, 0]], target);
+      : [1, 1, 2, outcome, 42, [1, 1, 1, 5, 8, 1, 1], [1, 2, 2, 1, 4, 1, 0]], target);
     if (duel) {
       api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 1, 3, true, false, 0, 3, 3, 0, 0, 0, 0, 5, 5, 0], 'Player1');
     } else {
@@ -538,7 +546,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
         else assert.ok(!replayFrame.paint.some(item => item.id === priceId), 'The impact badge must clear after damage');
         if (duel && name === 'result') requireText('Duel/Status', /战斗结束 · 等待结算/u);
         if (name === 'attack') {
-          requireText(statusTrail, /^战斗中/u);
+          requireText(statusTrail, duel ? /^战斗中$/mu : /^战斗中 · 对手席位 2$/u);
+          if (!duel) requireText('Room/Match/Replay/Own1', /^芦纹龟\nLv\.1 ■□$/u);
           requireText(playbackLabel, /^暂停$/u);
           requireText(speedLabel, /^倍速 x1$/u);
           requireText(skipLabel, /^跳过$/u);
@@ -555,7 +564,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
           assert.equal(renderedEvent(), eventText, 'Paused playback changed the rendered event');
           click(speed);
           await capture('client-1-replay-paused');
-          requireText(statusTrail, /^已暂停/u);
+          requireText(statusTrail, duel ? /^已暂停$/mu : /^已暂停 · 对手席位 2$/u);
           requireText(playbackLabel, /^继续$/u);
           requireText(speedLabel, /^倍速 x2$/u);
           click(speed);
@@ -632,7 +641,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
       }
       api.sendPlaySignal(session, replaySignal, duel
         ? [2, 42, 1, [1, 1, 999, 999, 3], [2, 2, 1, 4, 1]]
-        : [2, 1, 2, 1, 42, [1, 1, 1, 999, 999, 3, 0], [1, 2, 2, 1, 4, 1, 0]], 'Player1');
+        : [2, 1, 2, 1, 42, [1, 1, 1, 999, 999, 3, 5], [1, 2, 2, 1, 4, 1, 0]], 'Player1');
       const stats = duel ? 'Duel/ReplayBoard/Own1' : 'Room/Match/Replay/Own1';
       for (let step = 0; step < 50; step++) {
         const shield = api.playSnapshot(session, { paint: true }).paint.find(item => item.id === shieldIconId);
@@ -640,7 +649,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         api.stepPlay(session, 0.05);
       }
       const shieldFrame = await capture('client-1-replay-long-stats');
-      requireText(stats, /^芦纹龟\nLv\.3$/u);
+      requireText(stats, duel ? /^芦纹龟\nLv\.3$/u : /^芦纹龟\nLv\.3 满级$/u);
       assert.equal(shieldFrame.paint.find(item => item.id === shieldIconId)?.imageId, 102036);
       const shieldValue = shieldFrame.paint.find(item => item.id === shieldValueId);
       assert.ok(shieldValue?.textLayout?.fits && shieldValue.textLayout.visibleLineCount === 1);
