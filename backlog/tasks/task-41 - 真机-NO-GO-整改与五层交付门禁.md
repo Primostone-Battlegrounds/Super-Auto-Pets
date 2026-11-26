@@ -2,9 +2,10 @@
 id: TASK-41
 title: 真机 NO-GO 整改与五层交付门禁
 status: In Progress
-assignee: []
+assignee:
+  - '@FurinyaDev'
 created_date: '2026-11-25 15:40'
-updated_date: '2026-11-25 16:18'
+updated_date: '2026-11-26 12:34'
 labels:
   - device-qa
   - design-v2.0.0
@@ -36,6 +37,8 @@ Design-Version: v2.0.0
 
 <!-- SECTION:PLAN:BEGIN -->
 并行固定原版及千星参照、制作完整 HTML 原型、修复多人和原生文本、执行 Simulator 与隔离正式构建；统一验证、独立评审候选和画面，再根据门禁集成。
+
+v0.5.0 one-shot（366bb4189b685629e459ce8f86d19e9aa5317b9c）：T01/T02 独立核查，再分路径整改大厅、商店与战斗，同时完善 GIL CD。精确 SHA 独立复验后走 develop PR；官方设备待验单列。
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
