@@ -1,9 +1,14 @@
 name: Game delivery
-run-name: Game delivery · ${{ github.sha }}
+run-name: Game delivery · ${{ github.event.pull_request.head.sha || github.sha }}
 
 on:
   push:
     branches: [develop]
+  pull_request:
+    branches: [develop]
+    paths:
+      - .github/workflows/game-delivery.yml
+      - scripts/verify-delivery.mjs
   workflow_dispatch:
 
 permissions:
@@ -16,13 +21,18 @@ concurrency:
 jobs:
   package:
     name: Build and deliver game
-    if: github.repository == 'Primostone-Battlegrounds/Super-Auto-Pets' && github.ref == 'refs/heads/develop'
+    if: >-
+      github.repository == 'Primostone-Battlegrounds/Super-Auto-Pets' &&
+      (github.ref == 'refs/heads/develop' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -49,7 +59,7 @@ jobs:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
           SIMULATOR_REQUIRE_TEXT: '1'
         run: |
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           package="$RUNNER_TEMP/game-package"
           node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/game-validation" lua5.3 "$package"
           node scripts/check-design.mjs delivery "$package"
@@ -59,27 +69,60 @@ jobs:
           gate=$(node scripts/acceptance-gate.mjs "$package")
           verdict=$(node -p 'JSON.parse(process.argv[1]).verdict' "$gate")
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
-          printf 'name=super-auto-pets-%s\n' "${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+          printf 'evidence=game-evidence-%s\n' "${SOURCE_SHA:0:12}" >> "$GITHUB_OUTPUT"
           printf 'verdict=%s\n' "$verdict" >> "$GITHUB_OUTPUT"
-      - name: Upload the verified game
+      - name: Upload the verified GIL as a single file
         id: artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ steps.build.outputs.name }}
-          path: ${{ runner.temp }}/game-package
+          # An unarchived upload uses the filename. Give overwrite the same name.
+          name: super-auto-pets.gil
+          path: ${{ runner.temp }}/game-package/super-auto-pets.gil
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+      - name: Download the GIL without extraction
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ steps.artifact.outputs.artifact-id }}
+          path: ${{ runner.temp }}/game-download
+          skip-decompress: true
+      - name: Verify the downloaded GIL
+        env:
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+        run: |
+          package="$RUNNER_TEMP/game-package"
+          gil="$RUNNER_TEMP/game-download/super-auto-pets.gil"
+          node scripts/verify-delivery.mjs "$RUNNER_TEMP/miliastra-mcp" "$gil" "$package/BUILD.json" \
+            "$ARTIFACT_ID" "$ARTIFACT_DIGEST" > "$RUNNER_TEMP/download-receipt.json"
+          mv "$RUNNER_TEMP/download-receipt.json" "$package/DOWNLOAD.json"
+          (cd "$package" && sha256sum DOWNLOAD.json >> SHA256SUMS)
+      - name: Upload engineering evidence
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.build.outputs.evidence }}
+          path: |
+            ${{ runner.temp }}/game-package
+            !${{ runner.temp }}/game-package/super-auto-pets.gil
           if-no-files-found: error
           retention-days: 30
           overwrite: true
       - name: Link the game download
+        if: github.ref == 'refs/heads/develop'
         env:
-          ARTIFACT_NAME: ${{ steps.build.outputs.name }}
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          EVIDENCE_NAME: ${{ steps.build.outputs.evidence }}
           ACCEPTANCE_VERDICT: ${{ steps.build.outputs.verdict }}
         run: |
+          test -n "$ARTIFACT_URL"
           {
             printf '## 小动物自走棋 · 千星隔离候选\n\n'
-            printf '[下载 %s.zip](%s)\n\n' "$ARTIFACT_NAME" "$ARTIFACT_URL"
-            printf 'Git SHA `%s`\n\n' "$GITHUB_SHA"
-            printf '成品验收 `%s`。包内 `ACCEPTANCE.json` 列出每层状态。\n\n' "$ACCEPTANCE_VERDICT"
-            printf '解压后将 `super-auto-pets.gil` 导入隔离存档。\n'
+            printf '[下载 super-auto-pets.gil](%s)\n\n' "$ARTIFACT_URL"
+            printf '登录 GitHub 下载后，将 GIL 导入获授权的隔离存档。产物保留 30 天。\n\n'
+            printf 'Git SHA `%s`\n\n' "$SOURCE_SHA"
+            printf '成品验收 `%s`。各层状态、校验和及夹具许可见工程证据 `%s`。\n' \
+              "$ACCEPTANCE_VERDICT" "$EVIDENCE_NAME"
           } >> "$GITHUB_STEP_SUMMARY"
