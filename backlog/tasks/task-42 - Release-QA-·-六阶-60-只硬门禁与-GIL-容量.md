@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-11-26 05:39'
-updated_date: '2026-11-26 05:39'
+updated_date: '2026-11-26 05:42'
 labels: []
 dependencies: []
 references:
@@ -26,9 +26,9 @@ Design-Version: v2.0.0
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 统一 GIL 回读的可购买动物按阶记录到 BUILD.json，联机目录与练习一致，独立召唤物和食物不计数。
-- [ ] #2 正式成品门禁拒绝缺失计数、18 只、36 只及阶级分布错误的候选，维持 TASK-41 五层证据条件。
-- [ ] #3 开场技能元数据支持 60 只可购买动物及独立召唤物的原生容量，保持两种多人模式的技能顺序。
+- [x] #1 统一 GIL 回读的可购买动物按阶记录到 BUILD.json，联机目录与练习一致，独立召唤物和食物不计数。
+- [x] #2 正式成品门禁拒绝缺失计数、18 只、36 只及阶级分布错误的候选，维持 TASK-41 五层证据条件。
+- [x] #3 开场技能元数据支持 60 只可购买动物及独立召唤物的原生容量，保持两种多人模式的技能顺序。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -36,3 +36,9 @@ Design-Version: v2.0.0
 <!-- SECTION:PLAN:BEGIN -->
 从 GIL 回读练习池并核对多人商店阶级，新增正式成品数量门禁。拆分开场元数据列并核对原生图、双版本 Lua、实际 Simulator 和独立评审。
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+现有 18 只 GIL 回读输出六阶各 3 只，成品门禁显示 launchPetPool 待通过。65 个测试代码（60 个购买池容量与 5 个召唤代码）的原生开场图编译及回读通过，兼容与六阶触发回归均通过。完整首发动物池和官方设备证据见 TASK-35、TASK-41。
+<!-- SECTION:NOTES:END -->
