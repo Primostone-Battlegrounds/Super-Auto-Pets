@@ -238,6 +238,19 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   }
   const buy = (source, from, round, sequence, token) => request(source, 11n, round, sequence, token, from);
   const shop = (source, action, from, to, flag) => request(source, action, undefined, undefined, 0n, from, to, flag);
+  function mergeOfferSlots() {
+    for (;;) {
+      const market = markets.get('A');
+      const second = market.offers.findIndex((code, index) => market.offers.indexOf(code) < index);
+      if (second >= 0) {
+        const code = market.offers[second];
+        const different = market.offers.findIndex(offer => offer !== code);
+        if (different >= 0) return [market.offers.indexOf(code), second, different].map(index => BigInt(index + 1));
+      }
+      assert.ok(market.gold > BigInt(2 * price), 'fixture needs an affordable duplicate and a different species');
+      assert.deepEqual(shop('A', 10n, 0n, 0n), ['A', 'B']);
+    }
+  }
   function tick(time, name = 'AP_DuelClock') {
     assert.ok(BigInt(time) >= now);
     now = BigInt(time);
@@ -470,19 +483,21 @@ export function verifyGraph(graphSource, buttonSource, combatSource, registeredB
   reset();
   players.push('B');
   tick(1);
-  assert.deepEqual(buy('A', 1n), ['A', 'B']);
-  assert.deepEqual(buy('A', 3n), ['A', 'B']);
+  const [mergeFirst, mergeSecond, different] = mergeOfferSlots();
+  assert.deepEqual(buy('A', mergeFirst), ['A', 'B']);
+  assert.deepEqual(buy('A', mergeSecond), ['A', 'B']);
   assert.deepEqual(shop('A', 14n, 1n, 2n), ['A', 'B']);
   assert.deepEqual(shop('A', 15n, 1n, 2n), ['A', 'B']);
   assert.equal(markets.get('A').raw[5], 1n);
   assert.equal(markets.get('A').raw[16], 1n);
-  assert.deepEqual(shop('A', 12n, 2n, 1n), ['A']); // Different species cannot combine.
+  assert.deepEqual(shop('A', 12n, different, 1n), ['A']); // Different species cannot combine.
 
   reset();
   players.push('B');
   tick(1);
-  assert.deepEqual(buy('A', 1n), ['A', 'B']);
-  assert.deepEqual(shop('A', 12n, 3n, 1n), ['A', 'B']);
+  const [combineFirst, combineSecond] = mergeOfferSlots();
+  assert.deepEqual(buy('A', combineFirst), ['A', 'B']);
+  assert.deepEqual(shop('A', 12n, combineSecond, 1n), ['A', 'B']);
   assert.equal(markets.get('A').raw[16], 1n);
 
   reset();
