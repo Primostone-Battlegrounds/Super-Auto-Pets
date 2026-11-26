@@ -269,7 +269,7 @@ local function paint_battle()
         badges.select("replay", object("Replay"), function(slot)
             local label = object("Replay/" .. (slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5))))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 39, x, y + 35
+            return x, y - 43, x, y + 41
         end)
     end
     local allied_side = frame.left == match.seat and 0 or 1
@@ -294,7 +294,8 @@ local function paint_battle()
                     if portrait then
                         local growth = frame.growth[key][unit.uid]
                         if growth and (growth.id ~= unit.id or growth.level ~= unit.level) then growth = nil end
-                        display = badges and def.name .. "\n" .. pet_presentation.level(growth or unit, native_catalog.rules.level_xp)
+                        display = badges and replay_view.actor_caption(def.name,
+                            pet_presentation.level(growth or unit, native_catalog.rules.level_xp))
                             or replay_view.stats(def.name, unit.attack, unit.health, unit.shield)
                         attacking = event and event.type == "attack" and event.uid == unit.uid and event.side == key
                     else
@@ -309,7 +310,7 @@ local function paint_battle()
                 if item then
                     id, attack, life, shield = item.id, board[offset + 1], board[offset + 2], board[offset + 4]
                     if badges then
-                        display = item.name .. "\n" .. pet_presentation.level({level = board[offset + 3]})
+                        display = replay_view.actor_caption(item.name, pet_presentation.level({level = board[offset + 3]}))
                     elseif portrait then
                         display = replay_view.stats(item.name, board[offset + 1], board[offset + 2], board[offset + 4])
                     else

@@ -521,7 +521,7 @@ local function show_replay()
         badges.select("replay", board_root, function(slot)
             local label = board_root:GetChild(slot <= 5 and ("Own" .. slot) or ("Enemy" .. (slot - 5)))
             local x, y = label:GetAnchoredPosition()
-            return x, y - 40, x, y + 34
+            return x, y - 44, x, y + 41
         end)
     elseif badges and not preparing then badges.hide() end
     for slot = 1, rules.team_size do
@@ -557,7 +557,7 @@ local function show_replay()
             if unit then
                 local definition = native_catalog.pet_by_id[unit.id] or native_catalog.token_by_id[unit.id]
                 if badges then
-                    display = definition.name .. "\n" .. pet_presentation.level(unit)
+                    display = replay_view.actor_caption(definition.name, pet_presentation.level(unit))
                 elseif portrait then
                     display = replay_view.stats(definition.name, unit.attack, unit.health, unit.shield)
                 else
