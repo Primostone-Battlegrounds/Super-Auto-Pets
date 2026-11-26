@@ -116,11 +116,11 @@ export function nativeGame(lua53, lua54, parse, ids) {
     const practice = wrap('practice_view', convert('./m1_ui.lua'), {
       start: 'OnStart', enable: 'OnEnable', disable: 'OnDisable', update: 'OnUpdate', destroy: 'OnDestroy',
     });
-    const duelUi = duelClientSource(convert('./m2_probe.lua'), shop)
+    const duelUi = duelClientSource(convert('./m2_probe.lua'), shop, true)
       .replace('local root, offers = script.object, script.object',
         'local root, offers = view_root, view_root:GetChild("MarketOffers")');
     const duel = wrap('duel_view', duelUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot' }, 'view_root');
-    const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
+    const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog, true);
     const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
   }, clientLayout);
