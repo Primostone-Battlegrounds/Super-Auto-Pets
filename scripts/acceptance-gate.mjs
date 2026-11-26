@@ -97,6 +97,7 @@ export function checkAcceptance(packageDir, build, report, { requireGo = false }
   }
 
   if (build.designStatus !== 'Active') unsatisfied.unshift('designActivation');
+  if (build.artPreview) unsatisfied.unshift('artPreview');
   const { petTierCounts } = build;
   if (!Array.isArray(petTierCounts) || petTierCounts.length !== launchPetTierCounts.length ||
       !launchPetTierCounts.every((count, index) => petTierCounts[index] === count)) {

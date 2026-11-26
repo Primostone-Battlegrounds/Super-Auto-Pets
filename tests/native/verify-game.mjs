@@ -8,12 +8,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gameInterface, gameScript, nativeGame, playerVariables, practiceSeed, signals,
   stageVariables } from '../../platform/game-native.mjs';
 import { assertAssemblySourceLimits, gilListAudit } from './gil-list-limits.mjs';
+import { artPreview, fittedTemplate, fittedTemplateName } from '../../platform/m1-art-preview.mjs';
 import { readDesign } from '../../scripts/design-contract.mjs';
 import { initialAcceptance } from '../../scripts/acceptance-gate.mjs';
 
-const [checkoutArg, scratch, lua53, output] = process.argv.slice(2);
+const [checkoutArg, scratch, lua53, output, profile] = process.argv.slice(2);
 assert.ok(checkoutArg && scratch && lua53 && output,
-  'Usage: node tests/native/verify-game.mjs <MCP checkout> <scratch> <Lua 5.3> <new game package>');
+  'Usage: node tests/native/verify-game.mjs <MCP checkout> <scratch> <Lua 5.3> <new game package> [--art-preview]');
+assert.ok(profile === undefined || profile === '--art-preview');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0');
 assert.ok(!fs.existsSync(output), 'Use a new game package directory');
 
@@ -80,7 +82,20 @@ for (const [key, name] of Object.entries({
 })) {
   ids[key] = (await stage('scene_add_graph', { name, attachTo: 'stage' })).graphId;
 }
-const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids);
+let preview;
+if (profile) {
+  const rows = fs.readFileSync(new URL('../../docs/design/revisions/v2.1.0/prototype/rows-40.json', import.meta.url));
+  preview = { ...artPreview(JSON.parse(rows)), visualDesign: 'v2.1.0', rowsSha256: sha256(rows) };
+  const template = fittedTemplate(preview.layersPerSlot);
+  const { templateIndex } = await stage('scene_add_client_template', { template });
+  preview.templateIndex = templateIndex;
+  const readback = await call('scene_get_client_ui', { template: fittedTemplateName });
+  assert.equal(readback.templateIndex, templateIndex);
+  assert.equal(readback.template.kind, 'container');
+  assert.deepEqual(readback.template.children.map(layer => [layer.name, layer.image, layer.active, layer.visible]),
+    template.children.map(layer => [layer.name, layer.image, layer.active, layer.visible]));
+}
+const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids, preview);
 for (const { graphId, code } of game.graphs) assertAssemblySourceLimits(graphId, code, ts);
 await stage('write_graphs', { graphs: game.graphs });
 await stage('scene_set_client_script', {
@@ -178,10 +193,12 @@ assert.equal(inspected.sha256, hash);
 fs.mkdirSync(output, { recursive: true });
 fs.copyFileSync(mapPath, path.join(output, gil), fs.constants.COPYFILE_EXCL);
 fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(output, 'MCP-FIXTURE-LICENSE.txt'));
-fs.copyFileSync(new URL('../../platform/GAME.md', import.meta.url), path.join(output, 'README.md'));
+fs.copyFileSync(new URL(profile ? '../../platform/ART-PRACTICE.md' : '../../platform/GAME.md', import.meta.url),
+  path.join(output, 'README.md'));
 const build = {
   ...design, version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
   node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,
+  ...(preview && { artPreview: { ...preview, commonNames: undefined } }),
   officialClient: 'pending',
 };
 const buildJson = JSON.stringify(build, null, 2) + '\n';

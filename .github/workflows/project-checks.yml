@@ -273,18 +273,25 @@ jobs:
           path: ${{ runner.temp }}/verified-game
           if-no-files-found: error
           retention-days: 30
-      - name: Verify six fitted portraits in real practice
+      - name: Verify fitted portraits across all three game modes
         env:
           MILIASTRA_ALLOW_LIVE_WRITE: '0'
+          SIMULATOR_REQUIRE_TEXT: '1'
         run: |
-          package="$RUNNER_TEMP/art-practice"
-          node tests/native/verify-art-practice.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
-            docs/design/revisions/v2.1.0/prototype/rows-40.json "$package"
+          package="$RUNNER_TEMP/art-preview"
+          evidence="$RUNNER_TEMP/art-preview-simulator"
+          node tests/native/verify-game.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/native-validation" \
+            lua5.3 "$package" --art-preview
+          node tests/simulator/native-templates.test.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator"
+          node tests/simulator/native.test.mjs "$RUNNER_TEMP/miliastra-mcp" "$package/super-auto-pets.gil"
+          node scripts/simulator-verify.mjs "$RUNNER_TEMP/miliastra-mcp" "$RUNNER_TEMP/beyond-simulator" \
+            "$package/super-auto-pets.gil" "$evidence"
+          node scripts/record-acceptance.mjs "$package" "$RUNNER_TEMP/sap-rules.log" "$evidence"
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
-      - name: Upload verified art practice
+      - name: Upload verified three-mode art preview
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: art-practice-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/art-practice
+          name: art-preview-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/art-preview
           if-no-files-found: error
           retention-days: 30

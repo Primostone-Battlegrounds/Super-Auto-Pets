@@ -82,9 +82,16 @@ export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout 
     }),
   ].join('\n');
   return bundleModules(parse, names, entry, release, [
-    `local portrait_layers = ${artPreview?.layersPerSlot ?? portraitLayers}`,
+    `local portrait_layers = ${artPreview && !artPreview.templateIndex ? artPreview.layersPerSlot : portraitLayers}`,
+    `local fitted_portrait_limit = ${artPreview?.layersPerSlot ?? portraitLayers}`,
+    `local fitted_portrait_template = ${artPreview?.templateIndex ?? 'nil'}`,
     `local shared_portrait_homes = {${sharedPortraitHomes.map(name => JSON.stringify(name)).join(',')}}`,
     'local fitted_portraits',
+    `local function clear_fitted_portrait(picture)
+    if not fitted_portrait_template then return end
+    local extra = picture:FindChild("FittedPortraitLayers")
+    if extra then game.DestroyClientUIControl(extra) end
+end`,
     plateInitializer(layout.controls),
   ], configure);
 }

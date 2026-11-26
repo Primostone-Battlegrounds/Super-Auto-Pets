@@ -73,7 +73,7 @@ function gated(source, anchors, mode) {
   return source;
 }
 
-export function nativeGame(lua53, lua54, parse, ids) {
+export function nativeGame(lua53, lua54, parse, ids, artPreview) {
   const profile = 'release';
   const shop = nativeShop(lua53, lua54, profile);
   const battle = nativeBattle(lua53, lua54, parse, profile);
@@ -105,10 +105,10 @@ export function nativeGame(lua53, lua54, parse, ids) {
     const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
     const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
-  }, clientLayout);
+  }, clientLayout, artPreview);
   parse(source, { luaVersion: '5.3' });
   return {
-    layout: clientLayout, source, roomSettings: room.settings,
+    layout: clientLayout, source, roomSettings: room.settings, artPreview,
     shopRules: shop.rules, shopLevelThresholds: shop.levelThresholds, stockBaseLength: shop.start[0].length,
     petTierCounts: shop.petTierCounts,
     graphs: [

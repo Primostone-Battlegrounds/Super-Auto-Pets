@@ -10,9 +10,24 @@ return function(control, scale)
         portraits[path] = key
         local layers = id and assert(art[id], id) or {}
         local layer_scale = fitted_portraits and fitted_scale or scale
-        if fitted_portraits then control(path):SetLocalScale(mirrored and -1 or 1, 1, 1) end
-        for index = 1, portrait_layers do
-            local node = control(path .. "/Layer" .. index)
+        local extra
+        if fitted_portraits then
+            local picture = control(path)
+            picture:SetLocalScale(mirrored and -1 or 1, 1, 1)
+            if fitted_portrait_template then
+                extra = picture:FindChild("FittedPortraitLayers")
+                if #layers > portrait_layers and not extra then
+                    extra = assert(game.InstantiateClientUIControl(fitted_portrait_template, picture))
+                    extra:SetAsLastSibling()
+                elseif #layers <= portrait_layers and extra then
+                    game.DestroyClientUIControl(extra)
+                    extra = nil
+                end
+            end
+        end
+        for index = 1, extra and fitted_portrait_limit or portrait_layers do
+            local name = "Layer" .. index
+            local node = index <= portrait_layers and control(path .. "/" .. name) or extra:GetChild(name)
             local layer = layers[index]
             if layer then
                 local image, x, y, width, height, r, g, b, rx, ry, rz = table.unpack(layer)

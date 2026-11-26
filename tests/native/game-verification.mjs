@@ -122,14 +122,23 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
     duelReplayOracle(lua53, lua54, project, 'release'));
   const practice53 = run(lua53, ['tests/native/m1-replay.lua', 'source', 'release']);
   assert.equal(practice53, run(lua54, ['tests/native/m1-replay.lua', 'source', 'release']));
-  assert.equal(practice53, run(lua53, ['tests/native/m1-replay.lua', 'bundle', extracted, 'release']));
+  const readback = lua => run(lua, ['tests/native/m1-replay.lua', 'bundle', extracted, 'release']);
+  const bundled = readback(lua53);
+  if (game.artPreview) {
+    assert.equal(bundled, readback(lua54));
+    assert.equal(bundled.split('\n')[0], practice53.split('\n')[0]);
+  } else {
+    assert.equal(bundled, practice53);
+  }
   const counts = practice53.match(/^pet_tier_counts (\d+(?: \d+)*)$/m);
   assert.ok(counts, 'Missing readback shop tier counts');
   const petTierCounts = counts[1].split(' ').map(Number);
   assert.deepEqual(petTierCounts, game.petTierCounts, 'Practice and multiplayer must share the purchasable tier sizes');
   const client = (lua, suffix) => {
     const captures = path.join(workspace, `captures-${suffix}.tsv`);
-    const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures]);
+    const { templateIndex, layersPerSlot } = game.artPreview ?? {};
+    const template = templateIndex ? [String(templateIndex), String(layersPerSlot)] : [];
+    const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures, ...template]);
     return { trace, frames: fs.readFileSync(captures, 'utf8') };
   };
   const gameClient = client(lua53, '53');

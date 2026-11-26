@@ -1,17 +1,18 @@
 local source, layout, captures = assert(arg[1]), assert(arg[2]), assert(arg[3])
+local template_index, layer_limit = tonumber(arg[4]), tonumber(arg[5])
 local order = {}
 for line in io.lines(layout) do order[#order + 1] = line end
 local output = assert(io.open(captures, "w"))
 local function simulate()
     local controls, signals, commands = {}, {}, {}
     local function get(path) return assert(controls[path], path) end
-    for _, line in ipairs(order) do
-        local path, active, visible, x, y, width, height = line:match("([^\t]+)\t([01])\t([01])\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)")
-        controls[path] = {
-            alive = true, active = active == "1", visible = visible == "1", events = {}, keys = {},
+    local function make_control(path, active, visible, x, y, width, height)
+        assert(not controls[path], path)
+        local node = {
+            path = path, alive = true, active = active, visible = visible, events = {}, keys = {},
             x = x, y = y, width = width, height = height,
             GetChild = function(_, name) return get(path .. "/" .. name) end,
-            FindChild = function(_, name) return get(path .. "/" .. name) end,
+            FindChild = function(_, name) return controls[path .. "/" .. name] end,
             SetActive = function(self, value) assert(type(value) == "boolean"); self.active = value end,
             SetVisible = function(self, value) assert(type(value) == "boolean"); self.visible = value end,
             SetAnchoredPosition = function(self, px, py) self.x, self.y = px, py end,
@@ -21,6 +22,8 @@ local function simulate()
             GetSiblingIndex = function(self) return self.sibling_index or 2 end,
             SetSiblingIndex = function(self, index) self.sibling_index = index end,
             SetAsLastSibling = function(self) self.sibling_index = 99 end,
+            SetLocalScale = function(self, px, py, pz) self.scale = {px, py, pz} end,
+            SetLocalRotation = function(self, rx, ry, rz) self.rotation = {rx, ry, rz} end,
             SetImage = function(self, _, image) self.image = image end,
             AddCursorEventListener = function(self, event, callback) assert(not self.events[event]); self.events[event] = callback end,
             RemoveCursorEventListener = function(self, event, callback)
@@ -29,11 +32,32 @@ local function simulate()
             AddKeyEventListener = function(self, event, callback) assert(not self.keys[event]); self.keys[event] = callback end,
             RemoveKeyEventListener = function(self, event, callback) assert(self.keys[event] == callback); self.keys[event] = nil end,
         }
+        controls[path] = node
+        return node
+    end
+    for _, line in ipairs(order) do
+        local path, active, visible, x, y, width, height = line:match("([^\t]+)\t([01])\t([01])\t([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)")
+        make_control(path, active == "1", visible == "1", x, y, width, height)
     end
     local function colour(r, g, b) return string.format("#%02x%02x%02x", r, g, b) end
     local enabled
     local env = setmetatable({
         game = {
+            InstantiateClientUIControl = function(index, parent)
+                assert(index == template_index and layer_limit > 16)
+                local path = parent.path .. "/FittedPortraitLayers"
+                local node = make_control(path, true, true, 0, 0, 84, 84)
+                for layer = 17, layer_limit do make_control(path .. "/Layer" .. layer, false, false, 0, 0, 1, 1) end
+                return node
+            end,
+            DestroyClientUIControl = function(node)
+                assert(controls[node.path] == node and node.path:match("/FittedPortraitLayers$"))
+                for path, control in pairs(controls) do
+                    if control == node or path:sub(1, #node.path + 1) == node.path .. "/" then
+                        controls[path], control.alive = nil, false
+                    end
+                end
+            end,
             ServerSignal = function(name)
                 local args = {}
                 return {
@@ -90,7 +114,10 @@ local function simulate()
         assert(not enabled)
         env.OnDestroy()
         assert(next(signals) == nil)
-        for _, c in pairs(controls) do assert(next(c.events) == nil and next(c.keys) == nil) end
+        for path, c in pairs(controls) do
+            assert(next(c.events) == nil and next(c.keys) == nil)
+            assert(not path:find("/FittedPortraitLayers", 1, true), "a fitted instance leaked: " .. path)
+        end
     end
     return {press = press, receive = receive, get = get, view = view, expect = expect, capture = capture, destroy = destroy,
         update = env.OnUpdate}

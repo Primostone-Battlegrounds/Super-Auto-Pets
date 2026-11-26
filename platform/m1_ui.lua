@@ -89,6 +89,13 @@ local function arrange_portraits(preparing)
     lunging = nil
 end
 
+local function clear_fitted_practice()
+    if not fitted_portrait_template then return end
+    for index = 1, rules.team_size do clear_fitted_portrait(control("Team" .. index .. "/Portrait")) end
+    for _, path in ipairs(shared_portrait_homes) do clear_fitted_portrait(control(path .. "/Portrait")) end
+    clear_fitted_portrait(control("Shop/Reward/Portrait"))
+end
+
 local function clear_drag()
     if not drag then return end
     local picture, parent = drag.picture, drag.parent
@@ -968,6 +975,7 @@ local function release_view()
     view_enabled = false
     clear_drag()
     restore_portraits()
+    clear_fitted_practice()
     set_playing(false)
     stop_sound()
     for hit, bound in pairs(listeners) do
@@ -995,7 +1003,7 @@ function OnStart(view_root, back_to_game_menu)
     muted, replay_speed = false, 1
     reset_view()
     for id, layers in pairs(art) do
-        assert(#layers <= portrait_layers, "portrait exceeds the native pool: " .. id)
+        assert(#layers <= fitted_portrait_limit, "portrait exceeds the native pool: " .. id)
     end
     local seed = assert(math.tointeger(script:GetParam("seed")), "seed must be an integer")
     session = run.new(seed, difficulty, rules_data)
@@ -1059,6 +1067,7 @@ function OnDisable()
     view_enabled = false
     clear_drag()
     restore_portraits()
+    clear_fitted_practice()
     preparing_layout = nil
     press, pending_drop = nil, nil
     sync_updates()
