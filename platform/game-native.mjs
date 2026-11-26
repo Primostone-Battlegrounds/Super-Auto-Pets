@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { bundleRun } from './m1-bundle.mjs';
-import { button, group, image, label, nativeRun, pigment } from './m1-ui.mjs';
+import { button, group, image, label, pigment, unifiedRun } from './m1-ui.mjs';
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
@@ -40,7 +40,7 @@ function lobbyButton(name, position, size, title, { primary = false, small = fal
 function layout(duelRules) {
   const modeSize = [344, 112];
   const secondarySize = [224, 82];
-  const practice = nativeRun.controls.map(control => {
+  const practice = unifiedRun.controls.map(control => {
     if (/^Enemy[1-5]$/u.test(control.name)) {
       return { ...control, children: control.children.filter(child => child.name !== 'Portrait') };
     }
