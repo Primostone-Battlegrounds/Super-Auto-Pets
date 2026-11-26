@@ -77,6 +77,15 @@ export function nativeGame(lua53, lua54, parse, ids, artPreview) {
   const profile = 'release';
   const shop = nativeShop(lua53, lua54, profile);
   const battle = nativeBattle(lua53, lua54, parse, profile);
+  if (artPreview) {
+    const catalog = shop.catalog.pet.map((pet, index) => {
+      const id = battle.ids[index];
+      assert.ok(id);
+      return { id, name: artPreview.animals[id]?.name ?? artPreview.commonNames.pet_by_id[id] ?? pet.name };
+    });
+    assert.equal(new Set(catalog.map(pet => pet.id)).size, catalog.length);
+    artPreview = { ...artPreview, catalog };
+  }
   const room = nativeRoom(lua53, lua54, parse, ids.room, ids.roomFight, 1n, 1, undefined, profile);
   const [duel, duelFight] = duelGraphs(shop, battle, ids.duel, ids.duelFight, room.settings.STARTING_LIVES, true);
   const roomSource = gated(room.roomSource, [
@@ -101,9 +110,13 @@ export function nativeGame(lua53, lua54, parse, ids, artPreview) {
     const duelUi = duelClientSource(convert('./m2_probe.lua'), shop)
       .replace('local root, offers = script.object, script.object',
         'local root, offers = view_root, view_root:GetChild("MarketOffers")');
-    const duel = wrap('duel_view', duelUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot' }, 'view_root');
+    const duel = wrap('duel_view', duelUi, {
+      start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot', redraw: 'redraw',
+    }, 'view_root');
     const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
-    const versus = wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' });
+    const versus = wrap('room_view', roomUi, {
+      start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh', redraw: 'redraw',
+    });
     return [practice, duel, versus, convert('./game_ui.lua')].join('\n\n');
   }, clientLayout, artPreview);
   parse(source, { luaVersion: '5.3' });

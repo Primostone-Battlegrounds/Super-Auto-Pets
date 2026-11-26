@@ -554,14 +554,15 @@ for(const {canvasId,playerCount,mode} of configurations) {
       ]);
       const own = [1, 3, 8, 2, 7].map((code, index) => [code, 21 + index, 22, 20, 1, 0]);
       const enemy = [8, 3, 1, 18, 2].map((code, index) => [code, 31 + index, 1, 2, 1, 0]);
-      const publish = (version, offers, battling = false) => {
-        const packed = [5, 3, 10, 0, 0, 5, ...offers, 1, -2, ...own.flat()];
+      const publish = (version, offers, battling = false, round = 5) => {
+        const tier = Math.min(6, (round + 1) >> 1);
+        const packed = [round, tier, 10, 0, 0, 5, ...offers, 1, -2, ...own.flat()];
         if (duel) {
-          api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, 5, battling ? 3 : 0, battling, false, 3, version,
+          api.sendPlaySignal(session, 'AP_DuelSnapshot', [2, 1, round, battling ? 3 : 0, battling, false, 3, version,
             version, 0, 0, 30, 0, 5, 4, 0], 'Player1');
-          api.sendPlaySignal(session, 'AP_DuelMarket', [5, version, packed], 'Player1');
+          api.sendPlaySignal(session, 'AP_DuelMarket', [round, version, packed], 'Player1');
         } else {
-          api.sendPlaySignal(session, 'AP_RoomView', [version, battling ? 3 : 2, 5, 1, version, playerCount, 0, battling,
+          api.sendPlaySignal(session, 'AP_RoomView', [version, battling ? 3 : 2, round, 1, version, playerCount, 0, battling,
             Array(8).fill(5), Array(8).fill(0), [2, 1, 4, 3, 6, 5, 8, 7], Array(8).fill(0), packed, 0, 42], 'Player1');
         }
       };
@@ -605,6 +606,28 @@ for(const {canvasId,playerCount,mode} of configurations) {
       click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
       await capture('client-1-fitted-return-fixture');
       requireNoFittedLayers();
+      publish(23, shelf);
+      await capture('client-1-fitted-lobby-update-fixture');
+      requireNoFittedLayers();
+      click('Lobby/Continue/Hit');
+      const resumed = await capture('client-1-fitted-resume-fixture');
+      for (const [index, code] of shelf.entries()) requireArt(resumed, artHosts[5 + index], species.get(code)[0], false, 1.5);
+
+      const catalog = build.artPreview.catalog;
+      assert.equal(catalog.length, build.petTierCounts.reduce((sum, count) => sum + count, 0));
+      for (let offset = 0; offset < catalog.length; offset += 3) {
+        const entries = catalog.slice(offset, offset + 3);
+        const codes = entries.map((_, index) => offset + index + 1);
+        while (codes.length < 3) codes.push(0);
+        const sequence = offset / 3 + 1;
+        publish(23 + sequence, codes, false, 11);
+        const frame = await capture(`client-1-catalog-shelf-${sequence}-fixture`);
+        for (const [index, pet] of entries.entries()) {
+          requireText(duel ? `${shop}/MarketOffers/OfferLabel${index + 1}` : `${shop}/Offer${index + 1}/Text`,
+            new RegExp(`^${pet.name}$`, 'u'));
+          requireArt(frame, artHosts[5 + index], pet.id, false, 1.5);
+        }
+      }
     }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}

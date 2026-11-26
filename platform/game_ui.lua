@@ -105,9 +105,9 @@ local function online_portraits(duel)
         end
     end
 
-    local view, draw
+    local view, draw, suspended
     local function select(next_view)
-        if view == next_view then return end
+        if suspended or view == next_view then return end
         view = next_view
         draw = bind_portrait(function(path)
             local slot, layer = path:match("^(%d+)/?(.*)$")
@@ -169,8 +169,9 @@ local function online_portraits(duel)
         clear = function()
             if not fitted_portrait_template then return end
             for _, picture in ipairs(pictures) do clear_fitted_portrait(picture.control) end
-            view = nil
+            view, suspended = nil, true
         end,
+        resume = function() suspended = false end,
         shop = function(slot, id) if view == "shop" then paint(slot, id, false, false) end end,
         replay = function(slot, id, mirrored, attacking, show_empty)
             if view == "replay" then paint(replay_slots[slot], id, mirrored, attacking, show_empty) end
@@ -182,7 +183,14 @@ local function show_online()
     local duel = mode == 2
     local board = duel and "Duel" or "Room"
     show_section(board)
-    if online then online.refresh(); return end
+    if online then
+        if fitted_portrait_template then
+            online_painter.resume()
+            online.redraw()
+        end
+        online.refresh()
+        return
+    end
     online = (duel and duel_view or room_view)(root:GetChild(board))
     local badges = root:FindChild("Duel/ReplayBoard/BadgePool")
     online_painter = online_portraits(duel)

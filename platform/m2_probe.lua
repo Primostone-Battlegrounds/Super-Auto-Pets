@@ -531,6 +531,12 @@ local function receive_market(_, parameters)
     render_market()
 end
 
+local function redraw()
+    show_actions()
+    render_market()
+    show_replay()
+end
+
 draw_status = function()
     if not status_header then return end
     local message = status_message
@@ -588,12 +594,10 @@ local function receive_snapshot(_, parameters)
     status_message = message
     awaiting_settlement = players == 2 and seat > 0 and phase == 3
     seconds = players == 2 and seat > 0 and (phase == 0 or phase == 1) and math.max(0, remaining) or nil
-    show_actions()
     print(string.format("AUTO_PETS_M2 seat=%d players=%d round=%d phase=%d ready=%s continued=%s settlements=%d version=%d",
         seat, players, round, phase, tostring(is_ready), tostring(continued), settlements, version))
     print(string.format("AUTO_PETS_M2 sequence=%d winner=%d reason=%d remaining=%d", sequence, winner, reason, remaining))
-    render_market()
-    show_replay()
+    redraw()
 end
 
 function OnStart(_, painter, badge_pool)

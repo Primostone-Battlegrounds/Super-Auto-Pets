@@ -199,7 +199,7 @@ fs.copyFileSync(new URL(profile ? '../../platform/ART-PRACTICE.md' : '../../plat
 const build = {
   ...design, version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
   node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,
-  ...(preview && { artPreview: { ...preview, commonNames: undefined } }),
+  ...(preview && { artPreview: { ...game.artPreview, commonNames: undefined } }),
   officialClient: 'pending',
 };
 const buildJson = JSON.stringify(build, null, 2) + '\n';
