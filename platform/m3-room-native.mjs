@@ -45,11 +45,12 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   const seeds = [];
   const ranks = [];
   const weights = [];
+  let frontAffinities;
   const names = new Map();
   let random;
   for (const row of configuration.trimEnd().split('\n')) {
     const [kind, key, ...fields] = row.split('\t');
-    assert.ok(fields.slice(kind === 'pet' ? 1 : 0).every(field => /^\d+$/.test(field)));
+    assert.ok(kind === 'front' || fields.slice(kind === 'pet' ? 1 : 0).every(field => /^\d+$/.test(field)));
     if (kind === 'config') {
       assert.match(key, /^[A-Z_]+$/);
       assert.equal(fields.length, 1);
@@ -65,6 +66,9 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
       assert.equal(Number(key), weights.length / 2 + 1);
       assert.equal(fields.length, 2);
       weights.push(...fields.map(BigInt));
+    } else if (kind === 'front') {
+      assert.ok(!frontAffinities && [key, ...fields].every(value => /^-?\d+$/.test(value)));
+      frontAffinities = [key, ...fields].map(BigInt);
     } else {
       assert.equal(kind, 'pet');
       assert.equal(fields.length, 1);
@@ -89,6 +93,11 @@ export function nativeRoom(lua53, lua54, parse, roomId, fightId, seed, cadence =
   room = setList(room, 'SEEDS', seeds);
   room = setList(room, 'RANDOM', random);
   room = replace(room, "[0n], 'int'); // AP_ROOM_BOT_WEIGHTS", `[${literals(weights)}], 'int');`);
+  if (profile === 'expanded') assert.equal(frontAffinities?.length, shop.catalog.pet.length);
+  room = replace(room, '    // AP_ROOM_FRONT_AFFINITIES\n', frontAffinities
+    ? `    const frontAffinities = f.assemblyList([${literals(frontAffinities)}], 'int');\n` : '');
+  room = replace(room, ' /* AP_ROOM_FRONT_SCORE */', frontAffinities
+    ? '\n        + f.getCorrespondingValueFromList(frontAffinities, f.getCorrespondingValueFromList(stock, at) - 1n)\n        * f.getCorrespondingValueFromList(stock, at + 4n)' : '');
   room = initialize(room, 'EMPTY_STOCK', 6 + shop.rules.PET_SLOTS + shop.rules.FOOD_SLOTS + 6 * shop.rules.TEAM_SIZE);
   let fight = replace(read('./m3_room_fight.ts'), 'id: 1073741826,', `id: ${fightId},`);
   fight = bindFaintColumns(fight, battle.faintMetadata);

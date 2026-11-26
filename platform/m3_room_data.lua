@@ -20,6 +20,11 @@ print("config", "RECOVERY", 15)
 print("config", "COMPATIBILITY_TIER", compatibility.rules.max_tier)
 print("config", "EARLY_PET_LIMIT", #data.pets_for_tier(compatibility.rules.max_tier))
 for index, weight in ipairs(bot.style_weights()) do print("weight", index, weight.attack, weight.health) end
+if profile == "expanded" then
+    local affinities = {}
+    for index, pet in ipairs(data.pets) do affinities[index] = bot.native_front_affinity(pet.ability) end
+    print("front", table.unpack(affinities))
+end
 print("random", match.pairing_random.state, match.battle_random.state)
 assert(match:join("fixture", 0))
 for seat = 1, #match.seats do

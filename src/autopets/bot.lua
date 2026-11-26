@@ -33,6 +33,16 @@ function bot.style_weights()
     return result
 end
 
+-- Use one signed coefficient per shop code in the bounded native controller.
+function bot.native_front_affinity(ability)
+    local effect, power = ability.effect, ability.power
+    if effect == "rally_summon" then return -12 * power end
+    if effect == "splash" then return 6 * power end
+    if effect == "shield_next" then return 4 * power end
+    if effect == "summon" then return 8 + 6 * power end
+    return ability.trigger == "faint" and 8 or 0
+end
+
 local function copy(value)
     if type(value) ~= "table" then
         return value

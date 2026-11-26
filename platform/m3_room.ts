@@ -124,6 +124,7 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
   if (action === 1n && attempt < 4n && gold >= shopRerollCost) action = 10n;
   if (action === 1n && teamCount > 1n && attempt <= roomBotLimit) {
     const weights = f.assemblyList([0n], 'int'); // AP_ROOM_BOT_WEIGHTS
+    // AP_ROOM_FRONT_AFFINITIES
     const style = seat % (f.getListLength(weights) / 2n) * 2n;
     const attackWeight = f.getCorrespondingValueFromList(weights, style);
     const healthWeight = f.getCorrespondingValueFromList(weights, style + 1n);
@@ -132,7 +133,7 @@ function gstsServerRoomBotPlan(f: ShopFlow, stock: bigint[], seat: bigint, attem
     for (let slot = 0n; slot < teamCount; slot += 1n) {
       const at = shopTeamAt + slot * shopUnitSize;
       const score = f.getCorrespondingValueFromList(stock, at + 2n) * attackWeight
-        + f.getCorrespondingValueFromList(stock, at + 3n) * healthWeight;
+        + f.getCorrespondingValueFromList(stock, at + 3n) * healthWeight /* AP_ROOM_FRONT_SCORE */;
       if (score > best) {
         best = score;
         front = slot;
