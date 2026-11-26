@@ -41,5 +41,6 @@ assert(replay.next_speed(1) == 2 and replay.next_speed(2) == 1)
 assert(replay.toggle_caption(true, false) == "暂停")
 assert(replay.toggle_caption(false, false) == "继续")
 assert(replay.toggle_caption(false, true) == "重看")
+assert(replay.actor_caption("芦纹龟", "Lv.3 满级") == "芦纹龟\n<size=13>Lv.3 满级</size>")
 
 print("battle presentation: x1/x2, event order, pause captions and terminal board")

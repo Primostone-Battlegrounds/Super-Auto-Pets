@@ -34,6 +34,10 @@ function M.toggle_caption(playing, ended)
     return playing and "暂停" or ended and "重看" or "继续"
 end
 
+function M.actor_caption(name, level)
+    return name .. "\n<size=13>" .. level .. "</size>"
+end
+
 -- Keep the next event visible for at least one render at low frame rates. The
 -- fractional time carried at ordinary frame rates keeps x1 and x2 accurate.
 function M.advance_clock(position, elapsed, dt, speed, count, duration_at)
