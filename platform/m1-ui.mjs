@@ -77,7 +77,7 @@ function card(name, position, width, type, interactive = true, visible = true, f
     image('LifePaper', [badgeX - 12, -49], [20, 20], '#813830', { image: lifeIcon }),
     label('Detail', [-badgeX + 10, -49], [badgeWidth - 14, 35], '', 25, '#253e58'),
     label('LifeValue', [badgeX + 9, -49], [badgeWidth - 14, 35], '', 25, '#813830'),
-    market ? preparationBadge('Tag', [-47, 58], [58, 34])
+    market ? preparationBadge('Tag', [-42, 58], [70, 34])
       : label('Tag', [0, 61], [Math.min(width - 4, 90), 29], '', 18, '#58431f'),
   ];
   if (market) {
@@ -132,13 +132,22 @@ export function button(name, position, size, title, primary = false, fontSize = 
 }
 
 function stat(name, x, title, glyph, colour) {
-  return group(name, [x, 307], [116, 56], [
+  const round = name === 'Round';
+  return group(name, [x, 307], [round ? 180 : 116, 64], [
     image('Surface', [-41, 6], [23, 23], colour, { image: glyph }),
-    label('Label', [8, -14], [83, 25], title, 15, pigment.muted),
-    label('Value', [11, 11], [87, 33], '', 24, colour),
+    label('Label', [8, -17], [83, 28], title, 15, pigment.muted),
+    label('Value', [round ? 13 : 11, 11], [round ? 150 : 87, 40], '', 24, colour),
   ]);
 }
 
+function settings() {
+  return group('OpenMenu', [522, 313], [112, 82], [
+    roundedPlate('Face', [0, 0], [104, 48], 107015, '#fff8df'),
+    image('Rim', [-29, 0], [22, 22], pigment.muted, { image: 101063 }),
+    label('Title', [14, 0], [70, 36], '设置', 21),
+    { name: 'Hit', kind: 'cursorArea', size: [112, 82] },
+  ]);
+}
 const slots = [1, 2, 3, 4, 5];
 const offers = ['Pet1', 'Pet2', 'Pet3', 'Food1', 'Food2', 'Reward'];
 const offerX = [-464, -288, -112, 110, 282, 464];
@@ -151,7 +160,22 @@ const actions = [
   ['RewardNext', '下个奖励', [464, -102]],
 ];
 
-export const nativeRun = {
+function battlePanel(unified) {
+  const positions = unified ? [[164, 239], [-164, 239], [0, 239]] : [[-222, -33], [0, -33], [222, -33]];
+  const replayButton = unified ? [144, 82] : [202, 82];
+  return group('Battle', [0, unified ? -15 : -174], unified ? [1200, 622] : [1152, 154], [
+    image('Surface', [0, unified ? -192 : 0], unified ? [1200, 178] : [1148, 154], preparationColours.shelfInset),
+    label('Outcome', [0, unified ? -121 : 60], [1074, unified ? 36 : 34], '', 27, pigment.ink),
+    label('Event', [0, unified ? -158 : 29], [1074, unified ? 34 : 28], '', 20, pigment.ink),
+    button('Replay', positions[0], replayButton, unified ? '跳过' : '下一条战斗事件'),
+    button('Auto', positions[1], replayButton, '暂停'),
+    button('Fast', positions[2], replayButton, '倍速 ×1'),
+    button('Rewatch', [-111, unified ? -225 : -33], [202, 82], '重新回放'),
+    button('NewSeed', [111, unified ? -225 : -33], [202, 82], '新一局'),
+  ], false);
+}
+
+export const unifiedRun = {
   name: 'AutoPetsRun',
   script: 'auto_pets_run',
   showCursor: true,
@@ -162,12 +186,12 @@ export const nativeRun = {
     image('Panel', [0, 0], [1192, 674], '#e4e6ba'),
     image('Header', [0, 307], [1200, 82], preparationColours.header),
     { ...label('Heading', [65, 306], [226, 44], '小动物自走棋', 26), visible: false },
-    button('OpenMenu', [522, 306], [112, 82], '设置'),
+    settings(),
     { ...button('Reset', [392, 306], [132, 48], '重开本局'), visible: false },
     stat('Money', -528, '金币', disc, '#83501b'),
     stat('Lives', -402, '生命', lifeIcon, '#893e2e'),
-    stat('Wins', -276, '胜场', 102036, '#335c36'),
-    stat('Round', -150, '回合', 101049, '#314f43'),
+    stat('Wins', -276, '胜场', 102024, '#335c36'),
+    stat('Round', -122, '回合', 101049, '#314f43'),
     group('Field', [0, 129], [1200, 282], [
       image('Surface', [0, 0], [1200, 282], preparationColours.grass),
       image('Cloud', [266, 103], [178, 38], '#f8f4d4', { image: 105102 }),
@@ -217,16 +241,7 @@ export const nativeRun = {
         label('Value', [0, 0], [54, 30], '', 24, '#8f3c30'),
       ], false),
     ], false),
-    group('Battle', [0, -15], [1200, 622], [
-      image('Surface', [0, -192], [1200, 150], preparationColours.shelfInset),
-      label('Outcome', [0, -137], [1074, 36], '', 27, pigment.ink),
-      label('Event', [0, -176], [1074, 34], '', 20, pigment.ink),
-      button('Auto', [-164, 239], [144, 82], '暂停'),
-      button('Fast', [0, 239], [144, 82], '倍速 ×1'),
-      button('Replay', [164, 239], [144, 82], '跳过'),
-      button('Rewatch', [-111, -230], [202, 54], '重新回放'),
-      button('NewSeed', [111, -230], [202, 54], '新一局'),
-    ], false),
+    battlePanel(true),
     button('Primary', [481, -291], [204, 82], '开战', true),
     label('Hint', [0, -291], [690, 53], '', 19, pigment.ink),
     { ...group('Menu', [0, 0], [1202, 684], [
@@ -249,4 +264,18 @@ export const nativeRun = {
       button('Confirm', [135, -56], [230, 50], '确认重开', true),
     ], false), blockCursor: true },
   ],
+};
+
+// Standalone rule probes keep their permanently bound controls available.
+// The unified game instead reveals the same actions beside their own targets.
+const auxiliaryActions = new Set(actions.map(([name]) => name));
+export const nativeRun = {
+  ...unifiedRun,
+  controls: unifiedRun.controls.map(control => {
+    if (control.name === 'Battle') return battlePanel(false);
+    if (control.name !== 'Shop') return control;
+    const children = control.children.filter(child => !auxiliaryActions.has(child.name));
+    return { ...control, children: [...children,
+      ...actions.map(([name, title], index) => button(name, [(index - 2) * 232, -116], [172, 48], title))] };
+  }),
 };

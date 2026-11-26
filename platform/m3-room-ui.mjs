@@ -50,13 +50,15 @@ function roomLayout(unified) {
 
   function inspectable(name, inspect, x, y, width, height, fill = pigment.chip, art) {
     if (unified && art) {
-      const badge = preparationBadge('Text', [0, 0], [59, 34]);
+      const team = art === 'team';
+      const badgeSize = team ? [122, 48] : [76, 34];
+      const badgePosition = team ? [x, y + 74] : [x - 36, y + 64];
       return [
         button(name, x, y, width, height, '', false, 17, fill, art),
-        group(inspect, [x - 44, y + 64], [62, 36], [
-          image('Surface', [0, 0], [59, 34], prep.badgePaper),
-          badge,
-          { name: 'Hit', kind: 'cursorArea', size: [62, 36] },
+        group(inspect, badgePosition, badgeSize, [
+          image('Surface', [0, 0], badgeSize, prep.badgePaper),
+          preparationBadge('Text', [0, 0], badgeSize),
+          { name: 'Hit', kind: 'cursorArea', size: badgeSize },
         ]),
       ];
     }
@@ -82,7 +84,7 @@ function roomLayout(unified) {
       ...(slot <= 3
         ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, offerX, offerY, offerWidth, offerHeight, clearing.nearTrack, 'offer')
         : [button(`Offer${slot}`, offerX, offerY, offerWidth, offerHeight, '', false, 17, clearing.farTrack, 'offer')]),
-      ...(unified && slot > 3 ? [preparationBadge(`OfferTier${slot}`, [offerX - 44, offerY + 64], [59, 34])] : []),
+      ...(unified && slot > 3 ? [preparationBadge(`OfferTier${slot}`, [offerX - 36, offerY + 64], [76, 34])] : []),
       unified ? { ...freeze, visible: false, active: false } : freeze,
       ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), unified ? 122 : 94, 154,
         unified ? 92 : 76, pigment.rail, 'team'),
@@ -114,7 +116,7 @@ function roomLayout(unified) {
             image('Turf', [0, -156], [832, 312], prep.shelf),
             labelFront('TeamFront', [339, 228], '前排 ›'),
           ] : []),
-          label('Money', unified ? [-254, 282] : [0, 160], unified ? [302, 45] : [810, 36], '', 22,
+          label('Money', unified ? [-254, 282] : [0, 160], unified ? [302, 48] : [810, 36], '', 22,
             pigment.ink, 'left'),
           ...slots.flatMap(buildStock),
           ...browse.flatMap(([name, text], index) => {
@@ -126,9 +128,9 @@ function roomLayout(unified) {
             const action = button(name, x, y, 154, unified ? 82 : 52, text, false, unified ? 19 : 17);
             return [unified ? { ...action, visible: false, active: false } : action];
           }),
-          label('AbilityTitle', unified ? [-209, -6] : [0, -182], unified ? [394, 32] : [810, 28], '查看动物技能', unified ? 21 : 18,
+          label('AbilityTitle', unified ? [-209, 40] : [0, -182], unified ? [394, 34] : [810, 28], '查看动物技能', unified ? 21 : 18,
             unified ? '#65441d' : pigment.ink, 'left'),
-          label('AbilityBody', unified ? [-209, -29] : [0, -215], unified ? [394, 40] : [810, 38], '', unified ? 18 : 17,
+          label('AbilityBody', unified ? [-209, 9] : [0, -215], unified ? [394, 48] : [810, 38], '', unified ? 18 : 17,
             pigment.ink, 'left'),
         ], false),
         label('Status', unified ? [-125, 244] : [0, 225], unified ? [530, 32] : [820, 42],
@@ -140,7 +142,7 @@ function roomLayout(unified) {
             image('Pine', [-385, 96], [42, 78], '#8ca98d', { image: 105098 }),
             image('Canopy', [-296, 90], [218, 91], '#f6fbec', { image: 105135 }),
           ] : []),
-          label('RoundText', [0, unified ? -168 : 144], [800, 66], '', 23, pigment.ink, 'left'),
+          label('RoundText', [0, unified ? -193 : 144], [800, 66], '', 23, pigment.ink, 'left'),
           ...(unified ? [
             terrain('Enemy', [130, 27], [560, 114], clearing.enemyLane),
             terrain('Ally', [-130, 32], [560, 114], clearing.ownLane),
@@ -154,7 +156,7 @@ function roomLayout(unified) {
             label(`Own${slot}`, [-48 - (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
             label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
           ]),
-          label('Event', [0, unified ? -107 : -72], [800, unified ? 32 : 50], '', unified ? 19 : 18, unified ? '#65441d' : pigment.ink),
+          label('Event', [0, unified ? -142 : -72], [800, unified ? 32 : 50], '', unified ? 19 : 18, unified ? '#65441d' : pigment.ink),
           ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
             .map(([name, text], index) => {
               if (!unified) return button(name, (index - 1.5) * 202, -133, 188, 52, text);
