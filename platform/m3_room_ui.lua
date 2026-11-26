@@ -212,7 +212,7 @@ local function paint_shop()
             action:SetAnchoredPosition(x, y)
         end
         text("Shop/Reroll/Text", shop_drag.waiting() and "取消拖放"
-            or string.format("刷新 · %d 金 · %s", native_catalog.rules.reroll_cost, pet_presentation.tier(preview.tier)))
+            or string.format("刷新 · %d 金\n%s", native_catalog.rules.reroll_cost, pet_presentation.tier(preview.tier)))
     end
 end
 

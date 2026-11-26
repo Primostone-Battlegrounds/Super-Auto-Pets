@@ -204,7 +204,7 @@ local function team_card(path, unit, selected, effect)
     show(path .. "/HealthTrack", unit ~= nil and not preparing)
     show(health_path, unit ~= nil and unit.health > 0 and not preparing and not shielding)
     if not mirrored then
-        show(path .. "/XPPaper", preparing and unit ~= nil)
+        show(path .. "/XPPaper", preparing and unit ~= nil and not shared_portraits)
         if preparing and unit then
             if shared_portraits then
                 text(path .. "/XP", pet_presentation.level(unit, rules.level_xp))
@@ -521,6 +521,7 @@ local function draw(refresh)
             local caption = pending_drop and ("确认" .. drop_label) or drop_label
             text(path .. "/DropLabel", shared_portraits and combining and ("→ " .. caption) or caption)
         elseif shared_portraits and combining then
+            show(path .. "/Name", false)
             text(path .. "/DropLabel", "→ 合并")
         else
             show(path .. "/DropLabel", false)
@@ -553,7 +554,7 @@ local function draw(refresh)
         reward_index = math.max(1, math.min(reward_index, #state.shop.rewards))
         text("Shop/Caption", string.format("商店 · %d 阶", state.shop.tier))
         text("Shop/Buy/Title", string.format("购买 · %d 金", rules.pet_cost))
-        local reroll_tier = shared_portraits and (" · " .. pet_presentation.tier(state.shop.tier)) or ""
+        local reroll_tier = shared_portraits and ("\n" .. pet_presentation.tier(state.shop.tier)) or ""
         text("Shop/Reroll/Title", pending_drop and "取消拖放" or string.format("刷新 · %d 金", rules.reroll_cost) .. reroll_tier)
         local picked = drag or selection
         local selling = picked and picked.kind == "team" and state.shop.team[picked.index]

@@ -24,11 +24,11 @@ end
 function presentation.animal(catalog, item, unit)
     local level = unit and unit.level or 1
     local heading, body = animal_ability.describe(catalog, item, level, true, true)
-    return heading .. " · " .. presentation.tier(item), body
+    return heading .. " " .. presentation.tier(item), body
 end
 
 function presentation.food(item)
-    local heading = item.name .. " · " .. presentation.tier(item)
+    local heading = item.name .. " " .. presentation.tier(item)
     local effect = string.format("目标获得 +%d攻 +%d命", item.attack, item.health)
     if item.adjacent_attack or item.adjacent_health then
         effect = effect .. string.format("，相邻队员 +%d攻 +%d命", item.adjacent_attack or 0, item.adjacent_health or 0)

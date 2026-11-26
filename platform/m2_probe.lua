@@ -245,7 +245,7 @@ local function render_market()
     market_gold.text = portrait and string.format("金币 %d", view.gold) or string.format("金币 %d  ·  第 %d 阶", view.gold, view.tier)
     if portrait then
         child("RerollLabel").text = shop_drag and shop_drag.waiting() and "取消拖放"
-            or string.format("刷新 · %d 金 · %s", native_catalog.rules.reroll_cost, pet_presentation.tier(view.tier))
+            or string.format("刷新 · %d 金\n%s", native_catalog.rules.reroll_cost, pet_presentation.tier(view.tier))
     end
     local picked = selected_slot(view)
     if not picked then selected_uid = nil end
