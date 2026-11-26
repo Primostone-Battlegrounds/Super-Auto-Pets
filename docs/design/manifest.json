@@ -50,6 +50,15 @@
         "evidence": "docs/evidence/v2-design-basis-review.md",
         "evidenceSha256": "cdf20a2fb5b474cb992056faa03c6544d7a0c72d03276f7f72583194e1654647"
       }
+    },
+    "v2.1.0": {
+      "status": "Draft",
+      "gameVersion": "0.6.0",
+      "original": {
+        "version": null,
+        "verification": "unverified"
+      },
+      "references": []
     }
   }
 }
