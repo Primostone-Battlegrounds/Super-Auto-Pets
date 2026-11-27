@@ -33,7 +33,7 @@ export function checkFormalClient(ui, source, build) {
   }
   checkControls(ui.controls);
   assert.doesNotMatch(source, closedModeText, 'Closed mode text in formal Lua');
-  assert.doesNotMatch(source, /AP_Duel|Choices\/(?:Duel|Practice)|(?:practice|duel)_view|factories\['autopets\.(?:run|bot)'\]/u,
+  assert.doesNotMatch(source, /AP_Duel|Choices\/(?:Duel|Practice)|(?:practice|duel)_view|duel_board|factories\['autopets\.(?:run|bot)'\]/u,
     'Closed mode reference in formal Lua');
 }
 

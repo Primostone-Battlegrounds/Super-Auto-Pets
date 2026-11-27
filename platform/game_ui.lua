@@ -113,8 +113,8 @@ local function online_portraits(duel)
     local portrait_board = root:GetChild(online_portrait_home)
     local replay = root:FindChild("Room/Match/Replay")
     local room_shop = root:FindChild("Room/Match/Shop")
-    local market, duel_board
     -- @internal begin
+    local market, duel_board
     if duel then
         replay = root:FindChild("Duel/ReplayBoard")
         market = root:FindChild("Duel/MarketOffers")
@@ -139,11 +139,14 @@ local function online_portraits(duel)
             label:SetAnchoredPosition(lx, ly - (duel and 40 or 35))
             label:SetSizeDelta(width, duel and 90 or 84)
             local shop, hit
+            -- @internal begin
             if duel then
                 shop = own and duel_board or market
                 local name = own and ("Team" .. slot) or slot <= 3 and ("Buy" .. slot) or ("Food" .. (slot - 3))
                 hit = shop:GetChild(name)
-            else
+            end
+            -- @internal end
+            if not hit then
                 shop = room_shop:GetChild((own and "Team" or "Offer") .. slot)
                 hit = shop:GetChild("Hit")
             end
@@ -258,7 +261,10 @@ local function receive_lobby(_, values)
         reset_fill()
     end
     mode = selected
-    availability, snapshot_age = {[2] = duel_reason, [8] = room_reason, waiting = waiting}, 0
+    availability, snapshot_age = {[8] = room_reason, waiting = waiting}, 0
+    -- @internal begin
+    availability[2] = duel_reason
+    -- @internal end
     if label or matched then clear_pending() end
     set_visible(lobby:GetChild("Choices"), label == nil)
     set_visible(lobby:GetChild("Continue"), label ~= nil)

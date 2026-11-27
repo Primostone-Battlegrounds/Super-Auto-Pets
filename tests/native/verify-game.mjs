@@ -140,7 +140,7 @@ if (release) {
   assert.equal(verifyArt(lua54), artReadback);
 }
 const { interface: ui } = await call('scene_get_client_ui', { ui: gameInterface });
-assert.deepEqual(ui.scripts, [{ name: gameScript, values }]);
+assert.deepEqual(ui.scripts, internal ? [{ name: gameScript, values }] : [gameScript]);
 if (release) checkFormalClient(ui, scripts[0].source, { gameVersion: release.scope.gameVersion, sourceRevision });
 for (const flag of ['showCursor', 'blockCursor', 'blockKeys']) assert.equal(ui[flag], game.layout[flag], flag);
 const diagnostics = await call('scene_check_client', { scripts: [gameScript] });

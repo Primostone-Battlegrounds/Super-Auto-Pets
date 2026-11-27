@@ -41,7 +41,8 @@ assert.deepEqual(listRespawnPoints({ mapPath }).players, build.players);
 const { readback, receipt, save } = await nativeSimulatorSave(checkout, mapPath, gameInterface);
 assert.equal(receipt.controls, build.controls + 1); // Simulator includes the interface root.
 assert.deepEqual(receipt.scripts.map(({ name }) => name), [gameScript]);
-assert.deepEqual(readback.interface.scripts, [{ name: gameScript, values: {} }]);
+assert.deepEqual(readback.interface.scripts, [gameScript]);
+assert.deepEqual(receipt.scriptParameters, { [gameScript]: {} });
 checkFormalClient(readback.interface, save.assets.scripts[0].source, build);
 
 console.log(JSON.stringify({
