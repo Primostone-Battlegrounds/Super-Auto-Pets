@@ -1,6 +1,6 @@
 local animal_ability = require("autopets.animal_ability")
 local phase_names = {[0] = "等待入席", "分配席位", "经营准备", "自动战斗", "回合结算", "对局终局", "计算名次"}
-local result_names = {"本轮获胜", "本轮落败", "本轮平局", "战斗到达步数上限"}
+local result_names = {"本轮获胜", "本轮落败", "本轮平局", "本轮未分胜负"}
 local battle = require("autopets.battle")
 local replay_view = require("autopets.replay_view")
 local decode_shop = require("autopets.shop_wire")
@@ -9,7 +9,7 @@ local shop_rules = {pet_slots = 3, food_slots = 2, team_size = 5}
 local battle_codes = {win = 1, loss = 2, draw = 3}
 local click = Enum.CursorEventType.CursorClick
 local latest, match, preview, selected, merge, reward, pending, forfeiting, hint
-local inspected
+local inspected, round_start_lives, reviewing_result
 local render_standings, panel, portrait, badges, unified_layout
 local shop_drag
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
@@ -79,6 +79,22 @@ end
 
 local function paint_ability()
     local picked = inspected or {kind = "pet", slot = 1}
+    local title = unified_layout and "点「技能」或「详情」查看" or "点动物旁的「技能」查看"
+    local body = "查看不会购买或改变阵容"
+    if picked.kind == "food" then
+        local code = preview.foods[picked.slot]
+        local food = native_catalog.foods[math.abs(code)]
+        if food then
+            title = string.format("%s · %d 阶食物 · %d 金", food.name, food.tier, native_catalog.rules.food_cost)
+            body = string.format("目标 +%d攻 +%d命", food.attack, food.health)
+            if food.adjacent_attack or food.adjacent_health then
+                body = body .. string.format(" · 邻位 +%d攻 +%d命", food.adjacent_attack or 0, food.adjacent_health or 0)
+            end
+        end
+        text("Shop/AbilityTitle", title)
+        text("Shop/AbilityBody", body)
+        return
+    end
     local code, level, experience
     if picked.kind == "team" then
         local unit = preview and preview.team[picked.slot]
@@ -89,9 +105,18 @@ local function paint_ability()
         code, level = shelf and shelf[picked.slot], 1
     end
     local pet = code and native_catalog.pets[math.abs(code)]
-    local title, body = "点动物旁的「技能」查看", "查看不会购买或改变阵容"
-    if pet then title, body = animal_ability.describe(native_catalog, pet, level, true) end
-    if badges and experience then body = body .. " · 经验 " .. experience end
+    if pet then
+        title, body = animal_ability.describe(native_catalog, pet, level, true)
+        if unified_layout then
+            title = title .. string.format(" · %d 阶", pet.tier)
+            if experience then
+                local next_level = native_catalog.rules.level_xp[level + 1]
+                body = body .. (next_level and string.format(" · 经验 %d/%d", experience, next_level) or " · 经验已满")
+            else
+                title = title .. string.format(" · %d 金", native_catalog.rules.pet_cost)
+            end
+        end
+    end
     text("Shop/AbilityTitle", title)
     text("Shop/AbilityBody", body)
 end
@@ -121,7 +146,7 @@ local function paint_shop()
         end
         local offer = "售罄"
         if badges then
-            if is_pet then visible("Shop/InspectOffer" .. slot, item ~= nil) end
+            if is_pet or unified_layout then visible("Shop/InspectOffer" .. slot, item ~= nil) end
             local cost = is_pet and native_catalog.rules.pet_cost or native_catalog.rules.food_cost
             badges.paint(5 + slot, item and item.attack, item and item.health, item and cost, not is_pet)
             if item then offer = item.name end
@@ -134,7 +159,9 @@ local function paint_shop()
         local kind, index = is_pet and "pet" or "food", is_pet and slot or slot - 3
         if shop_drag and shop_drag.source(kind, index) then offer = "拖动中" end
         text("Shop/Offer" .. slot .. "/Text", offer)
-        text("Shop/Freeze" .. slot .. "/Text", code < 0 and "解冻" or "冻结")
+        local frozen = code < 0
+        text("Shop/Freeze" .. slot .. "/Text", frozen and (unified_layout and "已冻结 · 解冻" or "解冻") or "冻结")
+        if unified_layout then visible("Shop/Freeze" .. slot, code ~= 0) end
         local unit = preview.team[slot]
         if portrait then
             local definition = unit and native_catalog.pets[unit.code]
@@ -165,14 +192,20 @@ local function paint_shop()
         or badges and "暂无奖励" or "暂无升级奖励")
     text("Shop/Merge/Text", merge and "取消合并" or "合并队员")
     if unified_layout then
+        visible("Shop/RewardNext", #preview.rewards > 1)
         text("Shop/Reroll/Text", shop_drag.waiting() and "取消拖放"
             or string.format("刷新 · %d 金", native_catalog.rules.reroll_cost))
     end
 end
 
-local function paint_battle()
+local function current_frame()
     local frame = frame_round == match.round and frames[frame_index]
-    local has_frame = frame and (frame.left == match.seat or frame.right == match.seat) or false
+    return frame and (frame.left == match.seat or frame.right == match.seat) and frame or nil
+end
+
+local function paint_battle()
+    local frame = current_frame()
+    local has_frame = frame ~= nil
     for _, name in ipairs({"Previous", "Forward", "Follow", "Ally", "Enemy"}) do
         visible("Replay/" .. name, has_frame)
     end
@@ -195,7 +228,7 @@ local function paint_battle()
             elseif match.phase == 5 then result = "本局已结束"
             elseif match.phase == 6 then result = "计算名次"
             elseif opponent == 0 then result = "本轮轮空"
-            else result = "等待服务端战斗画面" end
+            else result = "等待本轮战斗" end
         end
         text("Replay/RoundText", result)
         for slot = 1, 5 do
@@ -265,7 +298,7 @@ local function paint_battle()
         end
     end
     local sides = allied_side == 0 and {player = "我方", enemy = "对方"} or {player = "对方", enemy = "我方"}
-    text("Replay/Event", frame.event and replay_view.describe(frame.event, native_catalog, sides) or "服务端战斗快照")
+    text("Replay/Event", frame.event and replay_view.describe(frame.event, native_catalog, sides) or "")
     local result
     if frame.outcome == 1 or frame.outcome == 2 then
         result = frame.outcome == allied_side + 1 and "本轮获胜" or "本轮落败"
@@ -285,31 +318,64 @@ local function draw_status()
     text("Status", label)
 end
 
+local function paint_settlement()
+    local place = match.places[match.seat] or 0
+    local title = place == 1 and "冠军" or place > 0 and string.format("第 %d 名", place) or "本局已结束"
+    local summary = string.format("共 %d 轮", match.round)
+    if match.seat > 0 then summary = summary .. string.format(" · 剩余 %d 命", match.lives[match.seat]) end
+    if match.winner > 0 and match.winner ~= match.seat then
+        summary = summary .. string.format(" · 冠军为席位 %d", match.winner)
+    end
+    local frame = current_frame()
+    local can_review = frame and frame.event ~= nil
+    text("Settlement/Placement", title)
+    text("Settlement/Summary", summary)
+    text("Settlement/ReplayGuide", can_review and "" or "本局可在右侧查看完整排名")
+    visible("ResultReplay", not not can_review)
+    text("ResultReplay/Text", reviewing_result and "返回结算" or "回看最后一战")
+end
+
 local function redraw()
     if not match then return end
     draw_status()
     local shop_open = match.phase == 2 and preview ~= nil and alive()
-    local replay_open = match.phase >= 3 and match.seat > 0
-    if portrait then portrait.view(shop_open and "shop" or "replay") end
+    local settled = unified_layout and match.phase == 5
+    local replay_open = match.phase >= 3 and match.seat > 0 and (not settled or reviewing_result)
+    if portrait then portrait.view(shop_open and "shop" or replay_open and "replay" or nil) end
     visible("Shop", shop_open)
     visible("Replay", replay_open)
+    if unified_layout then
+        visible("Settlement", settled and not reviewing_result)
+        visible("Hint", not settled)
+        if settled then paint_settlement() else visible("ResultReplay", false) end
+    end
     local can_prepare = shop_open and not match.ready
     visible("Ready", can_prepare)
     if unified_layout then visible("Shop/Reroll", can_prepare) end
     visible("Forfeit", alive() and match.phase > 0 and match.phase < 5)
     text("Forfeit/Text", forfeiting and "确认认输" or "认输")
     if shop_open then paint_shop() end
-    if replay_open then paint_battle() end
-    local message = hint or "等待服务端推进"
+    if replay_open then paint_battle() elseif badges and not shop_open then badges.hide() end
+    local message = hint or ""
     if pending then
-        message = "等待服务端响应，可用「同步」查看当前状态"
+        message = "正在确认操作，可点「同步」查看进度"
     elseif not hint and shop_open then
         local _, unit = chosen()
         local animal = unit and pets[unit.code]
         if match.ready then message = "已准备，等待其他席位"
         elseif animal then message = "已选 " .. animal.name .. " · 可喂食、出售、换位或合并"
         else message = unified_layout and "拖向高亮站位，或点选动物购买" or "点选队员后可喂食、出售、换位或合并" end
-    elseif not hint and match.phase == 5 then
+    elseif not hint and match.phase == 4 then
+        local lives = match.lives[match.seat]
+        if lives then
+            local outcome = (round_start_lives or lives) > 0 and result_names[match.results[match.seat]]
+            local life = round_start_lives and round_start_lives > lives and string.format("损失 %d 命 · ", round_start_lives - lives) or ""
+            message = (outcome and outcome .. " · " or "") .. life .. string.format("剩余 %d 命", lives)
+                .. (lives > 0 and "\n等待下一轮" or "\n已淘汰，等待最终排名")
+        end
+    elseif not hint and match.phase == 2 and match.seat > 0 then
+        message = alive() and "正在准备商店" or "已淘汰，等待最终排名"
+    elseif not hint and match.phase == 5 and not unified_layout then
         local place = match.places[match.seat]
         message = place and place > 0 and ("我的名次 · 第 " .. place .. " 名") or "本局已结束"
     end
@@ -329,8 +395,9 @@ local function receive_view(_, values)
     local transitioned = not match or round ~= match.round or phase ~= match.phase
     if transitioned then
         selected, merge, reward, hint, inspected = nil, false, 1, nil, nil
+        reviewing_result = false
     elseif acknowledged and sequence == pending[3] then
-        hint = "操作未生效，已同步服务端状态"
+        hint = "操作未生效，画面已同步"
     else
         hint = nil
     end
@@ -338,10 +405,12 @@ local function receive_view(_, values)
         frames, frame_round, frame_index, following = {}, round, 0, true
         replay_playing, replay_elapsed = false, 0
     end
+    if not match or round ~= match.round then round_start_lives = nil end
+    if phase == 1 or phase == 2 or phase == 3 then round_start_lives = round_start_lives or lives[seat] end
     if transitioned or acknowledged or pending and sequence > pending[3] then pending = nil end
     latest, forfeiting = revision, false
     match = {phase = phase, round = round, seat = seat, sequence = sequence, ready = ready, lives = lives,
-        places = places, opponents = opponents, results = results}
+        places = places, opponents = opponents, results = results, winner = winner}
     seconds = (phase == 2 or phase == 4) and remaining or nil
     preview = decode_shop(raw, shop_rules)
     local playing_seats = phase >= 1
@@ -380,7 +449,7 @@ local function receive_battle(_, values)
     if at <= frame_index then frame_index = frame_index + 1 end
     if #frames > 256 then table.remove(frames, 1); frame_index = math.max(1, frame_index - 1) end
     if following then frame_index = #frames end
-    if match and round == match.round and match.phase >= 3 then paint_battle() end
+    if match and round == match.round and match.phase >= 3 then redraw() end
 end
 
 local function decode_formation(wire)
@@ -419,7 +488,7 @@ local function receive_replay(_, values)
     frames, frame_round, frame_index, following, canonical_round = resolved, round, 1, false, round
     replay_playing, replay_elapsed = #resolved > 1, 0
     print(string.format("AUTO_PETS_M3 replay round=%d events=%d outcome=%d", round, #result.events, outcome))
-    if match.round == round and match.phase >= 3 then paint_battle() end
+    if match.round == round and match.phase >= 3 then redraw() end
 end
 
 local function shop_action(kind, index, target, merging)
@@ -513,7 +582,7 @@ function OnStart(view_root, painter, badge_pool)
     latest, match, preview, selected, merge, reward, pending, forfeiting, hint = -1, nil, nil, nil, false, 1, nil, false, nil
     frames, frame_round, frame_index, following, canonical_round = {}, -1, 0, true, -1
     controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
-    inspected = nil
+    inspected, round_start_lives, reviewing_result = nil, nil, false
     source_ready = true
     if unified_layout then
         if game.GetUICanvasSize then
@@ -544,10 +613,10 @@ function OnStart(view_root, painter, badge_pool)
     button("Shop/InspectReward", function() inspected = {kind = "reward", slot = reward} end)
     for slot = 1, 5 do
         button("Shop/InspectTeam" .. slot, function() inspected = {kind = "team", slot = slot} end)
-        if slot <= 3 then
-            button("Shop/InspectOffer" .. slot, function() inspected = {kind = "pet", slot = slot} end)
-        end
         local kind, index = slot <= 3 and "pet" or "food", slot <= 3 and slot or slot - 3
+        if slot <= 3 or unified_layout then
+            button("Shop/InspectOffer" .. slot, function() inspected = {kind = kind, slot = index} end)
+        end
         button("Shop/Offer" .. slot, function()
             if slot <= 3 then
                 buy(slot, false)
@@ -589,6 +658,14 @@ function OnStart(view_root, painter, badge_pool)
         following, replay_elapsed = false, 0
     end)
     button("Replay/Follow", function() scrub(0) end)
+    if unified_layout then
+        button("ResultReplay", function()
+            local frame = match and match.phase == 5 and current_frame()
+            if not frame or not frame.event then return end
+            reviewing_result = not reviewing_result
+            if reviewing_result then frame_index, replay_playing, replay_elapsed = 1, #frames > 1, 0 end
+        end)
+    end
     button("Refresh", refresh)
     button("Ready", ready_up)
     button("Forfeit", function()
@@ -611,6 +688,7 @@ function OnUpdate(dt)
         draw_status()
     end
     if not replay_playing or not match or match.phase < 3 or frame_round ~= match.round then return end
+    if unified_layout and match.phase == 5 and not reviewing_result then return end
     local frame = frames[frame_index]
     if not frame or not frame.event then return end
     replay_elapsed = replay_elapsed + dt

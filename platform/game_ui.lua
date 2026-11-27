@@ -6,6 +6,7 @@ local request_id, last_view = 0, 0
 local availability, snapshot_age, pending, saw_lobby
 local bindings = {}
 local borrowed_portraits = {}
+local syncing_lobby = "房间状态未同步，可以稍后重试。"
 local online_modes = {[8] = "八人吃鸡"}
 -- @internal begin
 online_modes[2] = "好友 1v1"
@@ -60,7 +61,7 @@ end
 local function start_online(choice)
     if pending then return end
     if not availability then
-        feedback("千星关卡状态未同步。可以稍后重试。")
+        feedback(syncing_lobby)
         return
     end
     local reason = availability[choice]
@@ -266,7 +267,7 @@ local function receive_lobby(_, values)
     if waiting > 0 then count = count .. string.format(" · %d 人加载中", waiting) end
     if entry_labels[entry] then count = entry_labels[entry] .. " · " .. count end
     lobby:GetChild("Status").text = label and ("当前对局 · " .. label) or count
-    lobby:GetChild("Help").text = label and "联机重开请使用千星房间的「重新挑战」。"
+    lobby:GetChild("Help").text = label and "若要再开一局，请在千星房间选择「重新挑战」。"
         or room_reason == 6 and "等待关卡内的发起者开局。"
         or "从千星好友房间邀请好友，空位由机器人补齐。"
     -- @internal begin
@@ -281,6 +282,8 @@ local function receive_lobby(_, values)
     elseif matched and refusal[reason] then
         print("AUTO_PETS_LOBBY mode_rejected " .. reason)
         feedback(refusal[reason])
+    elseif lobby:GetChild("Feedback").text == syncing_lobby then
+        feedback("")
     -- @internal begin
     elseif duel_reason == 0 and lobby:GetChild("Feedback").text == refusal[1] then
         feedback("两位玩家已到齐，点好友 1v1 开局。")
@@ -347,7 +350,8 @@ function OnEnable()
     -- @internal end
     if section then
         script:EnableUpdate(true)
-        if resuming and section == "Lobby" then main_menu() end
+        if resuming and section == "Lobby" then main_menu()
+        elseif resuming and online then online.refresh() end
     end
 end
 

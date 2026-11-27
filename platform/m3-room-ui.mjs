@@ -61,7 +61,7 @@ function roomLayout(unified) {
       surface.size[0] = width - inspectWidth - 12;
     }
     return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height,
-      '技能', false, unified ? 16 : 17, '#b8d9c8')];
+      art === 'food' ? '详情' : '技能', false, unified ? 16 : 17, '#b8d9c8')];
   }
 
   return {
@@ -88,8 +88,9 @@ function roomLayout(unified) {
           ] : []),
           label('Money', [0, unified ? 174 : 160], [810, 36], '', unified ? 25 : 22, pigment.ink, 'left'),
           ...slots.flatMap(slot => [
-            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, clearing.nearTrack, 'offer')
-              : [button(`Offer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, '', false, 17, clearing.farTrack, 'offer')]),
+            ...(slot <= 3 || unified ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154,
+              unified ? 96 : 80, slot <= 3 ? clearing.nearTrack : clearing.farTrack, slot <= 3 ? 'offer' : 'food')
+              : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '', false, 17, clearing.farTrack, 'offer')]),
             button(`Freeze${slot}`, slotX(slot), unified ? -80 : -74, 154, 48, '冻结', false, 19),
             ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), unified ? 103 : 94, 154, unified ? 96 : 76, pigment.rail, 'team'),
           ]),
@@ -100,10 +101,21 @@ function roomLayout(unified) {
             return name === 'Reward' ? inspectable(name, 'InspectReward', x, y, 154, 52)
               : [button(name, x, y, 154, 52, text, false, unified ? 19 : 17)];
           }),
-          label('AbilityTitle', [0, unified ? -124 : -182], [810, unified ? 32 : 28], '点动物旁的「技能」查看', unified ? 22 : 18,
+          label('AbilityTitle', [0, unified ? -124 : -182], [810, unified ? 32 : 28],
+            unified ? '点「技能」或「详情」查看' : '点动物旁的「技能」查看', unified ? 22 : 18,
             unified ? '#65441d' : pigment.ink, 'left'),
           label('AbilityBody', [0, unified ? -155 : -215], [810, 38], '', unified ? 20 : 17, pigment.ink, 'left'),
         ], false),
+        ...(unified ? [
+          group('Settlement', [0, 10], [832, 426], [
+            image('Paper', [0, 0], [820, 414], '#f7eed7'),
+            label('Placement', [0, 88], [774, 84], '', 55, clearing.ink),
+            label('Summary', [0, 6], [774, 56], '', 26, pigment.ink),
+            label('ReplayGuide', [0, -86], [774, 42], '', 22, pigment.muted),
+            label('RestartGuide', [0, -135], [774, 52], '在千星房间选择「重新挑战」可再开一局', 22, pigment.muted),
+          ], false),
+          { ...button('ResultReplay', 0, shopActionsY, 260, 82, '回看最后一战', true, 24), visible: false, active: false },
+        ] : []),
         group('Replay', [0, 10], [832, unified ? 426 : 370], [
           ...(unified ? [
             image('Meadow', [0, 22], [820, 228], clearing.grass),

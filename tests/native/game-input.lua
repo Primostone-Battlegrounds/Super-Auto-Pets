@@ -242,6 +242,7 @@ room.capture("room_lobby")
 room.press("Lobby/Choices/Room/Hit")
 assert(room.start_count() == 0 and room.get("Lobby/Feedback").text:find("状态未同步"))
 room.view(0, 1, 1, 1, 0)
+assert(room.get("Lobby/Feedback").text == "", "fresh availability must clear the stale sync message")
 room.press("Lobby/Choices/Room/Hit")
 room.expect("AP_GameChooseMode:8,false,2")
 assert(room.get("Lobby/Feedback").text:find("正在发起"))
@@ -279,9 +280,10 @@ local future_frame = {}
 for index = 1, 66 do future_frame[index] = 0 end
 room.receive("AP_RoomBattle", {11, 2, 1, 2, 0, future_frame})
 room.receive("AP_RoomView", room_snapshot(2, 5, 1, {3,0,0,0,0,0,0,0}, {1,2,3,4,5,6,7,8}, 1, 1))
-assert(room.get("Room/Match/Hint").text:find("第 1 名"))
-for _, name in ipairs({"Previous", "Forward", "Follow"}) do
-    assert(not room.get("Room/Match/Replay/" .. name).active and not room.get("Room/Match/Replay/" .. name).visible, name)
+assert(room.get("Room/Match/Settlement/Placement").text == "冠军")
+assert(room.get("Room/Match/Settlement/Summary").text:find("剩余 3 命"))
+for _, name in ipairs({"Shop", "Replay", "ResultReplay", "Ready", "Forfeit"}) do
+    assert(not room.get("Room/Match/" .. name).active and not room.get("Room/Match/" .. name).visible, name)
 end
 room.capture("room_result")
 room.press("Room/Back/Hit")
