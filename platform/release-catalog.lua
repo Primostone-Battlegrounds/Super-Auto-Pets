@@ -1,6 +1,12 @@
 package.path = "src/?.lua;" .. package.path
 
-local catalog = arg[1] and assert(loadfile(arg[1]))() or require("autopets.release_data")
+local catalog
+if arg[1] then
+    catalog = assert(loadfile(arg[1]))()
+else
+    catalog = require("autopets.release_data")
+end
+assert(type(catalog) == "table", "Expected a release catalog table")
 for _, kind in ipairs({"pets", "foods"}) do
     local entries = catalog[kind]
     local lookup = catalog[kind == "pets" and "pet_by_id" or "food_by_id"]

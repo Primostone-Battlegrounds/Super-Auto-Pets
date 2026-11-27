@@ -36,6 +36,8 @@ return catalog
 `);
     assert.throws(() => verifyReleaseCatalog(root, scope, 'lua5.3', 'lua5.4', bundle), new RegExp(`Formal ${kind}`));
   }
+  fs.writeFileSync(bundle, 'return nil\n');
+  assert.throws(() => verifyReleaseCatalog(root, scope, 'lua5.3', 'lua5.4', bundle), /Expected a release catalog table/);
   assert.throws(() => validateRelease({ ...scope, catalogProfile: 'expanded' }), /catalog profile/);
   assert.throws(() => validateRelease({ ...scope, modes: ['eight-player', 'duel'] }), /formal mode/);
 });
