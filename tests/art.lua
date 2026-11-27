@@ -1,7 +1,13 @@
 package.path = "src/?.lua;" .. package.path
 
-local art = require("autopets.art")
 local data = require("autopets.release_data")
+local art
+if arg[1] then
+    art = assert(loadfile(arg[1]))()
+else
+    art = require("autopets.art")
+end
+assert(type(art) == "table", "expected an artwork table")
 
 local function assert_dense(list)
     assert(type(list) == "table")
