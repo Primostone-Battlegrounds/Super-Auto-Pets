@@ -113,9 +113,10 @@ const signalLinks = [
   ['lobby', 'AP_GameChooseMode', 'monitor'],
   ['room', 'AP_RoomRequest', 'monitor'], ['room', 'AP_RoomFightWork', 'send'],
   ['roomFight', 'AP_RoomFightWork', 'monitor'], ['room', 'AP_RoomFightDone', 'monitor'],
-  ['roomFight', 'AP_RoomFightDone', 'send'], ['duel', 'AP_DuelRequest', 'monitor'],
-  ['duel', 'AP_DuelFightStart', 'send'], ['duelFight', 'AP_DuelFightStart', 'monitor'],
+  ['roomFight', 'AP_RoomFightDone', 'send'],
 ];
+if (internal) signalLinks.push(['duel', 'AP_DuelRequest', 'monitor'],
+  ['duel', 'AP_DuelFightStart', 'send'], ['duelFight', 'AP_DuelFightStart', 'monitor']);
 for (const [key, name, role] of signalLinks) {
   const graph = graphs.find(entry => entry.id === ids[key]);
   assert.ok(graph.signalReferences.some(reference => reference.name === name && reference.role === role), name);
