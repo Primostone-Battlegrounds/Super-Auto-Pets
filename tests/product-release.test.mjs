@@ -41,7 +41,7 @@ return catalog
 });
 
 test('the delivery gate rejects internal graphs, content and active modes', () => {
-  const graphs = ['AP_GameLobby', 'AP_EightRoom', 'AP_EightFight'].map(name => ({ name }));
+  const graphs = ['_GSTS_AP_GameLobby', '_GSTS_AP_EightRoom', '_GSTS_AP_EightFight'].map(name => ({ name }));
   const build = { buildProfile: 'formal', releaseScopeSha256, gameVersion: scope.gameVersion,
     modes: scope.modes, catalog, graphs };
   checkFormalBuild(root, build);

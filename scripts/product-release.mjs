@@ -52,5 +52,5 @@ export function checkFormalBuild(root, build) {
   assert.equal(build.gameVersion, scope.gameVersion);
   assert.deepEqual(build.modes, scope.modes);
   checkReleaseCatalog(scope, build.catalog);
-  assert.deepEqual(build.graphs.map(graph => graph.name).sort(), ['AP_EightFight', 'AP_EightRoom', 'AP_GameLobby']);
+  assert.deepEqual(build.graphs.map(graph => graph.name).sort(), ['_GSTS_AP_EightFight', '_GSTS_AP_EightRoom', '_GSTS_AP_GameLobby']);
 }
