@@ -124,6 +124,7 @@ for (const [key, name, role] of signalLinks) {
 const { scripts } = await call('scene_list_client_scripts', { includeSource: true });
 assert.deepEqual(scripts.map(({ name }) => name), [gameScript]);
 assert.equal(scripts[0].source, game.source);
+let artReadback;
 if (release) {
   assert.doesNotMatch(scripts[0].source, /AP_Duel|practice_view|duel_view|factories\['autopets\.(?:run|bot)'\]/u);
   const boundary = scripts[0].source.indexOf('local online_portrait_home');
@@ -131,6 +132,11 @@ if (release) {
   const catalogSource = path.join(workspace, 'readback-catalog.lua');
   fs.writeFileSync(catalogSource, scripts[0].source.slice(0, boundary) + 'return native_catalog\n');
   assert.deepEqual(verifyReleaseCatalog(project, release.scope, lua53, lua54, catalogSource), catalog);
+  const artSource = path.join(workspace, 'readback-art.lua');
+  fs.writeFileSync(artSource, scripts[0].source.slice(0, boundary) + "return loadAutoPetsModule('autopets.art')\n");
+  const verifyArt = lua => execFileSync(lua, ['-E', 'tests/art.lua', artSource], { cwd: project, encoding: 'utf8' }).trim();
+  artReadback = verifyArt(lua53);
+  assert.equal(verifyArt(lua54), artReadback);
 }
 const { interface: ui } = await call('scene_get_client_ui', { ui: gameInterface });
 assert.deepEqual(ui.scripts, [{ name: gameScript, values: { seed: practiceSeed } }]);
@@ -201,7 +207,7 @@ fs.copyFileSync(new URL(internal ? '../../platform/INTERNAL-GAME.md' : '../../pl
 const build = {
   ...design,
   ...(release && { gameVersion: release.scope.gameVersion, releaseScopeSha256: release.releaseScopeSha256,
-    modes: release.scope.modes, catalog }),
+    modes: release.scope.modes, catalog, artReadback }),
   buildProfile: internal ? 'internal' : 'formal',
   version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
   node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,

@@ -53,4 +53,4 @@ Team Wood Games 的官方商店页确认 Standard 使用预置动物包，Versus
 
 终端练习用 `lua5.4 scripts/play.lua 7 --release` 开启六阶目录。增加 `--beginner` 选择入门对手。`help` 显示经营和回放指令。
 
-`lua5.4 tests/release_content.lua` 和 `lua5.3 -E tests/release_content.lua` 验证 64 个固定种子的开放货架、六阶奖励、冻结、邻位食物、所有新增动物的三个等级、站位触发、碰撞与同时阵亡顺序、召唤容量和战斗回放复现。官方客户端的六阶美术显示、交互和运行预算记录在对应候选的设备验收。
+`lua5.4 -E tests/release_content.lua` 和 `lua5.3 -E tests/release_content.lua` 从 64 个固定种子的货架逐只购买 18 只动物，核对技能触发、回放和结算，并逐种喂食 12 种食物，核对金币、目标与邻位成长和入战属性。套件同时覆盖六阶奖励、冻结、三级技能、碰撞与阵亡顺序及召唤容量。项目 CI 的六阶原生商店检查用生成图复跑全部 12 种食物的喂食状态。正式构建从 GIL 回读内容目录和 35 个原创图元，校验批准范围、图元边界和图层预算，结果随 `BUILD.json` 记录。官方客户端的美术显示、交互和运行预算记录在对应候选的设备验收。

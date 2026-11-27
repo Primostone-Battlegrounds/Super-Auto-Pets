@@ -385,6 +385,60 @@ function checkRounds(run, settings, receiptChecks = [], positionChecks = []) {
   };
 }
 
+function checkReplayRecovery(run, settings) {
+  const { controller: state, enrolled, field } = run;
+  const until = (condition, limit) => {
+    const output = [];
+    let attempts = 0;
+    while (!condition()) {
+      assert.ok(++attempts <= limit, 'recovery scenario did not reach its expected phase');
+      output.push(...run.tick(Number(run.clock()) + settings.CADENCE));
+    }
+    return output;
+  };
+  until(() => state.phase === 3n, settings.WAIT + settings.PREPARE + 10);
+
+  const actor = enrolled[1];
+  const before = read(run.request(actor, 0n), actor);
+  const index = state.pairs.indexOf(before.seat - 1n);
+  assert.ok(index >= 0, 'all eight seats are paired on the opening round');
+  const pair = index - index % 2;
+  const [left, right] = state.pairs.slice(pair, pair + 2);
+  field.splice(field.indexOf(actor), 1);
+  const missed = until(() => state.results[Number(left)] > 0n, 8);
+  assert.ok(!missed.some(event => event.target === actor));
+  assert.deepEqual(run.request(actor, 0n), [], 'an absent owner cannot request a replay');
+
+  const replacement = 'replacement-entity';
+  field.push(replacement);
+  const unauthorized = run.request(replacement, 0n);
+  const publicView = read(unauthorized, replacement);
+  assert.equal(publicView.seat, 0n);
+  assert.deepEqual(publicView.market, []);
+  assert.ok(!unauthorized.some(event => event.name === replaySignal));
+
+  field.push(actor);
+  const snapshot = run.request(actor, 0n);
+  const restored = read(snapshot, actor);
+  assert.equal(restored.seat, before.seat);
+  assert.equal(restored.sequence, before.sequence);
+  assert.deepEqual(restored.market, before.market);
+  const seed = state.fightSeeds[pair / 2];
+  const receipt = run.completed.find(entry => entry[1] === seed);
+  assert.ok(receipt, 'the missed battle completed normally');
+  const [round, , outcome, first, second] = receipt;
+  const replay = { name: replaySignal, target: actor, values: [round, left + 1n, right + 1n, outcome, seed, first, second] };
+  assert.deepEqual(snapshot.map(event => event.name), [viewSignal, replaySignal]);
+  assert.deepEqual(snapshot[1], replay, 'the restored replay is the authoritative battle');
+  const repeated = run.request(actor, 0n);
+  assert.equal(read(repeated, actor).sequence, restored.sequence);
+  assert.deepEqual(repeated[1], replay, 'retry does not mutate the replay');
+  assert.equal(run.request(actor, 10n, round, restored.sequence).length, 1, 'mutating acknowledgements send no replay');
+
+  until(() => state.round > round, settings.PREPARE + settings.SETTLE + 20);
+  assert.equal(run.request(actor, 0n).length, 1, 'a new round cannot replay the previous round under a new identity');
+}
+
 export function verifyRoom(sources, ts, settings, receiptChecks, positionChecks) {
   const combinations = [];
   for (let humans = 1; humans <= 8; humans += 1) {
@@ -418,7 +472,9 @@ export function verifyRoom(sources, ts, settings, receiptChecks, positionChecks)
   advance(settings.RECOVERY + 5 * settings.CADENCE);
   assert.equal(recovering.controller.table[1], 0n);
   assert.equal(recovering.controller.table[9], 8n);
+  checkReplayRecovery(session(sources, ts, 2, settings), settings);
   return { combinations, delayedSignalRecovery: { droppedWork: 1, delayedReceipt: 1, repeatedBotActions: 2,
     places: recoveredMatch.places },
-    recovery: ['same entity recovered', 'replacement rejected', 'absence timed out'] };
+    recovery: ['same entity recovered', 'replacement rejected', 'absence timed out',
+      'missed authoritative replay restored only to its original present owner for the current round'] };
 }

@@ -145,6 +145,7 @@ local function apply(reference, action, from, to, flag)
     end
     local accepted = reference:apply(command) and 1 or 0
     row("apply", action, from, to, flag, accepted, packed(reference))
+    return accepted == 1
 end
 
 if profile == "release" then
@@ -182,6 +183,23 @@ if profile == "release" then
         row("init", packed(edge))
         apply(edge, 16, food_slot, target, 0)
     end
+
+    -- Compare the native shop with Lua for every formal food code, including
+    -- bonuses to both adjacent slots and the unchanged formation entries.
+    local fed, food_count = {}, 0
+    for seed = 1, 128 do
+        local candidate = stocked(seed)
+        for slot, offer in ipairs(candidate:snapshot().foods) do
+            if not fed[offer.id] then
+                row("init", packed(candidate))
+                assert(apply(candidate, 16, slot, 2, 0))
+                fed[offer.id] = true
+                food_count = food_count + 1
+            end
+        end
+        if food_count == #data.foods then break end
+    end
+    assert(food_count == #data.foods, "expected a native feeding trace for every release food")
 end
 
 -- Buy two identical pets, merge them, and use the third offer to trigger a reward.
