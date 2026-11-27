@@ -23,8 +23,8 @@ function bundleModules(parse, names, entry, release, prefix = []) {
   const modules = release ? [...names, 'release_data'] : names;
   const validModules = new Set(modules.map(name => `autopets.${name}`));
   const catalog = release ? 'autopets.release_data' : 'autopets.data';
-  function convert(relativePath) {
-    let source = fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8');
+  function convert(relativePath, select = source => source) {
+    let source = select(fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8'));
     const references = [];
     parse(source, {
       luaVersion: '5.3', ranges: true, scope: true, comments: false,
@@ -70,6 +70,16 @@ export function bundleRun(parse, release = false, entry = './m1_ui.lua', layout 
   const names = ['data', 'rng', 'battle_receipt', 'shop', 'bot', 'battle', 'run', 'art', 'native_portrait',
     'shop_wire', 'animal_ability', 'replay_view', 'shop_input'];
   return bundleModules(parse, names, entry, release, [
+    `local portrait_layers = ${portraitLayers}`,
+    `local shared_portrait_homes = {${sharedPortraitHomes.map(name => JSON.stringify(name)).join(',')}}`,
+    plateInitializer(layout.controls),
+  ]);
+}
+
+export function bundleRoom(parse, entry, layout) {
+  const names = ['data', 'rng', 'battle_receipt', 'battle', 'art', 'native_portrait',
+    'shop_wire', 'animal_ability', 'replay_view', 'shop_input'];
+  return bundleModules(parse, names, entry, true, [
     `local portrait_layers = ${portraitLayers}`,
     `local shared_portrait_homes = {${sharedPortraitHomes.map(name => JSON.stringify(name)).join(',')}}`,
     plateInitializer(layout.controls),

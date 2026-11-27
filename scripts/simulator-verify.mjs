@@ -13,6 +13,10 @@ const lock=JSON.parse(fs.readFileSync(new URL('../platform/toolchain-lock.json',
 assert.equal(revision(mcp),lock.mcp.commit,'MCP revision differs from toolchain lock');
 assert.equal(revision(sim),lock.simulator.commit,'Simulator revision differs from toolchain lock');
 for(const directory of [mcp,sim]){const changed=execFileSync('git',['-C',directory,'diff','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(Boolean);assert.ok(changed.every(file=>file==='npm-shrinkwrap.json'),'Tracked tool source changed: '+changed.join(','));}
+const buildPath=path.join(path.dirname(gil),'BUILD.json');
+const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
+const formal = build.buildProfile === 'formal';
+const portraitHome = formal ? 'PortraitPool' : 'Practice';
 const {save,receipt}=await nativeSimulatorSave(mcp,gil,process.env.SIMULATOR_UI??'AutoPetsGame');
 fs.writeFileSync(path.join(output,'native.save.json'),JSON.stringify(save));
 const api=await import(pathToFileURL(path.join(sim,'studio/play/session.js')));
@@ -29,20 +33,24 @@ const parse=createRequire(path.join(mcp,'package.json'))('luaparse').parse;
 const roundsSource=fs.readFileSync(new URL('../tests/native/release-practice-rounds.lua',import.meta.url),'utf8');
 const literal=n=>{if(n.type==='TableConstructorExpression')return n.fields.map(f=>literal(f.value));if(n.type==='NumericLiteral')return n.value;if(n.type==='StringLiteral')return n.raw.slice(1,-1);throw Error('Nonliteral action fixture');};
 const practiceRounds=literal(parse(roundsSource,{luaVersion:'5.3'}).body[0].arguments[0]);
-receipt.practiceInputFixtureSha256=sha256(roundsSource);
+if (!formal) receipt.practiceInputFixtureSha256=sha256(roundsSource);
 const results=[];
 const canvases=['pc-16-9','pc-21-9','mobile-16-9','mobile-19.5-9','mobile-4-3'];
 const configurations=canvases.map(canvasId=>({canvasId,playerCount:1}));
 if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
   configurations.push(
-    { canvasId: 'pc-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'pc-16-9', playerCount: 2, mode: 8 },
     { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
-    { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
-    { canvasId: 'mobile-19.5-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-19.5-9', playerCount: 8, mode: 8 },
   );
+  if (formal) {
+    configurations.push(...canvases.filter(canvasId => canvasId !== 'mobile-16-9')
+      .map(canvasId => ({ canvasId, playerCount: 1, mode: 8 })));
+  } else {
+    configurations.push(...['pc-16-9', 'mobile-16-9', 'mobile-19.5-9']
+      .map(canvasId => ({ canvasId, playerCount: 2, mode: 2 })));
+  }
 }
 for(const {canvasId,playerCount,mode} of configurations) {
   const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
@@ -99,7 +107,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
   if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
     requireText('Lobby/Title', /小动物自走棋/u);
-    for (const name of ['Room', 'Duel', 'Practice']) {
+    for (const name of formal ? ['Room'] : ['Room', 'Duel', 'Practice']) {
       requirePlayButton(`Lobby/Choices/${name}/Hit`, ['Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     }
     requirePlayButton('Lobby/Exit/Hit', ['Lobby/Feedback', 'Lobby/Help']);
@@ -113,10 +121,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session, 'AP_GameLobby', [0, 1, 0, 0, 0, statusToken(), 1, 1, 0, 0]);
     await capture('lobby-fixture');
     requireText('Lobby/Status', /已进入 1 人/u);
-    click('Lobby/Choices/Duel/Hit');
-    await capture('duel-wait-fixture');
-    requireText('Lobby/Feedback', /等待好友/u);
-    assert.equal(startRequests(), 0, 'Known-invalid duel start must stay on the client');
+    if (!formal) {
+      click('Lobby/Choices/Duel/Hit');
+      await capture('duel-wait-fixture');
+      requireText('Lobby/Feedback', /等待好友/u);
+      assert.equal(startRequests(), 0, 'Known-invalid duel start must stay on the client');
+    }
     click('Lobby/Choices/Room/Hit');
     await capture('lobby-room-request');
     requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
@@ -134,6 +144,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('room-wait-fixture');
     requireText('Lobby/Feedback', /仍在加载/u);
     assert.equal(startRequests(), beforeFill, 'Robot fill requires explicit confirmation');
+  }
+  if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame' && !mode && !formal) {
     click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
     click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
     const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
@@ -296,9 +308,9 @@ for(const {canvasId,playerCount,mode} of configurations) {
     assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {
-    const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
-    const foodPortrait = control('Practice/Shop/Food1/Portrait/Layer1').Id;
-    const priceId = control('Duel/ReplayBoard/BadgePool/Price1').Id;
+    const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`${portraitHome}/${slot}/Portrait/Layer1`).Id);
+    const foodPortrait = control(`${portraitHome}/Shop/Food1/Portrait/Layer1`).Id;
+    const priceId = control(formal ? 'BadgePool/Price1' : 'Duel/ReplayBoard/BadgePool/Price1').Id;
     const shopPortraits = [...portraits, foodPortrait];
     function requireShopPortraits(frame) {
       assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),
@@ -553,10 +565,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
-  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+  results.push({canvasId,playerCount,mode:mode??(formal ? 'lobby' : 'practice'),runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
 }
-const buildPath=path.join(path.dirname(gil),'BUILD.json');
-const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
 if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
 const textDefects = results.flatMap(result => result.frames.flatMap(frame => frame.visibleTexts
   .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))

@@ -1,0 +1,18 @@
+{
+  "gameVersion": "0.6.0",
+  "catalogProfile": "release",
+  "modes": ["eight-player"],
+  "pets": [
+    "reed_turtle", "ember_swift", "cottontail_rabbit",
+    "alder_marmot", "maple_fox", "river_otter",
+    "slate_muskdeer", "sunset_cat", "cloud_sheep",
+    "dawn_tapir", "cinder_caracal", "fern_quail",
+    "moon_yak", "storm_kestrel", "mist_crane",
+    "frost_muskox", "night_pangolin", "tidal_narwhal"
+  ],
+  "foods": [
+    "dew_berry", "sun_seed", "stone_jelly", "glow_bun", "wind_rice", "golden_reed",
+    "clear_plum", "fennel_twist", "honeyed_taro", "pearl_broth", "winter_roselle", "night_orchard"
+  ],
+  "tokens": ["fern_chick", "lambkin", "otter_pup", "rabbit_kit", "tidal_calf"]
+}

@@ -41,7 +41,7 @@ export function group(name, position, size, children, visible = true) {
   return { name, kind: 'container', position, size, children, visible };
 }
 
-function portrait() {
+export function portrait() {
   const layers = Array.from({ length: portraitLayers }, (_, index) =>
     image(`Layer${index + 1}`, [0, 0], [1, 1], pigment.cream, { visible: false }));
   return group('Portrait', [0, 27], [84, 84], layers);

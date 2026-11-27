@@ -5,11 +5,13 @@ status: In Progress
 assignee:
   - '@codex-native'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-24 01:18'
-labels: []
+updated_date: '2026-11-27 03:45'
+labels:
+  - v0.6.0
 milestone: m-4
-dependencies:
-  - TASK-34
+dependencies: []
+references:
+  - docs/PRODUCT.md
 type: feature
 ordinal: 29000
 ---
@@ -17,13 +19,15 @@ ordinal: 29000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-补齐同一首发包的动物、食物和技能时序，完善预算、协同、升级与站位策略，并对多人正式候选做回归。
+Design-Version: v2.0.0
+
+维护 v0.6.0 已批准的六阶动物和食物，按八人对局证据修正阻断可玩性的数值与美术。
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 六阶目录和技能回归通过。固定种子对照表明策略机器人优于随机购物，并保留多种可行构筑。
-- [ ] #2 1v1 与 8 人正式候选通过双端性能、匹配、同步和断线恢复验收。
+- [ ] #2 已批准动物、食物和生成物通过六阶目录、商店、战斗和美术离线复验，候选正式构建与范围清单一致。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -44,4 +48,8 @@ ordinal: 29000
 六阶首发目录已在源码验证。原创 18 只动物、12 种食物、5 种生成物使用同一商店和战斗引擎。Lua 5.3/5.4 的 tests/release_content.lua 核查 64 个种子的货架、各阶奖励、全部新增动物三个等级与触发时序。兼容练习的领域回放 SHA-256 维持 f54e2e7b4dbecf2cef49d327c9fabd6ce0fb923159ba2a4fb60235ab8726ba97。六阶 1v1 源码候选按 6 个种子复跑回合、双视角回放和终局。正式候选、策略大样本和官方双端验收继续跟踪。参见 docs/design/RELEASE-POOL.md。
 
 六阶源码及策略验收已通过 PR #25 和 #26 的独立评审与 Project checks。每个 Lua 运行 73,728 场，输出 SHA-256 783b7caf846a0fe58319713379a8582588feed36dbf058affed214e81c8d097a。标准对随机得分率 89.1%–91.5%，入门对随机为 65.9%–72.6%，标准档第 12 轮 768 个阵容中有 653 种。双人和八席 Lua 宿主可选择相同目录，终端六阶练习亦可复验。正式多人原生接入及官方验收继续跟踪。
+
+原双端三模式候选验收保留为历史。本版内容与八席对局可并行开发，集成后一起复验。
+
+v0.5.0 的历史验收目标为 1v1 与 8 人候选通过双端性能、匹配、同步和断线恢复。该历史条件的真机完成仍未记录。
 <!-- SECTION:NOTES:END -->

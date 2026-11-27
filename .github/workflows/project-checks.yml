@@ -239,7 +239,7 @@ jobs:
           path: ${{ runner.temp }}/m3-release-room
           if-no-files-found: error
           retention-days: 30
-      - name: Verify the unified six-tier game
+      - name: Verify the formal product scope and GIL
         id: unified
         if: hashFiles('tests/native/verify-game.mjs') != ''
         env:

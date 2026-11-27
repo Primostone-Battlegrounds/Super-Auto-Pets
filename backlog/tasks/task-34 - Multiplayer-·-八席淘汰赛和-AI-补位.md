@@ -5,11 +5,14 @@ status: In Progress
 assignee:
   - '@rules-core'
 created_date: '2026-11-23 08:53'
-updated_date: '2026-11-24 02:11'
-labels: []
+updated_date: '2026-11-27 03:39'
+labels:
+  - v0.6.0
 milestone: m-3
 dependencies:
-  - TASK-33
+  - TASK-28
+references:
+  - docs/PRODUCT.md
 documentation:
   - platform/M3-host.md
 priority: high
@@ -20,13 +23,16 @@ ordinal: 28000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-在已验 1v1 权威对局上增加最多八席。复用平台房间，按每轮两两配对结算，机器人使用合法经营指令。
+Design-Version: v2.0.0
+
+完成八人淘汰赛，复用已存在的权威商店与战斗契约及官方房间能力。覆盖真人入场、机器人补位、完整对局、退出和异常恢复。
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 覆盖 1 至 8 名真人的入场、奇数存活、机器人对战、退出、淘汰和最终名次。
 - [ ] #2 用官方环境记录匹配等待和实际开局。
+- [ ] #3 隔离 v0.6.0 候选验证开局、补位、结算、退出和可离线复现的异常恢复。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -49,4 +55,6 @@ ordinal: 28000
 三阶兼容原生八席候选完成独立经营、机器人补位、准备、配对、战斗回放、淘汰与最终名次。隔离 GIL 读回 1–8 人，通过全部真人数量的源码图整赛及双画布客户端验证，含单人加七机器人、超时、退出、轮空与重复请求。官方平台匹配、设备、事件来源和实际性能仍待验，六阶原生接入继续跟踪。
 
 六阶首发池已接通完整八席原生关卡；全部真人数量可打到唯一冠军，正式六阶技能与共享 Lua 的完整原生回执核对。淘汰后界面明确显示已淘汰。官方匹配、身份、重连和负载证据待写。
+
+历史工作以双人同步探针验证共享契约。现行八席实现已经使用已完成的 TASK-28，独立的 1v1 产品验收不再是此任务前置。
 <!-- SECTION:NOTES:END -->

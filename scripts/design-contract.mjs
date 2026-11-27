@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { checkFormalBuild } from './product-release.mjs';
 
 const manifestPath = 'docs/design/manifest.json';
 const designVersion = /^v\d+\.\d+\.\d+$/;
@@ -194,7 +195,10 @@ export function checkPullRequest(root, body, base) {
 
 export function checkBuild(root, build, gil, options) {
   const design = readDesign(root, { ...options, forBuild: true });
-  for (const [key, value] of Object.entries(design)) assert.equal(build[key], value, `Build ${key} mismatch`);
+  if (build.buildProfile === 'formal' || options?.delivery) checkFormalBuild(root, build);
+  for (const [key, value] of Object.entries(design)) {
+    if (key !== 'gameVersion' || build.buildProfile !== 'formal') assert.equal(build[key], value, `Build ${key} mismatch`);
+  }
   assert.equal(build.sourceRevision, git(root, ['rev-parse', 'HEAD']).toString().trim(), 'Build Git SHA mismatch');
   assert.match(build.sha256, sha256);
   assert.equal(build.sha256, createHash('sha256').update(gil).digest('hex'), 'Build GIL SHA-256 mismatch');

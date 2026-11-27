@@ -38,9 +38,9 @@ GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub �
 
 ## 项目负责人验收顺序
 
-使用同一个 `super-auto-pets.gil` 完成单人 AI 练习、好友 1v1 和八人吃鸡。执行顺序和留档项目见 [统一 GIL 官方客户端验收](../platform/GAME.md#官方客户端验收)。上方的内部候选继续用于定位独立的规则、界面和设备问题。
+用相同的 `super-auto-pets.gil` 完成 v0.6.0 的官方八人验证。 [验收步骤](../platform/GAME.md#官方客户端验收)
 
-`tests/native/verify-game.mjs` 在同一 GIL 中检查五张挂载图、模式和私有信号绑定、界面和 Lua 原文回读，并复用六阶双人、八席和练习回归。它在隔离目录输出基于回读控件和脚本输入的 `frames.json`，可沿用本文的两种画布渲染命令。真机结果单独记录。
+`MILIASTRA_ALLOW_LIVE_WRITE=0 node tests/native/verify-game.mjs <MCP> <隔离工作目录> lua5.3 <新候选目录>` 构建正式候选。构建首先在两版 Lua 核对内容 ID，随后读回挂载图、信号、模式入口、UI 和嵌入目录，复验房间与画面。`--internal` 选择内部三模式构建，输出 `super-auto-pets-internal.gil`。发布流水线仅接收正式 profile。 [产品范围](../docs/PRODUCT.md) · [内部技术构建](../platform/INTERNAL-GAME.md)
 
 ## 单局成品复核
 
