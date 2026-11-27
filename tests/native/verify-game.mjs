@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gameInterface, gameScript, graphNames, nativeGame, practiceSeed, roomGraphNames, stageVariables } from '../../platform/game-native.mjs';
 import { assertAssemblySourceLimits, gilListAudit } from './gil-list-limits.mjs';
 import { readDesign } from '../../scripts/design-contract.mjs';
-import { checkFormalBuild, readProductRelease, verifyReleaseCatalog } from '../../scripts/product-release.mjs';
+import { checkFormalBuild, checkFormalClient, formalDeliveryFilename, readProductRelease, verifyReleaseCatalog } from '../../scripts/product-release.mjs';
 import { initialAcceptance } from '../../scripts/acceptance-gate.mjs';
 
 const [checkoutArg, scratch, lua53, output, flag, ...extra] = process.argv.slice(2);
@@ -79,19 +79,21 @@ const ids = {};
 for (const [key, name] of Object.entries(registration)) {
   ids[key] = (await stage('scene_add_graph', { name, attachTo: 'stage' })).graphId;
 }
-const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids, release?.scope);
+const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids,
+  internal ? { profile: 'internal' } : { release: release.scope, sourceRevision });
 await stage('scene_add_components', { prefab: 'player', variables: integers(game.playerVariables) });
 for (const [name, parameters] of Object.entries(game.signals)) {
   await stage('scene_add_signal', { name, parameters });
 }
 for (const { graphId, code } of game.graphs) assertAssemblySourceLimits(graphId, code, ts);
 await stage('write_graphs', { graphs: game.graphs });
+const parameters = internal ? [{ name: 'seed', type: 'integer', value: practiceSeed, public: true }] : [];
+const values = internal ? { seed: practiceSeed } : {};
 await stage('scene_set_client_script', {
-  name: gameScript, source: game.source,
-  variables: [{ name: 'seed', type: 'integer', value: practiceSeed, public: true }],
+  name: gameScript, source: game.source, variables: parameters,
 });
 const built = await stage('scene_add_client_ui', {
-  ...game.layout, script: { name: gameScript, values: { seed: practiceSeed } }, outputName: 'super-auto-pets',
+  ...game.layout, script: { name: gameScript, values }, outputName: 'super-auto-pets',
 });
 assert.equal(built.offPhoneCanvas, undefined);
 
@@ -126,7 +128,6 @@ assert.deepEqual(scripts.map(({ name }) => name), [gameScript]);
 assert.equal(scripts[0].source, game.source);
 let artReadback;
 if (release) {
-  assert.doesNotMatch(scripts[0].source, /AP_Duel|practice_view|duel_view|factories\['autopets\.(?:run|bot)'\]/u);
   const boundary = scripts[0].source.indexOf('local online_portrait_home');
   assert.ok(boundary > 0, 'Expected scoped client catalog in GIL');
   const catalogSource = path.join(workspace, 'readback-catalog.lua');
@@ -139,7 +140,8 @@ if (release) {
   assert.equal(verifyArt(lua54), artReadback);
 }
 const { interface: ui } = await call('scene_get_client_ui', { ui: gameInterface });
-assert.deepEqual(ui.scripts, [{ name: gameScript, values: { seed: practiceSeed } }]);
+assert.deepEqual(ui.scripts, internal ? [{ name: gameScript, values }] : [gameScript]);
+if (release) checkFormalClient(ui, scripts[0].source, { gameVersion: release.scope.gameVersion, sourceRevision });
 for (const flag of ['showCursor', 'blockCursor', 'blockKeys']) assert.equal(ui[flag], game.layout[flag], flag);
 const diagnostics = await call('scene_check_client', { scripts: [gameScript] });
 assert.deepEqual(diagnostics.problems, []);
@@ -181,11 +183,6 @@ function readControls(expected, actual, parent, bounds) {
 }
 readControls(game.layout.controls, ui.controls, null, [1280, 720]);
 assert.ok(controls.length <= 1000);
-if (release) {
-  const choices = controls.filter(control => control.parent === 'Lobby/Choices');
-  assert.deepEqual(choices.map(choice => choice.path), ['Lobby/Choices/Room']);
-  assert.ok(controls.every(control => !/^(?:Duel|Practice)(?:\/|$)/u.test(control.path)));
-}
 const extracted = path.join(workspace, `${gameScript}.lua`);
 fs.writeFileSync(extracted, scripts[0].source);
 const bindings = path.join(workspace, 'controls.tsv');
@@ -207,6 +204,7 @@ fs.copyFileSync(new URL(internal ? '../../platform/INTERNAL-GAME.md' : '../../pl
 const build = {
   ...design,
   ...(release && { gameVersion: release.scope.gameVersion, releaseScopeSha256: release.releaseScopeSha256,
+    deliveryFilename: formalDeliveryFilename({ gameVersion: release.scope.gameVersion, sourceRevision }),
     modes: release.scope.modes, catalog, artReadback }),
   buildProfile: internal ? 'internal' : 'formal',
   version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,

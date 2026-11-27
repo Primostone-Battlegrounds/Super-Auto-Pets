@@ -4,11 +4,32 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { checkFormalBuild, readProductRelease, validateRelease, verifyReleaseCatalog } from '../scripts/product-release.mjs';
+import { nativeGame } from '../platform/game-native.mjs';
+import { checkFormalBuild, checkFormalClient, formalDeliveryFilename, readProductRelease, validateRelease, verifyReleaseCatalog } from '../scripts/product-release.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const { scope, releaseScopeSha256 } = readProductRelease(root);
 const catalog = { pets: scope.pets, foods: scope.foods, tokens: scope.tokens };
+
+test('an implicit game build cannot produce the internal game', () => {
+  assert.throws(() => nativeGame(), /requires the approved release scope/);
+  assert.throws(() => nativeGame(undefined, undefined, undefined, undefined, { profile: 'unknown' }), /Unknown game build profile/);
+});
+
+test('formal GIL readback rejects hidden controls, stale prompts and closed mode bindings', () => {
+  const build = { gameVersion: scope.gameVersion, sourceRevision: 'fedcba9876543210fedcba9876543210fedcba98' };
+  assert.equal(formalDeliveryFilename(build), 'super-auto-pets-v0.6.0-fedcba987654.gil');
+  const ui = { controls: [{ name: 'Lobby', children: [
+    { name: 'Choices', children: [{ name: 'Room' }] },
+    { name: 'BuildVersion', text: { content: 'v0.6.0 · fedcba987654' } },
+  ] }] };
+  checkFormalClient(ui, '', build);
+  assert.throws(() => checkFormalClient({ controls: [...ui.controls, { name: 'Practice', visible: false }] }, '', build), /Closed mode control/);
+  assert.throws(() => checkFormalClient({ controls: [...ui.controls, { name: 'Help', text: { content: '好友 1v1 请先邀请好友。' } }] }, '', build), /Closed mode text/);
+  assert.throws(() => checkFormalClient(ui, 'feedback("可以稍后重试，或先开始 AI 练习。")', build), /Closed mode text/);
+  assert.throws(() => checkFormalClient(ui, 'bind(lobby, "Choices/Duel/Hit", callback)', build), /Closed mode reference/);
+  assert.throws(() => checkFormalClient(ui, '', { ...build, sourceRevision: '0'.repeat(40) }), /identify the delivered build/);
+});
 
 test('the approved roster matches both Lua runtimes', () => {
   assert.equal(scope.pets.length, 18);

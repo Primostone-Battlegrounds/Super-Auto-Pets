@@ -24,7 +24,7 @@ GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub �
 
 ## 持续交付验收
 
-`Game delivery` 在 `develop` 更新后对该次提交构建、回读并核对 `SHA256SUMS`。工作流上传原始 `super-auto-pets.gil`，优先通过 GitHub 的工件 ID 下载接口验证匿名下载。匿名下载失败时，使用 GitHub 授权下载。散列校验和原生回读通过后，Summary 提供一个链接并注明是否需要登录。同次运行的 `game-evidence-<short-sha>` 工件保留 `BUILD.json`、`ACCEPTANCE.json`、`SHA256SUMS`、下载回执 `DOWNLOAD.json`、各层验证记录和夹具许可。工程全量校验时，将同次运行下载的 GIL 放在工程证据目录根部，再运行 `sha256sum --strict -c SHA256SUMS`。涉及交付工作流或回下载检查的同仓 PR 会运行同一套传输验证。[固定下载入口](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
+`Game delivery` 在 `develop` 更新后对该次提交构建、回读并核对 `SHA256SUMS`。工作流以 `super-auto-pets-v<版本>-<短提交号>.gil` 上传原始 GIL，优先通过 GitHub 的工件 ID 下载接口验证匿名下载。匿名下载失败时，使用 GitHub 授权下载。散列校验和原生回读通过后，Summary 提供下载链接、同一版本与短提交号，并注明是否需要登录。同次运行的 `game-evidence-<short-sha>` 工件保留 `BUILD.json`、`ACCEPTANCE.json`、`SHA256SUMS`、下载回执 `DOWNLOAD.json`、各层验证记录和夹具许可。工程全量校验时，将同次下载的 GIL 复制为工程证据目录根部的 `super-auto-pets.gil`，再运行 `sha256sum --strict -c SHA256SUMS`。涉及交付工作流或回下载检查的同仓 PR 会运行同一套传输验证。[固定下载入口](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
 
 项目最早采用 ZIP 托管交付。合入提交 `a23f1bef22a5595528ce7333c852892e77547cc9` 的工件回下载后校验了 GitHub 归档散列、五项根目录文件、包内四项校验和与 `BUILD.json` 的 Git SHA。[首次成功运行](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/runs/45324002378)
 
@@ -38,7 +38,7 @@ GitHub CLI API 不可用时，保留 Doctor 中的观察缺口，使用 GitHub �
 
 ## 项目负责人验收顺序
 
-用相同的 `super-auto-pets.gil` 完成 v0.6.0 的官方八人验证。 [验收步骤](../platform/GAME.md#官方客户端验收)
+用同次下载的 GIL 完成 v0.6.0 的官方八人验证。 [验收步骤](../platform/GAME.md#官方客户端验收)
 
 `MILIASTRA_ALLOW_LIVE_WRITE=0 node tests/native/verify-game.mjs <MCP> <隔离工作目录> lua5.3 <新候选目录>` 构建正式候选。构建首先在两版 Lua 核对内容 ID，随后读回挂载图、信号、模式入口、UI 和嵌入目录，复验房间与画面。`--internal` 选择内部三模式构建，输出 `super-auto-pets-internal.gil`。发布流水线仅接收正式 profile。 [产品范围](../docs/PRODUCT.md) · [内部技术构建](../platform/INTERNAL-GAME.md)
 

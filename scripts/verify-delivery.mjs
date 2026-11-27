@@ -6,16 +6,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gameInterface, gameScript } from '../platform/game-native.mjs';
 import { checkBuild } from './design-contract.mjs';
 import { nativeSimulatorSave } from './simulator-native.mjs';
+import { checkFormalClient, formalDeliveryFilename } from './product-release.mjs';
 
 const [mcpCheckout, downloadedGil, buildManifest, artifactId, artifactDigest] = process.argv.slice(2);
 assert.ok(mcpCheckout && downloadedGil && buildManifest && artifactId && artifactDigest,
   'Usage: node scripts/verify-delivery.mjs <MCP checkout> <downloaded GIL> <BUILD.json> <artifact ID> <artifact SHA-256>');
 assert.match(artifactId, /^\d+$/);
-assert.equal(path.basename(downloadedGil), 'super-auto-pets.gil');
 assert.ok(fs.lstatSync(downloadedGil).isFile(), 'GIL must be a regular file');
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 const build = JSON.parse(fs.readFileSync(buildManifest));
+assert.equal(build.deliveryFilename, formalDeliveryFilename(build));
+assert.equal(path.basename(downloadedGil), build.deliveryFilename, 'Delivered filename must identify the exact GIL');
 const mapPath = fs.realpathSync(downloadedGil);
 const gil = fs.readFileSync(mapPath);
 checkBuild(project, build, gil, { delivery: true });
@@ -36,9 +38,12 @@ const graphs = items => items.map(({ id, name, nodeCount, editorCount }) => ({ i
 assert.equal(inspected.sha256, build.sha256);
 assert.deepEqual(graphs(inspected.graphs), graphs(build.graphs));
 assert.deepEqual(listRespawnPoints({ mapPath }).players, build.players);
-const { receipt } = await nativeSimulatorSave(checkout, mapPath, gameInterface);
+const { readback, receipt, save } = await nativeSimulatorSave(checkout, mapPath, gameInterface);
 assert.equal(receipt.controls, build.controls + 1); // Simulator includes the interface root.
 assert.deepEqual(receipt.scripts.map(({ name }) => name), [gameScript]);
+assert.deepEqual(readback.interface.scripts, [gameScript]);
+assert.deepEqual(receipt.scriptParameters, { [gameScript]: {} });
+checkFormalClient(readback.interface, save.assets.scripts[0].source, build);
 
 console.log(JSON.stringify({
   sourceRevision: build.sourceRevision,
@@ -46,5 +51,8 @@ console.log(JSON.stringify({
   filename: path.basename(mapPath),
   sha256: build.sha256,
   bytes: gil.length,
-  nativeReadback: { graphs: inspected.graphs.length, controls: build.controls, scripts: receipt.scripts },
+  gameVersion: build.gameVersion,
+  modes: build.modes,
+  nativeReadback: { graphs: inspected.graphs.length, controls: build.controls, scripts: receipt.scripts,
+    lobbyChoices: ['Room'] },
 }, null, 2));

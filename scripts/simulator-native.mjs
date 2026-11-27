@@ -31,7 +31,8 @@ export async function nativeSimulatorSave(mcpRoot, mapPath, uiName = 'AutoPetsGa
   const root=convert({...readback.interface,kind:'container',name:uiName,children:readback.interface.controls,size:[0,0],anchor:{min:[0,0],max:[1,1]}},'/');
   const mounted=scripts.map((s,i)=>({id:'script'+i,guid:s.scriptId,path:s.file??s.name+'.lua',source:s.source,controlAsset:'server',controlId:root.id}));
   root.scriptMappingIds=mounted.map(s=>s.guid);
-  const scriptParameters=Object.fromEntries((readback.interface.scripts??[]).map(s=>[s.name,s.values??{}]));
+  const scriptParameters=Object.fromEntries((readback.interface.scripts??[])
+    .map(s=>typeof s==='string'?[s,{}]:[s.name,s.values??{}]));
   const save={format:'qxqy-simulator-save',version:4,assets:{server:{layoutSchemaVersion:2,canvasId:'mobile-16-9',root:{...root,id:'holder'+readback.containerId,guid:readback.containerId,kind:'server-container',scriptMappingIds:[],children:[root]}},client:{layoutSchemaVersion:2,canvasId:'mobile-16-9',root:{...root,id:'templates',guid:0,children:[],scriptMappingIds:[]}},scripts:mounted}};
   return {save,receipt:{mapSha256:sha256(fs.readFileSync(mapPath)),controls:count,scripts:scripts.map(s=>({name:s.name,sha256:sha256(s.source)})),luaSourceExact:true,scriptParameters,serverGraphsExecuted:false,limitations:['Native node graphs are not executed by the simulator. Server responses must be explicitly identified as test fixtures.','Software raster screenshots do not verify official-client fonts, GPU performance, text permissions, multiplayer or audio.']},readback};
 }

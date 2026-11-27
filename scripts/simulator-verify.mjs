@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {execFileSync} from 'node:child_process';
 import {nativeSimulatorSave,sha256} from './simulator-native.mjs';
+import { closedModeText, formalBuildLabel } from './product-release.mjs';
 const [mcp,sim,gil,output]=process.argv.slice(2);
 assert.ok(output,'Usage: node scripts/simulator-verify.mjs <MCP root> <simulator root> <GIL> <new evidence dir>');
 assert.ok(!fs.existsSync(output),'New evidence directory required');fs.mkdirSync(output,{recursive:true});
@@ -107,6 +108,15 @@ for(const {canvasId,playerCount,mode} of configurations) {
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
   if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
     requireText('Lobby/Title', /小动物自走棋/u);
+    if (formal) {
+      requireText('Lobby/BuildVersion', /^v\d+\.\d+\.\d+ · [a-f0-9]{12}$/u);
+      assert.equal(visibleText('Lobby/BuildVersion').text, formalBuildLabel(build));
+      assert.deepEqual(control('Lobby/Choices').children.map(choice => choice.name), ['Room']);
+      api.sendPlaySignal(session, 'AP_GameLobby', [2, 1, 0, 2, 0, statusToken(), 1, 4, 4, 0]);
+      await capture('lobby-ignored-closed-mode');
+      requireText('Lobby/Status', /^正在连接千星关卡$/u);
+      assert.ok(!visibleText('Lobby/Continue/Title')?.text);
+    }
     for (const name of formal ? ['Room'] : ['Room', 'Duel', 'Practice']) {
       requirePlayButton(`Lobby/Choices/${name}/Hit`, ['Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     }
@@ -719,10 +729,13 @@ const textDefects = results.flatMap(result => result.frames.flatMap(frame => fra
     height: text.height, requiredHeight: text.textLayout?.requiredHeight }))));
 const assetDefects = results.flatMap(result => result.frames.flatMap(frame => frame.assetWarnings
   .map(warning => ({ canvasId: result.canvasId, mode: result.mode, frame: frame.name, ...warning }))));
-const runtimeFailed = results.some(result => result.runtimeExceptions.length || result.frames.some(frame => frame.mountError || frame.logs.length));
+const closedModeDefects = formal ? results.flatMap(result => result.frames.flatMap(frame => frame.visibleTexts
+  .filter(text => closedModeText.test(text.text))
+  .map(text => ({ canvasId: result.canvasId, frame: frame.name, path: text.path, text: text.text })))) : [];
+const runtimeFailed = closedModeDefects.length > 0 || results.some(result => result.runtimeExceptions.length || result.frames.some(frame => frame.mountError || frame.logs.length));
 const status = runtimeFailed ? 'runtime-failed' : assetDefects.length ? 'observed-asset-defects'
   : textDefects.length ? 'observed-text-defects' : 'executed';
-const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,assetDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status,mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
+const report={schemaVersion:1,toolSourceSha256:{nativeReader:sha256(fs.readFileSync(path.join(mcp,'src/scene-save.mjs'))),luaRuntime:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/runtime.js'))),luaBridge:sha256(fs.readFileSync(path.join(sim,'client/lua-runtime/src/lua-bridge.js'))),renderer:sha256(fs.readFileSync(path.join(sim,'studio/host-png.js'))),playSession:sha256(fs.readFileSync(path.join(sim,'studio/play/session.js')))},sourceRevision:build.sourceRevision??null,designVersion:build.designVersion??null,textDefects,assetDefects,closedModeDefects,scope:'Actual upstream Lua VM and software renderer, native GIL UI/scripts; server fixture explicitly identified',status,mcpCommit:revision(mcp),simulatorCommit:revision(sim),officialClient:'not-executed',...receipt,results};
 fs.writeFileSync(path.join(output,'receipt.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify({status:report.status,output,controls:receipt.controls,results:results.map(r=>({canvasId:r.canvasId,playerCount:r.playerCount,runtimeExceptions:r.runtimeExceptions,frames:r.frames.map(f=>({name:f.name,mountError:f.mountError,errors:f.logs}))}))},null,2));
 
