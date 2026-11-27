@@ -6,6 +6,36 @@ import path from 'node:path';
 
 const releasePath = 'platform/product-release.json';
 const contentKinds = ['pets', 'foods', 'tokens'];
+export const closedModeText = /(?:\bAI\s*练习|好友\s*1\s*v\s*1|单人\s*AI)/iu;
+
+export function formalBuildLabel({ gameVersion, sourceRevision }) {
+  assert.match(gameVersion, /^\d+\.\d+\.\d+$/u);
+  assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
+  return `v${gameVersion} · ${sourceRevision.slice(0, 12)}`;
+}
+
+export function formalDeliveryFilename(build) {
+  return `super-auto-pets-${formalBuildLabel(build).replace(' · ', '-')}.gil`;
+}
+
+export function checkFormalClient(ui, source, build) {
+  const lobby = ui.controls.find(control => control.name === 'Lobby');
+  const choices = lobby?.children.find(control => control.name === 'Choices');
+  assert.deepEqual(choices?.children.map(control => control.name), ['Room'], 'Formal lobby must contain only the eight-seat choice');
+  assert.equal(lobby.children.find(control => control.name === 'BuildVersion')?.text?.content,
+    formalBuildLabel(build), 'Formal lobby must identify the delivered build');
+  function checkControls(controls) {
+    for (const control of controls) {
+      assert.doesNotMatch(control.name, /duel|practice/iu, 'Closed mode control in formal GIL');
+      assert.doesNotMatch(control.text?.content ?? '', closedModeText, 'Closed mode text in formal GIL');
+      checkControls(control.children ?? []);
+    }
+  }
+  checkControls(ui.controls);
+  assert.doesNotMatch(source, closedModeText, 'Closed mode text in formal Lua');
+  assert.doesNotMatch(source, /AP_Duel|Choices\/(?:Duel|Practice)|(?:practice|duel)_view|factories\['autopets\.(?:run|bot)'\]/u,
+    'Closed mode reference in formal Lua');
+}
 
 export function validateRelease(scope) {
   assert.deepEqual(Object.keys(scope).sort(), ['catalogProfile', 'foods', 'gameVersion', 'modes', 'pets', 'tokens']);

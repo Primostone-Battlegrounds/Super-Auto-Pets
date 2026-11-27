@@ -73,15 +73,20 @@ jobs:
           gate=$(node scripts/acceptance-gate.mjs "$package")
           verdict=$(node -p 'JSON.parse(process.argv[1]).verdict' "$gate")
           (cd "$package" && sha256sum --strict -c SHA256SUMS)
+          filename=$(node -p 'require(process.argv[1]).deliveryFilename' "$package/BUILD.json")
+          version=$(node -p 'require(process.argv[1]).gameVersion' "$package/BUILD.json")
+          mkdir -p "$RUNNER_TEMP/game-upload"
+          cp "$package/super-auto-pets.gil" "$RUNNER_TEMP/game-upload/$filename"
           printf 'evidence=game-evidence-%s\n' "${SOURCE_SHA:0:12}" >> "$GITHUB_OUTPUT"
+          printf 'filename=%s\nversion=%s\n' "$filename" "$version" >> "$GITHUB_OUTPUT"
           printf 'verdict=%s\n' "$verdict" >> "$GITHUB_OUTPUT"
       - name: Upload the verified GIL as a single file
         id: artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # An unarchived upload uses the filename. Give overwrite the same name.
-          name: super-auto-pets.gil
-          path: ${{ runner.temp }}/game-package/super-auto-pets.gil
+          name: ${{ steps.build.outputs.filename }}
+          path: ${{ runner.temp }}/game-upload/${{ steps.build.outputs.filename }}
           archive: false
           if-no-files-found: error
           retention-days: 30
@@ -93,6 +98,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
           ARTIFACT_WEB_URL: ${{ steps.artifact.outputs.artifact-url }}
+          GIL_FILENAME: ${{ steps.build.outputs.filename }}
         run: |
           [[ "$ARTIFACT_ID" =~ ^[0-9]+$ ]]
           download="$RUNNER_TEMP/game-download"
@@ -108,7 +114,7 @@ jobs:
                   --connect-timeout 10 --max-time 30 --output "$download/artifact.partial" --write-out '%{http_code}' \
                   --header 'X-GitHub-Api-Version: 2022-11-28' "$@" "$api_url"); then
                 case "$status" in
-                  200) mv "$download/artifact.partial" "$download/super-auto-pets.gil"; return $? ;;
+                  200) mv "$download/artifact.partial" "$download/$GIL_FILENAME"; return $? ;;
                   404|408|429|5??) printf 'Artifact download returned HTTP %s.\n' "$status" ;;
                   *) printf 'Artifact download failed with HTTP %s.\n' "$status"; return 1 ;;
                 esac
@@ -130,9 +136,10 @@ jobs:
         env:
           ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
           ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          GIL_FILENAME: ${{ steps.build.outputs.filename }}
         run: |
           package="$RUNNER_TEMP/game-package"
-          gil="$RUNNER_TEMP/game-download/super-auto-pets.gil"
+          gil="$RUNNER_TEMP/game-download/$GIL_FILENAME"
           node scripts/verify-delivery.mjs "$RUNNER_TEMP/miliastra-mcp" "$gil" "$package/BUILD.json" \
             "$ARTIFACT_ID" "$ARTIFACT_DIGEST" > "$RUNNER_TEMP/download-receipt.json"
           mv "$RUNNER_TEMP/download-receipt.json" "$package/DOWNLOAD.json"
@@ -155,17 +162,20 @@ jobs:
           ARTIFACT_REQUIRES_LOGIN: ${{ steps.download.outputs.requires_login }}
           EVIDENCE_NAME: ${{ steps.build.outputs.evidence }}
           ACCEPTANCE_VERDICT: ${{ steps.build.outputs.verdict }}
+          GIL_FILENAME: ${{ steps.build.outputs.filename }}
+          GAME_VERSION: ${{ steps.build.outputs.version }}
         run: |
           test -n "$ARTIFACT_URL"
           {
-            printf '## 小动物自走棋 · 千星隔离候选\n\n'
-            printf '[下载 super-auto-pets.gil](%s)\n\n' "$ARTIFACT_URL"
+            printf '## 小动物自走棋 v%s · 八人隔离候选\n\n' "$GAME_VERSION"
+            printf '[下载 %s](%s)\n\n' "$GIL_FILENAME" "$ARTIFACT_URL"
             if [ "$ARTIFACT_REQUIRES_LOGIN" = true ]; then
               printf '此链接需要登录 GitHub。\n\n'
             else
               printf '此下载无需登录 GitHub。\n\n'
             fi
-            printf '下载后将 GIL 导入获授权的隔离存档。产物保留 30 天。\n\n'
+            printf '将 GIL 导入获授权的隔离存档，核对主菜单底部标识 `v%s · %s`。产物保留 30 天。\n\n' \
+              "$GAME_VERSION" "${SOURCE_SHA:0:12}"
             printf 'Git SHA `%s`\n\n' "$SOURCE_SHA"
             printf '成品验收 `%s`。各层状态、校验和及夹具许可见工程证据 `%s`。\n' \
               "$ACCEPTANCE_VERDICT" "$EVIDENCE_NAME"

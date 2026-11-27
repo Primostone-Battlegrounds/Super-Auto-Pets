@@ -4,7 +4,7 @@
 
 ## 隔离候选下载
 
-在最新成功的 `develop` 运行的 Summary 中点「下载 super-auto-pets.gil」，将文件直接导入获授权的隔离存档。Summary 会注明下载是否需要 GitHub 登录。候选保留 30 天。[Game delivery](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
+在最新成功的 `develop` 运行的 Summary 中点带版本和短提交号的 GIL 下载链接，例如 `super-auto-pets-v0.6.0-<短提交号>.gil`。将文件导入获授权的隔离存档，启动后核对主菜单底部的版本和短提交号。Summary 会注明下载是否需要 GitHub 登录。候选保留 30 天。[Game delivery](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/actions/workflows/game-delivery.yml?query=branch%3Adevelop)
 
 有 Actions 写权限的维护者可在运行页面选择「Re-run all jobs」，按该次运行的原始提交手动重新交付。
 
