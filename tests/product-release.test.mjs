@@ -40,6 +40,8 @@ return catalog
   assert.throws(() => verifyReleaseCatalog(root, scope, 'lua5.3', 'lua5.4', bundle), /Expected a release catalog table/);
   assert.throws(() => validateRelease({ ...scope, catalogProfile: 'expanded' }), /catalog profile/);
   assert.throws(() => validateRelease({ ...scope, modes: ['eight-player', 'duel'] }), /formal mode/);
+  assert.throws(() => validateRelease({ ...scope, pets: [...scope.pets, 'extra_pet'] }), /requires 18 formal pets/);
+  assert.throws(() => validateRelease({ ...scope, foods: [...scope.foods, 'extra_food'] }), /requires 12 formal foods/);
 });
 
 test('the delivery gate rejects internal graphs, content and active modes', () => {

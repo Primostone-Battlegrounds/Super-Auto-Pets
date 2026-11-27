@@ -12,6 +12,10 @@ export function validateRelease(scope) {
   assert.match(scope.gameVersion, /^\d+\.\d+\.\d+$/u);
   assert.equal(scope.catalogProfile, 'release', 'Unsupported formal catalog profile');
   assert.deepEqual(scope.modes, ['eight-player'], 'Unsupported formal mode');
+  if (scope.gameVersion === '0.6.0') {
+    assert.equal(scope.pets?.length, 18, 'v0.6.0 requires 18 formal pets');
+    assert.equal(scope.foods?.length, 12, 'v0.6.0 requires 12 formal foods');
+  }
   for (const kind of contentKinds) {
     assert.ok(Array.isArray(scope[kind]) && scope[kind].length, `Empty ${kind} scope`);
     assert.ok(scope[kind].every(id => /^[a-z][a-z_0-9]+$/u.test(id)), `Invalid ${kind} ID`);
