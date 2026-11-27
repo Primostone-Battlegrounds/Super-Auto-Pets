@@ -20,7 +20,7 @@ function roomLayout(unified) {
     const visualSize = [...size];
     const inspect = unified && name.startsWith('Inspect');
     const inspectY = name === 'InspectReward' ? 0 : -13;
-    const lake = name.startsWith('Freeze') || ['Previous', 'Forward', 'Auto', 'Follow'].includes(name);
+    const lake = name.startsWith('Freeze') || ['Previous', 'Forward', 'Auto', 'Speed', 'Follow'].includes(name);
     let surface = unified
       ? (inspect ? terrain('Surface', [0, inspectY], [width, 34], clearing.teal)
         : primary || lake ? image('Surface', [0, 0], size, primary ? '#fff5da' : '#719486', { image: primary ? 107015 : 107012 })
@@ -64,6 +64,8 @@ function roomLayout(unified) {
       art === 'food' ? '详情' : '技能', false, unified ? 16 : 17, '#b8d9c8')];
   }
 
+  const replayActions = [['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'],
+    ...(unified ? [['Speed', '倍速 · 1x']] : []), ['Follow', '跳过回放']];
   return {
     name: 'AP_Room',
     script: 'm3_room_ui',
@@ -138,9 +140,9 @@ function roomLayout(unified) {
             label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
           ]),
           label('Event', [0, unified ? -107 : -72], [800, unified ? 32 : 50], '', unified ? 19 : 18, unified ? '#65441d' : pigment.ink),
-          ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
-            .map(([name, text], index) => button(name, (index - 1.5) * 202, unified ? -170 : -133,
-              188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
+          ...replayActions.map(([name, text], index) => button(name,
+            (index - (replayActions.length - 1) / 2) * (unified ? 162 : 202), unified ? -170 : -133,
+            unified ? 152 : 188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
         ], false),
         unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),
         unified ? button('Ready', 310, shopActionsY, 206, 82, '准备 · F', true, 24)

@@ -14,7 +14,7 @@ local render_standings, panel, portrait, badges, unified_layout
 local shop_drag
 local controls, bindings, keys, content, visibility = {}, {}, {}, {}, {}
 local frames, frame_round, frame_index, following, canonical_round, seconds
-local replay_playing, replay_elapsed = false, 0
+local replay_playing, replay_elapsed, replay_speed = false, 0, 1
 local token = 0
 local source_ready = false
 
@@ -210,6 +210,10 @@ local function paint_battle()
         visible("Replay/" .. name, has_frame)
     end
     visible("Replay/Auto", has_frame and frame.event ~= nil)
+    if unified_layout then
+        visible("Replay/Speed", has_frame and frame.event ~= nil and frame_index < #frames)
+        text("Replay/Speed/Text", "倍速 · " .. replay_speed .. "x")
+    end
     if badges then
         visible("Replay/OwnFront", has_frame)
         visible("Replay/EnemyFront", has_frame)
@@ -382,6 +386,19 @@ local function redraw()
     text("Hint", message)
 end
 
+local function level_up_message(before, after)
+    if not before or not after or before.round ~= after.round then return end
+    for _, unit in ipairs(after.team) do
+        for _, previous in ipairs(before.team) do
+            if unit.uid == previous.uid and unit.level > previous.level then
+                local pet = native_catalog.pets[unit.code]
+                local reward_message = #after.rewards > #before.rewards and " · 有升级奖励" or ""
+                return string.format("%s 升至 L%d%s", pet.name, unit.level, reward_message)
+            end
+        end
+    end
+end
+
 local function receive_view(_, values)
     if not source_ready then return end
     local revision, phase, round, seat, sequence, humans, winner, ready, lives, places, opponents, results, raw, ack, remaining =
@@ -412,7 +429,9 @@ local function receive_view(_, values)
     match = {phase = phase, round = round, seat = seat, sequence = sequence, ready = ready, lives = lives,
         places = places, opponents = opponents, results = results, winner = winner}
     seconds = (phase == 2 or phase == 4) and remaining or nil
+    local previous = preview
     preview = decode_shop(raw, shop_rules)
+    if unified_layout and phase == 2 then hint = level_up_message(previous, preview) or hint end
     local playing_seats = phase >= 1
     local view = {revision = revision, phase = phase == 0 and "lobby" or phase == 5 and "ended" or "preparation",
         phase_name = phase_names[phase], round = round, seat = seat, human_count = humans,
@@ -486,7 +505,7 @@ local function receive_replay(_, values)
             teams = board, event = event}
     end
     frames, frame_round, frame_index, following, canonical_round = resolved, round, 1, false, round
-    replay_playing, replay_elapsed = #resolved > 1, 0
+    replay_playing, replay_elapsed, replay_speed = #resolved > 1, 0, 1
     print(string.format("AUTO_PETS_M3 replay round=%d events=%d outcome=%d", round, #result.events, outcome))
     if match.round == round and match.phase >= 3 then redraw() end
 end
@@ -607,7 +626,7 @@ function OnStart(view_root, painter, badge_pool)
             changed = function(message) hint = message; redraw() end,
         })
     end
-    replay_playing, replay_elapsed = false, 0
+    replay_playing, replay_elapsed, replay_speed = false, 0, 1
     visible("Ready", false)
     visible("Forfeit", false)
     button("Shop/InspectReward", function() inspected = {kind = "reward", slot = reward} end)
@@ -659,11 +678,12 @@ function OnStart(view_root, painter, badge_pool)
     end)
     button("Replay/Follow", function() scrub(0) end)
     if unified_layout then
+        button("Replay/Speed", function() replay_speed = replay_speed == 1 and 2 or 1 end)
         button("ResultReplay", function()
             local frame = match and match.phase == 5 and current_frame()
             if not frame or not frame.event then return end
             reviewing_result = not reviewing_result
-            if reviewing_result then frame_index, replay_playing, replay_elapsed = 1, #frames > 1, 0 end
+            if reviewing_result then frame_index, replay_playing, replay_elapsed, replay_speed = 1, #frames > 1, 0, 1 end
         end)
     end
     button("Refresh", refresh)
@@ -691,7 +711,7 @@ function OnUpdate(dt)
     if unified_layout and match.phase == 5 and not reviewing_result then return end
     local frame = frames[frame_index]
     if not frame or not frame.event then return end
-    replay_elapsed = replay_elapsed + dt
+    replay_elapsed = replay_elapsed + dt * replay_speed
     if replay_elapsed < replay_view.duration(frame.event) then return end
     replay_elapsed = 0
     frame_index = math.min(#frames, frame_index + 1)

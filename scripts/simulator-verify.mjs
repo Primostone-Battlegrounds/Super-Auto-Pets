@@ -121,6 +121,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session, 'AP_GameLobby', [0, 1, 0, 0, 0, statusToken(), 1, 1, 0, 0]);
     await capture('lobby-fixture');
     requireText('Lobby/Status', /已进入 1 人/u);
+    assert.equal(visibleText('Lobby/Feedback')?.text, undefined, 'A current room snapshot clears the outdated connection message');
     if (!formal) {
       click('Lobby/Choices/Duel/Hit');
       await capture('duel-wait-fixture');
@@ -362,6 +363,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
     if (!duel) {
       requireText(`${shop}/Team1/Text`, /^芦纹龟 L2$/u);
       assert.equal(visibleText(`${shop}/Team1/Text`).textLayout.visibleLineCount, 1);
+      requireText(`${shop}/AbilityBody`, /经验 1\/5/u);
+      requireText(`${shop}/Freeze5/Text`, /^已冻结 · 解冻$/u);
+      click(`${shop}/InspectOffer4/Hit`);
+      await capture('client-1-inspect-food');
+      requireText(`${shop}/AbilityTitle`, /朝露莓.*1 阶食物.*3 金/u);
+      requireText(`${shop}/AbilityBody`, /目标 \+1攻 \+1命/u);
     }
     assert.equal(requests(), beforeInspect, 'Reading abilities must not issue any gameplay request');
     const petOffer = duel ? 'Duel/MarketOffers/Buy1' : `${shop}/Offer1/Hit`;
@@ -502,7 +509,17 @@ for(const {canvasId,playerCount,mode} of configurations) {
       await capture('client-2-replay-loss');
       requireText('Room/Match/Replay/RoundText', /本轮落败/u);
       requireText(eventTrail, /对方获胜/u);
+      api.sendPlaySignal(session, 'AP_RoomView', [3, 4, 1, 2, 3, playerCount, 0, true,
+        [5, 4, 5, 5, 5, 5, 5, 5], Array(8).fill(0), [2,1,4,3,6,5,8,7], [1,2,0,0,0,0,0,0], [], 0, 7], 'Player2');
+      await capture('client-2-round-settlement');
+      requireText('Room/Match/Hint', /本轮落败 · 损失 1 命 · 剩余 4 命/su);
       api.setPlayView(session, 1);
+    }
+    if (!duel) {
+      api.sendPlaySignal(session, 'AP_RoomView', [4, 4, 1, 1, 4, playerCount, 0, true,
+        [5,4,5,5,5,5,5,5], Array(8).fill(0), [2,1,4,3,6,5,8,7], [1,2,0,0,0,0,0,0], [], 0, 7], 'Player1');
+      await capture('client-1-round-settlement');
+      requireText('Room/Match/Hint', /本轮获胜 · 剩余 5 命.*等待下一轮/su);
     }
     click(duel ? 'Duel/Back/Hit' : 'Room/Back/Hit');
     const returned = await capture('client-1-return');
@@ -561,6 +578,125 @@ for(const {canvasId,playerCount,mode} of configurations) {
         assert.ok(measurement?.fits && measurement.visibleLineCount === 1);
         assert.match(measurement.lines[0], expected);
       }
+    }
+    if (!duel && ((canvasId === 'pc-16-9' && playerCount === 2) || (canvasId === 'mobile-19.5-9' && playerCount === 1))) {
+      // A separate, later market fixture checks touch dispatch and the authority acknowledgement independently.
+      const state = [...market];
+      state[0] = 7;
+      state[1] = 4;
+      state[9] = 8; // fennel_twist, the approved tier-four food with adjacent attack
+      state.splice(11, 12, 1, 21, 2, 5, 1, 0, 1, 22, 2, 5, 1, 1);
+      let version = 8;
+      function showMarket(ack = 0) {
+        api.sendPlaySignal(session, 'AP_RoomView', [version, 2, 7, 1, version, playerCount, 0, false,
+          Array(8).fill(5), Array(8).fill(0), [2,1,4,3,6,5,8,7], Array(8).fill(0), state, ack, 42], 'Player1');
+      }
+      function expectMutation(count, action, from, to, flag = 0) {
+        const messages = api.playSnapshot(session).server.inbound.filter(row => row.name === requestName);
+        assert.equal(messages.length, count + 1);
+        assert.deepEqual(messages.at(-1).values.slice(0, 6), [action, 7, version, from, to, flag]);
+        return messages.at(-1).values[6];
+      }
+      showMarket();
+      const beforeFood = requests();
+      click(`${shop}/InspectOffer4/Hit`);
+      await capture('client-1-inspect-adjacent-food');
+      requireText(`${shop}/AbilityTitle`, /茴香卷.*4 阶食物.*3 金/u);
+      requireText(`${shop}/AbilityBody`, /目标 \+2攻 \+1命 · 邻位 \+1攻 \+0命/u);
+      assert.equal(requests(), beforeFood);
+
+      click(`${shop}/Freeze1/Hit`);
+      const freezeAck = expectMutation(beforeFood, 17, 1, 0);
+      state[6] = -1;
+      version++;
+      showMarket(freezeAck);
+      await capture('client-1-freeze-ack');
+      requireText(`${shop}/Freeze1/Text`, /^已冻结 · 解冻$/u);
+      click(`${shop}/Freeze1/Hit`);
+      const unfreezeAck = expectMutation(beforeFood + 1, 17, 1, 0);
+      state[6] = 1;
+      version++;
+      showMarket(unfreezeAck);
+      await capture('client-1-unfreeze-ack');
+      requireText(`${shop}/Freeze1/Text`, /^冻结$/u);
+
+      click(teamSlot(1));
+      click(`${shop}/Merge/Hit`);
+      click(teamSlot(2));
+      const mergeAck = expectMutation(beforeFood + 2, 15, 1, 2);
+      state[5] = 1;
+      state.splice(11, 12, 1, 22, 3, 6, 2, 2, 0, 0, 0, 0, 0, 0);
+      state.push(13); // one tier-five level-up reward
+      version++;
+      showMarket(mergeAck);
+      await capture('client-1-merge-level-up-ack');
+      requireText(`${shop}/Team1/Text`, /^芦纹龟 L2$/u);
+      requireText(shopHint, /芦纹龟 升至 L2 · 有升级奖励/u);
+      requireText(`${shop}/Reward/Text`, /月鬃牦牛/u);
+      click(`${shop}/InspectReward/Hit`);
+      await capture('client-1-inspect-level-up-reward');
+      requireText(`${shop}/AbilityTitle`, /月鬃牦牛.*5 阶.*3 金/u);
+      assert.equal(requests(), beforeFood + 3);
+
+      click(teamSlot(1));
+      click(`${shop}/Sell/Hit`);
+      const sellAck = expectMutation(beforeFood + 3, 13, 0, 1);
+      state[2] += 2;
+      state[5] = 0;
+      state.fill(0, 11, 17);
+      version++;
+      showMarket(sellAck);
+      await capture('client-1-sell-ack');
+      requireText(`${shop}/Money`, /金币 12/u);
+      assert.ok(!visibleText(`${shop}/Team1/Text`), 'Selling removes the companion from the lineup');
+    }
+    if (!duel) {
+      const result = 'Room/Match/Settlement';
+      const resultReplay = 'Room/Match/ResultReplay/Hit';
+      const runnerUp = playerCount === 8;
+      const winner = runnerUp ? 2 : 1;
+      const lastRound = 8;
+      api.sendPlaySignal(session, 'AP_RoomView', [20, 5, lastRound, 1, 20, playerCount, winner, true,
+        runnerUp ? [0,3,0,0,0,0,0,0] : [3,0,0,0,0,0,0,0],
+        runnerUp ? [2,1,3,4,5,6,7,8] : [1,2,3,4,5,6,7,8],
+        [2,1,4,3,6,5,8,7], runnerUp ? [2,1,0,0,0,0,0,0] : [1,2,0,0,0,0,0], [], 0, 0], 'Player1');
+      await capture('client-1-match-result');
+      requireText(`${result}/Placement`, runnerUp ? /^第 2 名$/u : /^冠军$/u);
+      requireText(`${result}/Summary`, runnerUp ? /共 8 轮.*剩余 0 命.*冠军为席位 2/u : /共 8 轮.*剩余 3 命/u);
+      requireText(`${result}/RestartGuide`, /千星房间.*重新挑战/u);
+      requireText('Room/Standings/Seat8Detail', /第 8 名/u);
+      assert.ok(!visibleText('Room/Match/Forfeit/Text') && !visibleText(`${shop}/Money`));
+
+      // Latest replay may arrive after the terminal snapshot; opening it is optional and read-only.
+      const stronger = [1, 1, 1, 5, 8, 1, 0];
+      const weaker = [1, 2, 2, 1, 4, 1, 0];
+      api.sendPlaySignal(session, replaySignal, [lastRound, runnerUp ? 2 : 1, runnerUp ? 1 : 2,
+        1, 42, stronger, weaker], 'Player1');
+      await capture('client-1-match-result-with-replay');
+      requirePlayButton(resultReplay, ['Room/Back/Hit']);
+      requireText('Room/Match/ResultReplay/Text', /^回看最后一战$/u);
+      const beforeReview = requests();
+      click(resultReplay);
+      const initialReplayEvent = renderedEvent();
+      click('Room/Match/Replay/Speed/Hit');
+      for (let step = 0; step < 5; step++) api.stepPlay(session, 0.05);
+      await capture('client-1-match-result-replay-speed');
+      requireText('Room/Match/Replay/Speed/Text', /^倍速 · 2x$/u);
+      assert.notEqual(renderedEvent(), initialReplayEvent, '2x must advance the first event within a quarter-second');
+      click('Room/Match/Replay/Follow/Hit');
+      await capture('client-1-match-result-replay-outcome');
+      requireText('Room/Match/Replay/RoundText', runnerUp ? /本轮落败/u : /本轮获胜/u);
+      assert.equal(requests(), beforeReview);
+      click(resultReplay);
+      await capture('client-1-match-result-returned');
+      requireText(`${result}/Placement`, runnerUp ? /^第 2 名$/u : /^冠军$/u);
+      click('Room/Back/Hit');
+      await capture('client-1-match-result-lobby');
+      requireText('Lobby/Continue/Title', /回到八人吃鸡/u);
+      click('Lobby/Continue/Hit');
+      await capture('client-1-match-result-reopen');
+      requireText(`${result}/Placement`, runnerUp ? /^第 2 名$/u : /^冠军$/u);
+      assert.equal(requests(), beforeReview + 1, 'Reopening may synchronize only, and must preserve the final result');
     }
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
