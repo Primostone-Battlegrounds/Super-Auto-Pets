@@ -13,6 +13,10 @@ const lock=JSON.parse(fs.readFileSync(new URL('../platform/toolchain-lock.json',
 assert.equal(revision(mcp),lock.mcp.commit,'MCP revision differs from toolchain lock');
 assert.equal(revision(sim),lock.simulator.commit,'Simulator revision differs from toolchain lock');
 for(const directory of [mcp,sim]){const changed=execFileSync('git',['-C',directory,'diff','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(Boolean);assert.ok(changed.every(file=>file==='npm-shrinkwrap.json'),'Tracked tool source changed: '+changed.join(','));}
+const buildPath=path.join(path.dirname(gil),'BUILD.json');
+const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
+const formal = build.buildProfile === 'formal';
+const portraitHome = formal ? 'PortraitPool' : 'Practice';
 const {save,receipt}=await nativeSimulatorSave(mcp,gil,process.env.SIMULATOR_UI??'AutoPetsGame');
 fs.writeFileSync(path.join(output,'native.save.json'),JSON.stringify(save));
 const api=await import(pathToFileURL(path.join(sim,'studio/play/session.js')));
@@ -29,20 +33,24 @@ const parse=createRequire(path.join(mcp,'package.json'))('luaparse').parse;
 const roundsSource=fs.readFileSync(new URL('../tests/native/release-practice-rounds.lua',import.meta.url),'utf8');
 const literal=n=>{if(n.type==='TableConstructorExpression')return n.fields.map(f=>literal(f.value));if(n.type==='NumericLiteral')return n.value;if(n.type==='StringLiteral')return n.raw.slice(1,-1);throw Error('Nonliteral action fixture');};
 const practiceRounds=literal(parse(roundsSource,{luaVersion:'5.3'}).body[0].arguments[0]);
-receipt.practiceInputFixtureSha256=sha256(roundsSource);
+if (!formal) receipt.practiceInputFixtureSha256=sha256(roundsSource);
 const results=[];
 const canvases=['pc-16-9','pc-21-9','mobile-16-9','mobile-19.5-9','mobile-4-3'];
 const configurations=canvases.map(canvasId=>({canvasId,playerCount:1}));
 if ((process.env.SIMULATOR_UI ?? 'AutoPetsGame') === 'AutoPetsGame') {
   configurations.push(
-    { canvasId: 'pc-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'pc-16-9', playerCount: 2, mode: 8 },
     { canvasId: 'mobile-16-9', playerCount: 1, mode: 8 },
-    { canvasId: 'mobile-16-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-16-9', playerCount: 8, mode: 8 },
-    { canvasId: 'mobile-19.5-9', playerCount: 2, mode: 2 },
     { canvasId: 'mobile-19.5-9', playerCount: 8, mode: 8 },
   );
+  if (formal) {
+    configurations.push(...canvases.filter(canvasId => canvasId !== 'mobile-16-9')
+      .map(canvasId => ({ canvasId, playerCount: 1, mode: 8 })));
+  } else {
+    configurations.push(...['pc-16-9', 'mobile-16-9', 'mobile-19.5-9']
+      .map(canvasId => ({ canvasId, playerCount: 2, mode: 2 })));
+  }
 }
 for(const {canvasId,playerCount,mode} of configurations) {
   const prefix = mode ? `${canvasId}-mode${mode}-${playerCount}clients` : canvasId;
@@ -99,7 +107,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
   // Deliberate server fixture: upstream simulator does not execute the GIL graphs.
   if((process.env.SIMULATOR_UI??'AutoPetsGame')==='AutoPetsGame'&&!mode) {
     requireText('Lobby/Title', /小动物自走棋/u);
-    for (const name of ['Room', 'Duel', 'Practice']) {
+    for (const name of formal ? ['Room'] : ['Room', 'Duel', 'Practice']) {
       requirePlayButton(`Lobby/Choices/${name}/Hit`, ['Lobby/Status', 'Lobby/Feedback', 'Lobby/Help']);
     }
     requirePlayButton('Lobby/Exit/Hit', ['Lobby/Feedback', 'Lobby/Help']);
@@ -113,10 +121,12 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session, 'AP_GameLobby', [0, 1, 0, 0, 0, statusToken(), 1, 1, 0, 0]);
     await capture('lobby-fixture');
     requireText('Lobby/Status', /已进入 1 人/u);
-    click('Lobby/Choices/Duel/Hit');
-    await capture('duel-wait-fixture');
-    requireText('Lobby/Feedback', /等待好友/u);
-    assert.equal(startRequests(), 0, 'Known-invalid duel start must stay on the client');
+    if (!formal) {
+      click('Lobby/Choices/Duel/Hit');
+      await capture('duel-wait-fixture');
+      requireText('Lobby/Feedback', /等待好友/u);
+      assert.equal(startRequests(), 0, 'Known-invalid duel start must stay on the client');
+    }
     click('Lobby/Choices/Room/Hit');
     await capture('lobby-room-request');
     requireText('Lobby/Feedback', /正在发起八人吃鸡/u);
@@ -134,171 +144,173 @@ for(const {canvasId,playerCount,mode} of configurations) {
     await capture('room-wait-fixture');
     requireText('Lobby/Feedback', /仍在加载/u);
     assert.equal(startRequests(), beforeFill, 'Robot fill requires explicit confirmation');
-    click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
-    click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
-    const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
-    assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
-      'Practice primary action must use its sliced native plate');
-    requireText('Practice/Shop/Pet1/Price', /^3金$/u);
-    requireText('Practice/Shop/Pet1/Detail', /^\d+$/u);
-    requireText('Practice/Shop/Pet1/LifeValue', /^\d+$/u);
-    for (const [name, image] of [['StatsPaper', 102035], ['LifePaper', 102018], ['PriceIcon', 102040]]) {
-      assert.equal(shopFrame.paint.find(item => item.id === control(`Practice/Shop/Pet1/${name}`).Id)?.imageId, image);
-    }
-    for (const trail of ['Practice/Panel', 'Practice/Field/Surface']) {
-      assert.equal(box(trail).width, shopFrame.canvasWidth, `${trail} should span the available canvas`);
-    }
-    assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
-    assert.ok(shopFrame.paint.some(item => item.id === control('Practice/Team1/Front').Id));
-    for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
-      requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
-    }
-    requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Shop/RewardNext/Hit', 'Practice/Hint']);
-    requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Shop/Buy/Hit', 'Practice/Shop/Freeze/Hit', 'Practice/Hint']);
-    requireText('Practice/Money/Value', /^10$/u);
-    requireText('Practice/Lives/Value', /^5 \/ 5$/u);
-    const press=name=>click('Practice/'+name+'/Hit');
-    for(const [roundIndex,round] of practiceRounds.entries()) {
-      for(const [action,from,to] of round.slice(1)) {
-        if(action==='buy'||action==='combine'){press('Shop/Pet'+from);press(to?'Team'+to:'Shop/Buy');}
-        else if(action==='feed'){press('Shop/Food'+from);press('Team'+to);}
-        else if(action==='move'||action==='sell'){press('Team'+from);press(to?'Team'+to:'Shop/Sell');}
-        else if(action==='reward'){press('Shop/Reward');press('Shop/Buy');}
-        else if(action==='reroll')press('Shop/Reroll');else throw Error('Unknown input fixture '+action);
+    if (!formal) {
+      click('Lobby/Choices/Practice/Hit');await capture('practice-menu');
+      click('Practice/Menu/Continue/Hit');const shopFrame = await capture('practice-shop');
+      const primarySkin = shopFrame.paint.find(item => item.id === control('Practice/Primary/Face').Id);
+      assert.ok(primarySkin?.imageId === 107015 && primarySkin.imageType === 'Stretch',
+        'Practice primary action must use its sliced native plate');
+      requireText('Practice/Shop/Pet1/Price', /^3金$/u);
+      requireText('Practice/Shop/Pet1/Detail', /^\d+$/u);
+      requireText('Practice/Shop/Pet1/LifeValue', /^\d+$/u);
+      for (const [name, image] of [['StatsPaper', 102035], ['LifePaper', 102018], ['PriceIcon', 102040]]) {
+        assert.equal(shopFrame.paint.find(item => item.id === control(`Practice/Shop/Pet1/${name}`).Id)?.imageId, image);
       }
-      if(roundIndex===10)await capture('practice-tier-six');
-      press('Primary');
-      if (roundIndex === 0) {
-        const battle = await capture('practice-battle');
-        assert.ok(battle.paint.some(item => item.id === control('Practice/Enemy1/Portrait/Layer1').Id));
-        let strike = false;
-        for (let frame = 0; frame < 75 && !strike; frame++) {
-          api.stepPlay(session, 0.1);
-          strike = api.playSnapshot(session, { paint: true }).paint.some(control => control.name === 'Wake');
+      for (const trail of ['Practice/Panel', 'Practice/Field/Surface']) {
+        assert.equal(box(trail).width, shopFrame.canvasWidth, `${trail} should span the available canvas`);
+      }
+      assert.ok(!visibleText('Practice/Team1/Name'), 'An empty recess should not display a numbered seat');
+      assert.ok(shopFrame.paint.some(item => item.id === control('Practice/Team1/Front').Id));
+      for (const [stat, label] of [['Round', '回合'], ['Money', '金币'], ['Wins', '胜场'], ['Lives', '生命']]) {
+        requireText(`Practice/${stat}/Label`, new RegExp(`^${label}$`, 'u'));
+      }
+      requirePlayButton('Practice/Primary/Hit', ['Practice/Shop/Reroll/Hit', 'Practice/Shop/RewardNext/Hit', 'Practice/Hint']);
+      requirePlayButton('Practice/Shop/Reroll/Hit', ['Practice/Shop/Buy/Hit', 'Practice/Shop/Freeze/Hit', 'Practice/Hint']);
+      requireText('Practice/Money/Value', /^10$/u);
+      requireText('Practice/Lives/Value', /^5 \/ 5$/u);
+      const press=name=>click('Practice/'+name+'/Hit');
+      for(const [roundIndex,round] of practiceRounds.entries()) {
+        for(const [action,from,to] of round.slice(1)) {
+          if(action==='buy'||action==='combine'){press('Shop/Pet'+from);press(to?'Team'+to:'Shop/Buy');}
+          else if(action==='feed'){press('Shop/Food'+from);press('Team'+to);}
+          else if(action==='move'||action==='sell'){press('Team'+from);press(to?'Team'+to:'Shop/Sell');}
+          else if(action==='reward'){press('Shop/Reward');press('Shop/Buy');}
+          else if(action==='reroll')press('Shop/Reroll');else throw Error('Unknown input fixture '+action);
         }
-        assert.ok(strike, 'Authoritative attack did not present its strike animation');
-        await capture('practice-strike');
-        requireText('Practice/Battle/Event', /出击/u);
-        for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
-        await capture('practice-replay');
-        for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
+        if(roundIndex===10)await capture('practice-tier-six');
+        press('Primary');
+        if (roundIndex === 0) {
+          const battle = await capture('practice-battle');
+          assert.ok(battle.paint.some(item => item.id === control('Practice/Enemy1/Portrait/Layer1').Id));
+          let strike = false;
+          for (let frame = 0; frame < 75 && !strike; frame++) {
+            api.stepPlay(session, 0.1);
+            strike = api.playSnapshot(session, { paint: true }).paint.some(control => control.name === 'Wake');
+          }
+          assert.ok(strike, 'Authoritative attack did not present its strike animation');
+          await capture('practice-strike');
+          requireText('Practice/Battle/Event', /出击/u);
+          for (let frame = 0; frame < 35; frame++) api.stepPlay(session, 1 / 60);
+          await capture('practice-replay');
+          for (const name of ['Replay', 'Auto', 'Fast']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
+        }
+        press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
       }
-      press('Primary');press('Primary');if(roundIndex<practiceRounds.length-1)press('Primary');
-    }
-    const final=await capture('practice-complete');
-    for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
-    assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
-    requireText('Practice/Wins/Value', /^10 \/ 10$/u);
-    press('Primary');await capture('practice-restart');
-    requireText('Practice/Round/Value', /第 1 轮/u);
-    const readOfferNames = () => [1, 2, 3].map(slot => visibleText(`Practice/Shop/Pet${slot}/Name`).text);
-    const beforeReroll = readOfferNames();
-    press('Shop/Pet1');await capture('practice-offer-detail');
-    requireText('Practice/Tooltip/Heading', /芦纹龟/u);
-    press('Shop/Freeze');press('Shop/Reroll');
-    await capture('practice-frozen-reroll');
-    requireText('Practice/Money/Value', /^9$/u);
-    requireText('Practice/Shop/Pet1/Tag', /^已冻结$/u);
-    const afterReroll = readOfferNames();
-    assert.equal(afterReroll[0], beforeReroll[0]);
-    assert.ok(afterReroll.slice(1).some((name, index) => name !== beforeReroll[index + 1]),
-      'At least one unfrozen offer must change for the fixed restart seed');
+      const final=await capture('practice-complete');
+      for (const name of ['Rewatch', 'NewSeed']) requirePlayButton(`Practice/Battle/${name}/Hit`, ['Practice/Battle/Event']);
+      assert.ok(final.logs.some(l=>/phase=ended/.test(l.text)),'Practice did not reach terminal state');
+      requireText('Practice/Wins/Value', /^10 \/ 10$/u);
+      press('Primary');await capture('practice-restart');
+      requireText('Practice/Round/Value', /第 1 轮/u);
+      const readOfferNames = () => [1, 2, 3].map(slot => visibleText(`Practice/Shop/Pet${slot}/Name`).text);
+      const beforeReroll = readOfferNames();
+      press('Shop/Pet1');await capture('practice-offer-detail');
+      requireText('Practice/Tooltip/Heading', /芦纹龟/u);
+      press('Shop/Freeze');press('Shop/Reroll');
+      await capture('practice-frozen-reroll');
+      requireText('Practice/Money/Value', /^9$/u);
+      requireText('Practice/Shop/Pet1/Tag', /^已冻结$/u);
+      const afterReroll = readOfferNames();
+      assert.equal(afterReroll[0], beforeReroll[0]);
+      assert.ok(afterReroll.slice(1).some((name, index) => name !== beforeReroll[index + 1]),
+        'At least one unfrozen offer must change for the fixed restart seed');
 
-    const pet = 'Practice/Shop/Pet1';
-    const team = 'Practice/Team1';
-    const food = 'Practice/Shop/Food1';
-    const slot = box(`${team}/Hit`);
-    const outside = box('Practice/TeamCaption');
-    function requireLiftedClearance(trail) {
-      const lifted = box(trail);
-      assert.ok(Math.abs(lifted.centerX - slot.centerX) <= slot.width, 'Dragged portrait should stay near the active slot');
-      for (const target of ['Portrait', 'DropLabel']) {
-        const obstacle = box(`${team}/${target}`);
-        assert.ok(Math.abs(lifted.centerX - obstacle.centerX) >= (lifted.width + obstacle.width) / 2
-          || Math.abs(lifted.centerY - obstacle.centerY) >= (lifted.height + obstacle.height) / 2,
-          `Dragged portrait obscures the destination ${target}`);
+      const pet = 'Practice/Shop/Pet1';
+      const team = 'Practice/Team1';
+      const food = 'Practice/Shop/Food1';
+      const slot = box(`${team}/Hit`);
+      const outside = box('Practice/TeamCaption');
+      function requireLiftedClearance(trail) {
+        const lifted = box(trail);
+        assert.ok(Math.abs(lifted.centerX - slot.centerX) <= slot.width, 'Dragged portrait should stay near the active slot');
+        for (const target of ['Portrait', 'DropLabel']) {
+          const obstacle = box(`${team}/${target}`);
+          assert.ok(Math.abs(lifted.centerX - obstacle.centerX) >= (lifted.width + obstacle.width) / 2
+            || Math.abs(lifted.centerY - obstacle.centerY) >= (lifted.height + obstacle.height) / 2,
+            `Dragged portrait obscures the destination ${target}`);
+        }
       }
+      const picture = control(`${pet}/Portrait`);
+      const petHome = picture.parent;
+      const petBefore = visibleText(`${pet}/Name`).text;
+      pointer('down', box(`${pet}/Hit`));
+      pointer('move', slot);
+      await capture('practice-drag-pet-target');
+      requireText(`${team}/DropLabel`, /^购买$/u);
+      requireText(`${pet}/Name`, /^拖动中$/u);
+      assert.notEqual(picture.parent, petHome, 'Dragged portrait must lift out of the source card');
+      requireLiftedClearance('Practice/Portrait');
+      pointer('move', outside);
+      pointer('up', outside);
+      const cancelled = await capture('practice-drag-cancel');
+      requireText('Practice/Money/Value', /^9$/u);
+      assert.ok(!visibleText(`${team}/Name`));
+      assert.equal(visibleText(`${pet}/Name`).text, petBefore);
+      assert.equal(picture.parent, petHome);
+      assert.ok(!visibleText(`${team}/DropLabel`));
+      assert.ok(!cancelled.paint.some(item => item.name === 'DropTarget'), 'Cancelling must clear all drop marks');
+
+      pointer('down', box(`${pet}/Hit`));
+      pointer('move', slot);
+      pointer('cancel', slot);
+      await capture('practice-drag-interrupted');
+      requireText('Practice/Money/Value', /^9$/u);
+      assert.ok(!visibleText(`${team}/Name`));
+      assert.equal(visibleText(`${pet}/Name`).text, petBefore);
+      assert.equal(picture.parent, petHome);
+      press('Shop/Reroll');
+      await capture('practice-drag-interrupt-dismissed');
+      requireText('Practice/Money/Value', /^9$/u);
+      assert.ok(!visibleText(`${team}/DropLabel`));
+
+      pointer('down', box(`${pet}/Hit`));
+      pointer('move', slot);
+      pointer('up', slot);
+      pointer('up', slot);
+      await capture('practice-drag-purchase-preview');
+      requireText('Practice/Money/Value', /^9$/u);
+      assert.ok(!visibleText(`${team}/Name`));
+      requireText('Practice/Hint', /购买需 3 金.*点高亮站位确认/u);
+      requireText(`${team}/DropLabel`, /^确认购买$/u);
+      assert.equal(visibleText(`${pet}/Name`).text, petBefore);
+      press('Team1');
+      await capture('practice-drag-purchase');
+      requireText('Practice/Money/Value', /^6$/u);
+      requireText(`${pet}/Name`, /^空商品$/u);
+      assert.equal(visibleText(`${team}/Name`).text, petBefore);
+      assert.equal(picture.parent, petHome);
+      assert.ok(!visibleText(`${team}/DropLabel`));
+
+      const stats = () => ['Detail', 'LifeValue'].map(name => visibleText(`${team}/${name}`).text);
+      const statsBefore = stats();
+      const nearBottom = { centerX: slot.centerX, centerY: slot.centerY - slot.height / 2 + 2 };
+      pointer('down', box(`${food}/Hit`));
+      pointer('move', nearBottom);
+      await capture('practice-drag-food-target');
+      requireText(`${team}/DropLabel`, /^喂食$/u);
+      requireLiftedClearance('Practice/Portrait');
+      assert.ok(!visibleText(`${team}/Name`), 'Drop feedback occupies the destination caption');
+      assert.ok(!visibleText('Practice/OpponentCaption'), 'The lifted portrait must not cover the board caption');
+      pointer('up', nearBottom);
+      await capture('practice-drag-feed-preview');
+      requireText('Practice/Money/Value', /^6$/u);
+      assert.deepEqual(stats(), statsBefore);
+      requireText('Practice/Hint', /喂食需 3 金.*点高亮站位确认/u);
+      requireText(`${team}/DropLabel`, /^确认喂食$/u);
+      press('Team1');
+      await capture('practice-drag-feed');
+      requireText('Practice/Money/Value', /^3$/u);
+      requireText(`${food}/Name`, /^空商品$/u);
+      assert.notDeepEqual(stats(), statsBefore);
+      requireText(`${team}/XP`, /^L1/u);
+      requireText('Practice/OpponentCaption', /下一位电脑对手/u);
+      assert.ok(!visibleText(`${team}/DropLabel`));
     }
-    const picture = control(`${pet}/Portrait`);
-    const petHome = picture.parent;
-    const petBefore = visibleText(`${pet}/Name`).text;
-    pointer('down', box(`${pet}/Hit`));
-    pointer('move', slot);
-    await capture('practice-drag-pet-target');
-    requireText(`${team}/DropLabel`, /^购买$/u);
-    requireText(`${pet}/Name`, /^拖动中$/u);
-    assert.notEqual(picture.parent, petHome, 'Dragged portrait must lift out of the source card');
-    requireLiftedClearance('Practice/Portrait');
-    pointer('move', outside);
-    pointer('up', outside);
-    const cancelled = await capture('practice-drag-cancel');
-    requireText('Practice/Money/Value', /^9$/u);
-    assert.ok(!visibleText(`${team}/Name`));
-    assert.equal(visibleText(`${pet}/Name`).text, petBefore);
-    assert.equal(picture.parent, petHome);
-    assert.ok(!visibleText(`${team}/DropLabel`));
-    assert.ok(!cancelled.paint.some(item => item.name === 'DropTarget'), 'Cancelling must clear all drop marks');
-
-    pointer('down', box(`${pet}/Hit`));
-    pointer('move', slot);
-    pointer('cancel', slot);
-    await capture('practice-drag-interrupted');
-    requireText('Practice/Money/Value', /^9$/u);
-    assert.ok(!visibleText(`${team}/Name`));
-    assert.equal(visibleText(`${pet}/Name`).text, petBefore);
-    assert.equal(picture.parent, petHome);
-    press('Shop/Reroll');
-    await capture('practice-drag-interrupt-dismissed');
-    requireText('Practice/Money/Value', /^9$/u);
-    assert.ok(!visibleText(`${team}/DropLabel`));
-
-    pointer('down', box(`${pet}/Hit`));
-    pointer('move', slot);
-    pointer('up', slot);
-    pointer('up', slot);
-    await capture('practice-drag-purchase-preview');
-    requireText('Practice/Money/Value', /^9$/u);
-    assert.ok(!visibleText(`${team}/Name`));
-    requireText('Practice/Hint', /购买需 3 金.*点高亮站位确认/u);
-    requireText(`${team}/DropLabel`, /^确认购买$/u);
-    assert.equal(visibleText(`${pet}/Name`).text, petBefore);
-    press('Team1');
-    await capture('practice-drag-purchase');
-    requireText('Practice/Money/Value', /^6$/u);
-    requireText(`${pet}/Name`, /^空商品$/u);
-    assert.equal(visibleText(`${team}/Name`).text, petBefore);
-    assert.equal(picture.parent, petHome);
-    assert.ok(!visibleText(`${team}/DropLabel`));
-
-    const stats = () => ['Detail', 'LifeValue'].map(name => visibleText(`${team}/${name}`).text);
-    const statsBefore = stats();
-    const nearBottom = { centerX: slot.centerX, centerY: slot.centerY - slot.height / 2 + 2 };
-    pointer('down', box(`${food}/Hit`));
-    pointer('move', nearBottom);
-    await capture('practice-drag-food-target');
-    requireText(`${team}/DropLabel`, /^喂食$/u);
-    requireLiftedClearance('Practice/Portrait');
-    assert.ok(!visibleText(`${team}/Name`), 'Drop feedback occupies the destination caption');
-    assert.ok(!visibleText('Practice/OpponentCaption'), 'The lifted portrait must not cover the board caption');
-    pointer('up', nearBottom);
-    await capture('practice-drag-feed-preview');
-    requireText('Practice/Money/Value', /^6$/u);
-    assert.deepEqual(stats(), statsBefore);
-    requireText('Practice/Hint', /喂食需 3 金.*点高亮站位确认/u);
-    requireText(`${team}/DropLabel`, /^确认喂食$/u);
-    press('Team1');
-    await capture('practice-drag-feed');
-    requireText('Practice/Money/Value', /^3$/u);
-    requireText(`${food}/Name`, /^空商品$/u);
-    assert.notDeepEqual(stats(), statsBefore);
-    requireText(`${team}/XP`, /^L1/u);
-    requireText('Practice/OpponentCaption', /下一位电脑对手/u);
-    assert.ok(!visibleText(`${team}/DropLabel`));
   }
   if(mode) {
-    const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`Practice/${slot}/Portrait/Layer1`).Id);
-    const foodPortrait = control('Practice/Shop/Food1/Portrait/Layer1').Id;
-    const priceId = control('Duel/ReplayBoard/BadgePool/Price1').Id;
+    const portraits = ['Team1', 'Shop/Pet1'].map(slot => control(`${portraitHome}/${slot}/Portrait/Layer1`).Id);
+    const foodPortrait = control(`${portraitHome}/Shop/Food1/Portrait/Layer1`).Id;
+    const priceId = control(formal ? 'BadgePool/Price1' : 'Duel/ReplayBoard/BadgePool/Price1').Id;
     const shopPortraits = [...portraits, foodPortrait];
     function requireShopPortraits(frame) {
       assert.ok(shopPortraits.every(id => frame.paint.some(item => item.id === id)),
@@ -553,10 +565,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
   }
   for(const [index,trail] of JSON.parse(process.env.SIMULATOR_CLICKS??'[]').entries()){click(trail);await capture('click-'+index);}
   } catch(error){runtimeExceptions.push({message:error.message,stack:error.stack});await capture('runtime-exception');}
-  results.push({canvasId,playerCount,mode:mode??'practice',runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
+  results.push({canvasId,playerCount,mode:mode??(formal ? 'lobby' : 'practice'),runtimeExceptions,inputs,playButtons,frames,history:api.playSnapshot(session).history});api.stopPlay(session);
 }
-const buildPath=path.join(path.dirname(gil),'BUILD.json');
-const build=fs.existsSync(buildPath)?JSON.parse(fs.readFileSync(buildPath)):{};
 if(build.sha256)assert.equal(build.sha256,receipt.mapSha256,'BUILD.json GIL digest mismatch');
 const textDefects = results.flatMap(result => result.frames.flatMap(frame => frame.visibleTexts
   .filter(text => text.text.trim() && (!text.textLayout?.fits || text.textLayout.visibleLineCount === 0))

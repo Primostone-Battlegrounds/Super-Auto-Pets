@@ -1,4 +1,6 @@
 local source, layout, captures = assert(arg[1]), assert(arg[2]), assert(arg[3])
+local internal = arg[4] == "internal"
+local portrait_home = internal and "Practice" or "PortraitPool"
 local order = {}
 for line in io.lines(layout) do order[#order + 1] = line end
 local output = assert(io.open(captures, "w"))
@@ -123,6 +125,7 @@ local function room_snapshot(revision, phase, human, lives, places, winner, ack)
         market(1), ack or 0, 42}
 end
 
+if internal then
 local practice = simulate()
 practice.view(0, 1, 1, 1, 0)
 practice.capture("menu")
@@ -232,8 +235,10 @@ leaving_duel.expect("AP_DuelRequest:0,0,0,0,0,0,0")
 leaving_duel.press("Duel/Leave")
 leaving_duel.expect("AP_DuelRequest:6,1,1,1,0,0,0")
 leaving_duel.destroy()
+end
 
 local room = simulate()
+room.capture("room_lobby")
 room.press("Lobby/Choices/Room/Hit")
 assert(room.start_count() == 0 and room.get("Lobby/Feedback").text:find("状态未同步"))
 room.view(0, 1, 1, 1, 0)
@@ -254,7 +259,7 @@ assert(room.get("Lobby/Feedback").text:find("再点一次"))
 room.press("Lobby/Choices/Room/Hit")
 room.expect("AP_GameChooseMode:8,true,4")
 room.view(8, 1, 4, 4, 4, 1, 8)
-assert(room.get("Practice/Shop/Pet1/Portrait").parent == room.get("Room/Match/Replay"))
+assert(room.get(portrait_home .. "/Shop/Pet1/Portrait").parent == room.get("Room/Match/Replay"))
 room.expect("AP_RoomRequest:0,0,0,0,0,0,0")
 local empty_room = room_snapshot(1, 2, 1)
 empty_room[13] = market(1, true)
@@ -283,7 +288,7 @@ room.press("Room/Back/Hit")
 room.expect("AP_GameChooseMode:0,false,5")
 assert(room.get("Lobby").active and not room.get("Room").active)
 room.destroy()
-assert(room.get("Practice/Shop/Pet1/Portrait").parent == room.get("Practice/Shop/Pet1"))
+assert(room.get(portrait_home .. "/Shop/Pet1/Portrait").parent == room.get(portrait_home .. "/Shop/Pet1"))
 
 local leaving_room = simulate()
 leaving_room.view(8, 1, 0, 4, 4)
@@ -311,11 +316,22 @@ cancelled.destroy()
 
 local guest = simulate()
 guest.view(0, 2, 1, 6, 6)
-guest.press("Lobby/Choices/Duel/Hit")
+if internal then guest.press("Lobby/Choices/Duel/Hit") end
 guest.press("Lobby/Choices/Room/Hit")
 assert(guest.start_count() == 0 and guest.get("Lobby/Feedback").text:find("等待关卡内的发起者"))
-guest.view(2, 2, 0, 4, 4)
-assert(guest.get("Duel").active)
+if internal then
+    guest.view(2, 2, 0, 4, 4)
+    assert(guest.get("Duel").active)
+else
+    guest.view(2, 2, 0, 4, 4)
+    assert(guest.get("Lobby").active and not guest.get("Room").active)
+    guest.view(8, 2, 0, 4, 4)
+    assert(guest.get("Room").active)
+end
 guest.destroy()
 output:close()
-print("Game readback: six-tier practice; zero ineligible starts, one eligible request, timeout, cancel, stale replies, guest permissions; duel and room ready, leave, shop and terminal.")
+if internal then
+    print("Internal readback: six-tier practice and duel, plus eight-player room.")
+else
+    print("Formal readback: eight-player lobby, ready, leave, shop and terminal; extra mode is rejected.")
+end

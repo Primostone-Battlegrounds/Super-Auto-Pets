@@ -85,7 +85,9 @@ g.server({
   } else {
     lastChoice = requestId;
     f.setCustomVariable(actor, 'AP_LobbyRequest', lastChoice, false);
+    // @internal begin
     if (requested === 2n) reason = duelReason;
+    // @internal end
     if (requested === 8n) {
       reason = roomReason;
       if (roomReason === 3n && event.params.fill) reason = 0n;

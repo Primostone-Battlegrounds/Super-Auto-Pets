@@ -4,7 +4,7 @@
 
 ## 版本关系
 
-当前产品文档以八席淘汰赛、好友 1v1 和单人练习为交付目标。PR #5 的 `b3427c1acef62d31503e69c181278fc954c5c5b1` 是早期单人 PvE 草稿。其中的样板数量、六只名册与技能映射适用于当时的样板验证。现行美术流程沿用原创素材、尺寸审查和隔离候选读回。项目将《原神》生物志用于研究，并以本仓库原创动物为此次扩充的基础。[产品](../PRODUCT.md) · [参照矩阵](../REFERENCE_MATRIX.md) · [PR #5](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [美术工艺](../ART_PIPELINE.md)
+本页说明六阶内容基线。适用产品版本、正式构建与模式范围见 [产品路线图](../PRODUCT.md)。PR #5 的 `b3427c1acef62d31503e69c181278fc954c5c5b1` 是早期单人 PvE 草稿。其中的样板数量、六只名册与技能映射适用于当时的样板验证。现行美术流程沿用原创素材、尺寸审查和隔离候选读回。项目将《原神》生物志用于研究，并以本仓库原创动物为此次扩充的基础。[产品](../PRODUCT.md) · [参照矩阵](../REFERENCE_MATRIX.md) · [PR #5](https://github.com/Primostone-Battlegrounds/Super-Auto-Pets/pull/5) · [美术工艺](../ART_PIPELINE.md)
 
 Team Wood Games 的官方商店页确认 Standard 使用预置动物包，Versus 是八人同步对战。官方 0.18 更新区分开场、受伤、回合结束和进食事件。Golden Pack 更新区分等级变化与各等级的技能效果，也记录普通食物和食物特性的用语变化。发售后不同版本的触发条件及数值有变化。[Steam 商店页](https://store.steampowered.com/app/1714040/Super_Auto_Pets/#about) · [0.18 官方更新](https://steamcommunity.com/games/1714040/announcements/detail/3217269675846591880/) · [Golden Pack 官方更新](https://steamcommunity.com/games/1714040/announcements/detail/3674407853169874545)
 

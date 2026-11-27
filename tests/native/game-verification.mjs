@@ -9,7 +9,7 @@ import { verifyGraph as verifyDuel } from './m2-probe-graph.mjs';
 import { verifyRoom } from './m3-room-graph.mjs';
 import { assertListCapacity } from './gil-list-limits.mjs';
 
-export function verifyLobby(source, ts, id) {
+export function verifyLobby(source, ts, id, internal = true) {
   let receive;
   let mode = 0n;
   let field = ['A'];
@@ -100,20 +100,27 @@ export function verifyLobby(source, ts, id) {
   assert.deepEqual(choose('A', 0n, 0n), []);
   assert.deepEqual(choose('A', 8n, 1n), [['A', 0n, 1n, 0n, 8n, 6n, 1n, 1n, 6n, 6n, 1n]]);
   assert.deepEqual(choose('A', 0n, 1n), [['A', 0n, 1n, 0n, 0n, 0n, 1n, 1n, 1n, 0n, 1n]]);
-  assert.deepEqual(choose('A', 2n, 2n), [['A', 0n, 1n, 0n, 2n, 1n, 2n, 1n, 1n, 0n, 2n]]);
-  expected = 2n;
-  playMode = GameplayMode.RoomPlay;
-  assert.deepEqual(choose('A', 8n, 3n), [['A', 0n, 1n, 1n, 8n, 3n, 3n, 2n, 1n, 3n, 3n]]);
-  field.push('B');
-  assert.deepEqual(choose('B', 0n, 1n), [['B', 0n, 2n, 0n, 0n, 0n, 1n, 2n, 6n, 6n, 0n]]);
-  assert.deepEqual(choose('B', 2n, 2n), [['B', 0n, 2n, 0n, 2n, 6n, 2n, 2n, 6n, 6n, 2n]]);
-  assert.deepEqual(choose('A', 2n, 3n), [['A', 0n, 2n, 0n, 2n, 7n, 3n, 2n, 0n, 0n, 3n]]);
-  assert.deepEqual(choose('A', 2n, 4n), [
-    ['A', 2n, 2n, 0n, 2n, 0n, 4n, 2n, 4n, 4n, 4n], ['B', 2n, 2n, 0n, 2n, 0n, 0n, 2n, 4n, 4n, 2n],
-  ]);
-  assert.deepEqual(choose('B', 8n, 3n), [['B', 2n, 2n, 0n, 8n, 4n, 3n, 2n, 4n, 4n, 3n]]);
-  assert.deepEqual(choose('B', 0n, 1n), [['B', 2n, 2n, 0n, 0n, 0n, 1n, 2n, 4n, 4n, 3n]]);
-  assert.equal(mode, 2n, 'returning to lobby never resets active authority');
+  if (internal) {
+    assert.deepEqual(choose('A', 2n, 2n), [['A', 0n, 1n, 0n, 2n, 1n, 2n, 1n, 1n, 0n, 2n]]);
+    expected = 2n;
+    playMode = GameplayMode.RoomPlay;
+    assert.deepEqual(choose('A', 8n, 3n), [['A', 0n, 1n, 1n, 8n, 3n, 3n, 2n, 1n, 3n, 3n]]);
+    field.push('B');
+    assert.deepEqual(choose('B', 0n, 1n), [['B', 0n, 2n, 0n, 0n, 0n, 1n, 2n, 6n, 6n, 0n]]);
+    assert.deepEqual(choose('B', 2n, 2n), [['B', 0n, 2n, 0n, 2n, 6n, 2n, 2n, 6n, 6n, 2n]]);
+    assert.deepEqual(choose('A', 2n, 3n), [['A', 0n, 2n, 0n, 2n, 7n, 3n, 2n, 0n, 0n, 3n]]);
+    assert.deepEqual(choose('A', 2n, 4n), [
+      ['A', 2n, 2n, 0n, 2n, 0n, 4n, 2n, 4n, 4n, 4n], ['B', 2n, 2n, 0n, 2n, 0n, 0n, 2n, 4n, 4n, 2n],
+    ]);
+    assert.deepEqual(choose('B', 8n, 3n), [['B', 2n, 2n, 0n, 8n, 4n, 3n, 2n, 4n, 4n, 3n]]);
+    assert.deepEqual(choose('B', 0n, 1n), [['B', 2n, 2n, 0n, 0n, 0n, 1n, 2n, 4n, 4n, 3n]]);
+    assert.equal(mode, 2n, 'returning to lobby never resets active authority');
+  } else {
+    assert.deepEqual(choose('A', 2n, 2n), [['A', 0n, 1n, 0n, 2n, 5n, 2n, 1n, 1n, 0n, 2n]]);
+    assert.deepEqual(choose('A', 1n, 3n), [['A', 0n, 1n, 0n, 1n, 5n, 3n, 1n, 1n, 0n, 3n]]);
+    assert.equal(mode, 0n, 'An unapproved mode cannot acquire authority');
+    assert.deepEqual(choose('A', 8n, 4n), [['A', 8n, 1n, 0n, 8n, 0n, 4n, 1n, 4n, 4n, 4n]]);
+  }
   assert.equal(logs.filter(message => message.endsWith('first_request')).length, 1);
   assert.equal(logs.filter(message => message.endsWith('start_accepted')).length, 1);
 
@@ -133,16 +140,16 @@ export function verifyLobby(source, ts, id) {
   }
   reset(Array.from({ length: 8 }, (_, index) => `P${index + 1}`), 8n, GameplayMode.MatchPlay);
   choose('P1', 0n, 1n);
-  assert.deepEqual(choose('P1', 2n, 2n), [['P1', 0n, 8n, 0n, 2n, 2n, 2n, 3n, 2n, 0n, 2n]]);
+  assert.deepEqual(choose('P1', 2n, 2n), [['P1', 0n, 8n, 0n, 2n, internal ? 2n : 5n, 2n, 3n, 2n, 0n, 2n]]);
   assert.deepEqual(choose('P1', 99n, 3n), [['P1', 0n, 8n, 0n, 99n, 5n, 3n, 3n, 2n, 0n, 3n]]);
   field.push('P9');
   assert.deepEqual(choose('P1', 8n, 4n, true), [['P1', 0n, 9n, 0n, 8n, 5n, 4n, 3n, 2n, 5n, 4n]]);
   return 'lobby authenticates its starter, separates platform entry, rejects stale requests, and locks one mode for 1–8 seats';
 }
 
-export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings }) {
+export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings, internal }) {
   const source = key => game.graphs.find(graph => graph.graphId === ids[key]).code;
-  const lobby = verifyLobby(source('lobby'), ts, ids.lobby);
+  const lobby = verifyLobby(source('lobby'), ts, ids.lobby, internal);
   const { GOLD, PET_COST, SELL_GOLD, TEAM_SIZE, MAX_LEVEL } = game.shopRules;
   const thresholds = game.shopLevelThresholds.slice(1, MAX_LEVEL + 1);
   assert.equal(thresholds.length, MAX_LEVEL);
@@ -156,7 +163,7 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   // Every distinct unit can produce at most MAX_LEVEL - 1 rewards this round.
   // Insertion into the formation briefly adds one slot before removing padding.
   const stockCapacityBound = game.stockBaseLength + (TEAM_SIZE + acquisitions) * (MAX_LEVEL - 1) + 1;
-  assertListCapacity(ids.duel, 'runtime variables shopOne/shopTwo', stockCapacityBound);
+  if (internal) assertListCapacity(ids.duel, 'runtime variables shopOne/shopTwo', stockCapacityBound);
   assertListCapacity(ids.room, 'runtime variable stocks (per seat)', stockCapacityBound);
   const receipts = [];
   const positions = [];
@@ -173,17 +180,20 @@ export function verifyGame(game, ids, ts, { lua53, lua54, workspace, project, ex
   const replayCheck = lua => run(lua, ['tests/native/m3-room-replay.lua', receiptsPath, 'release', positionsPath]);
   const roomReplay = replayCheck(lua53);
   assert.equal(roomReplay, replayCheck(lua54));
-  const { shopFixture, startingLives } = duelFixture(lua53, lua54, project, 'release');
-  const buttons = duelProbeButtons.map(button => ({ ...button, id: Number(button.placeholder) }));
-  const fixtureButtons = fs.readFileSync(path.join(project, 'platform/m2_probe_buttons.ts'), 'utf8');
-  const duel = verifyDuel(source('duel'), fixtureButtons, source('duelFight'), buttons, ts,
-    { ...shopFixture, startingLives, foodSlots: 2, release: true, gated: true },
-    duelReplayOracle(lua53, lua54, project, 'release'));
-  const practice53 = run(lua53, ['tests/native/m1-replay.lua', 'source', 'release']);
-  assert.equal(practice53, run(lua54, ['tests/native/m1-replay.lua', 'source', 'release']));
+  let duel;
+  if (internal) {
+    const { shopFixture, startingLives } = duelFixture(lua53, lua54, project, 'release');
+    const buttons = duelProbeButtons.map(button => ({ ...button, id: Number(button.placeholder) }));
+    const fixtureButtons = fs.readFileSync(path.join(project, 'platform/m2_probe_buttons.ts'), 'utf8');
+    duel = verifyDuel(source('duel'), fixtureButtons, source('duelFight'), buttons, ts,
+      { ...shopFixture, startingLives, foodSlots: 2, release: true, gated: true },
+      duelReplayOracle(lua53, lua54, project, 'release'));
+    const practice53 = run(lua53, ['tests/native/m1-replay.lua', 'source', 'release']);
+    assert.equal(practice53, run(lua54, ['tests/native/m1-replay.lua', 'source', 'release']));
+  }
   const client = (lua, suffix) => {
     const captures = path.join(workspace, `captures-${suffix}.tsv`);
-    const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures]);
+    const trace = run(lua, ['tests/native/game-input.lua', extracted, bindings, captures, internal ? 'internal' : 'formal']);
     return { trace, frames: fs.readFileSync(captures, 'utf8') };
   };
   const gameClient = client(lua53, '53');

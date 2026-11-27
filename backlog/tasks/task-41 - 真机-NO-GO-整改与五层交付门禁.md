@@ -5,13 +5,15 @@ status: In Progress
 assignee:
   - '@FurinyaDev'
 created_date: '2026-11-25 15:40'
-updated_date: '2026-11-26 12:44'
+updated_date: '2026-11-27 03:39'
 labels:
   - device-qa
   - design-v2.0.0
+  - v0.6.0
 dependencies: []
 references:
   - docs/design/manifest.json
+  - docs/PRODUCT.md
 priority: high
 type: feature
 ordinal: 35000
@@ -31,6 +33,7 @@ Design-Version: v2.0.0
 - [x] #2 每个发布候选绑定产品版本、原版参照版本、Git SHA、设计版本与 GIL SHA-256
 - [ ] #3 三种模式均通过实际可用的黑盒和视觉验收层；官方 PC、手机、多人缺证显示为待验
 - [ ] #4 精确候选通过必要 CI 与未参与实现的主力评审后集成 develop
+- [ ] #5 v0.6.0 八人模式的主菜单、商店与阵容、战斗表现、结算有精确候选的离线证据，真机证据独立记录。
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -49,4 +52,6 @@ v0.5.0 one-shot（366bb4189b685629e459ce8f86d19e9aa5317b9c）：T01/T02 独立�
 固定 Steam 官方短片与十个时间点，保留当前客户端及包版本未知的证据边界。三种模式统一动物技能文案。联机商店增加只读能力查看，联机回放按核对过的战斗事件呈现。候选交付工作流复跑 Lua 与实际 Simulator，成品门禁继续分列官方环境与原版同版操作证据。
 
 v0.5.0：CD 基线 366bb41 已回下载并校验。Simulator 复现能力未知时仍发送多人开局，原生文件格式未见损坏。官方多人房主可不在场，应用内发起资格以服务端快照为准。官方 PC、手机、真人联机和原作同版未验；拖动结束与取消在暂有运行证据中无法区分，按安全确认路径验收并单列待验项。
+
+三模式验收条件及 v0.5.0 证据作为历史保留；本版范围以 docs/PRODUCT.md 及其引用的正式构建清单为准。
 <!-- SECTION:NOTES:END -->

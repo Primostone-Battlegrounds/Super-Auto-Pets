@@ -5,15 +5,17 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { gameInterface, gameScript, nativeGame, playerVariables, practiceSeed, signals,
-  stageVariables } from '../../platform/game-native.mjs';
+import { gameInterface, gameScript, graphNames, nativeGame, practiceSeed, roomGraphNames, stageVariables } from '../../platform/game-native.mjs';
 import { assertAssemblySourceLimits, gilListAudit } from './gil-list-limits.mjs';
 import { readDesign } from '../../scripts/design-contract.mjs';
+import { checkFormalBuild, readProductRelease, verifyReleaseCatalog } from '../../scripts/product-release.mjs';
 import { initialAcceptance } from '../../scripts/acceptance-gate.mjs';
 
-const [checkoutArg, scratch, lua53, output] = process.argv.slice(2);
+const [checkoutArg, scratch, lua53, output, flag, ...extra] = process.argv.slice(2);
+assert.ok(!extra.length && (flag === undefined || flag === '--internal'), 'Unknown build profile');
+const internal = flag === '--internal';
 assert.ok(checkoutArg && scratch && lua53 && output,
-  'Usage: node tests/native/verify-game.mjs <MCP checkout> <scratch> <Lua 5.3> <new game package>');
+  'Usage: node tests/native/verify-game.mjs <MCP checkout> <scratch> <Lua 5.3> <new game package> [--internal]');
 assert.equal(process.env.MILIASTRA_ALLOW_LIVE_WRITE, '0');
 assert.ok(!fs.existsSync(output), 'Use a new game package directory');
 
@@ -22,6 +24,8 @@ const git = (directory, args) => execFileSync('git', ['-C', directory, ...args],
 const sourceRevision = git(project, ['rev-parse', 'HEAD']);
 assert.equal(git(project, ['status', '--porcelain', '--untracked-files=all']), '', 'Build from a clean checkout');
 const design = readDesign(project, { selected: process.env.SAP_DESIGN_VERSION, forBuild: true });
+const release = internal ? undefined : readProductRelease(project);
+const registration = internal ? graphNames : roomGraphNames;
 const checkout = fs.realpathSync(checkoutArg);
 const toolRevision = git(checkout, ['rev-parse', 'HEAD']);
 assert.equal(toolRevision, '59c576e41632a6bf6781bbca83a676d0da0374ec');
@@ -37,6 +41,7 @@ const lua54 = process.env.LUA54 || 'lua5.4';
 const versions = [lua53, lua54].map(lua => execFileSync(lua, ['-E', '-v'], { encoding: 'utf8' }).trim());
 assert.match(versions[0], /^Lua 5\.3\./);
 assert.match(versions[1], /^Lua 5\.4\./);
+const catalog = release && verifyReleaseCatalog(project, release.scope, lua53, lua54);
 const loadTool = module => import(pathToFileURL(path.join(checkout, 'src', module)).href);
 const [{ Service }, scene, { toolRegistry }] = await Promise.all([
   loadTool('core.mjs'), loadTool('scene-save.mjs'), loadTool('tool-registry.mjs'),
@@ -70,17 +75,15 @@ const integers = names => names.map(name => ({ name, type: 'integer', value: 0 }
 await stage('scene_remove_entities', { names: ['积木样本'] });
 await stage('scene_set_player_count', { min: 1, max: 8 });
 await stage('scene_add_components', { entity: 'stage', variables: integers(stageVariables) });
-await stage('scene_add_components', { prefab: 'player', variables: integers(playerVariables) });
-for (const [name, parameters] of Object.entries(signals)) {
-  await stage('scene_add_signal', { name, parameters });
-}
 const ids = {};
-for (const [key, name] of Object.entries({
-  lobby: 'AP_GameLobby', duel: 'AP_Duel', duelFight: 'AP_DuelBattle', room: 'AP_EightRoom', roomFight: 'AP_EightFight',
-})) {
+for (const [key, name] of Object.entries(registration)) {
   ids[key] = (await stage('scene_add_graph', { name, attachTo: 'stage' })).graphId;
 }
-const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids);
+const game = nativeGame(lua53, lua54, requireTool('luaparse').parse, ids, release?.scope);
+await stage('scene_add_components', { prefab: 'player', variables: integers(game.playerVariables) });
+for (const [name, parameters] of Object.entries(game.signals)) {
+  await stage('scene_add_signal', { name, parameters });
+}
 for (const { graphId, code } of game.graphs) assertAssemblySourceLimits(graphId, code, ts);
 await stage('write_graphs', { graphs: game.graphs });
 await stage('scene_set_client_script', {
@@ -95,7 +98,9 @@ assert.equal(built.offPhoneCanvas, undefined);
 const { players } = scene.listRespawnPoints({ mapPath });
 assert.deepEqual(players, { min: 1, max: 8 });
 const registered = await call('scene_list_signals');
-for (const [name, fields] of Object.entries(signals)) assert.deepEqual(registered.parameters[name], fields);
+for (const [name, fields] of Object.entries(game.signals)) assert.deepEqual(registered.parameters[name], fields);
+assert.deepEqual(Object.keys(registered.parameters).filter(name => name.startsWith('AP_')).sort(),
+  Object.keys(game.signals).sort());
 const inspected = service.inspectMap({ mapPath });
 const listCapacity = readListCapacity(fs.readFileSync(mapPath));
 assert.deepEqual(listCapacity.map(graph => graph.id).sort(), Object.values(ids).sort());
@@ -118,6 +123,14 @@ for (const [key, name, role] of signalLinks) {
 const { scripts } = await call('scene_list_client_scripts', { includeSource: true });
 assert.deepEqual(scripts.map(({ name }) => name), [gameScript]);
 assert.equal(scripts[0].source, game.source);
+if (release) {
+  assert.doesNotMatch(scripts[0].source, /AP_Duel|practice_view|duel_view|factories\['autopets\.(?:run|bot)'\]/u);
+  const boundary = scripts[0].source.indexOf('local online_portrait_home');
+  assert.ok(boundary > 0, 'Expected scoped client catalog in GIL');
+  const catalogSource = path.join(workspace, 'readback-catalog.lua');
+  fs.writeFileSync(catalogSource, scripts[0].source.slice(0, boundary) + 'return native_catalog\n');
+  assert.deepEqual(verifyReleaseCatalog(project, release.scope, lua53, lua54, catalogSource), catalog);
+}
 const { interface: ui } = await call('scene_get_client_ui', { ui: gameInterface });
 assert.deepEqual(ui.scripts, [{ name: gameScript, values: { seed: practiceSeed } }]);
 for (const flag of ['showCursor', 'blockCursor', 'blockKeys']) assert.equal(ui[flag], game.layout[flag], flag);
@@ -161,6 +174,11 @@ function readControls(expected, actual, parent, bounds) {
 }
 readControls(game.layout.controls, ui.controls, null, [1280, 720]);
 assert.ok(controls.length <= 1000);
+if (release) {
+  const choices = controls.filter(control => control.parent === 'Lobby/Choices');
+  assert.deepEqual(choices.map(choice => choice.path), ['Lobby/Choices/Room']);
+  assert.ok(controls.every(control => !/^(?:Duel|Practice)(?:\/|$)/u.test(control.path)));
+}
 const extracted = path.join(workspace, `${gameScript}.lua`);
 fs.writeFileSync(extracted, scripts[0].source);
 const bindings = path.join(workspace, 'controls.tsv');
@@ -168,22 +186,27 @@ fs.writeFileSync(bindings, controls.map(control => [control.path, Number(control
   ...(control.position), ...control.size].join('\t')).join('\n') + '\n');
 
 const tests = await import('./game-verification.mjs');
-const simulation = tests.verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings });
+const simulation = tests.verifyGame(game, ids, ts, { lua53, lua54, workspace, project, extracted, bindings, internal });
 const frames = tests.readGameFrames(simulation.frames, controls);
 assert.equal(sha256(fs.readFileSync(fixture)), fixtureHash);
 assert.equal(sha256(fs.readFileSync(input)), fixtureHash);
-const gil = 'super-auto-pets.gil';
+const gil = internal ? 'super-auto-pets-internal.gil' : 'super-auto-pets.gil';
 const hash = sha256(fs.readFileSync(mapPath));
 assert.equal(inspected.sha256, hash);
 fs.mkdirSync(output, { recursive: true });
 fs.copyFileSync(mapPath, path.join(output, gil), fs.constants.COPYFILE_EXCL);
 fs.copyFileSync(path.join(checkout, 'LICENSE'), path.join(output, 'MCP-FIXTURE-LICENSE.txt'));
-fs.copyFileSync(new URL('../../platform/GAME.md', import.meta.url), path.join(output, 'README.md'));
+fs.copyFileSync(new URL(internal ? '../../platform/INTERNAL-GAME.md' : '../../platform/GAME.md', import.meta.url), path.join(output, 'README.md'));
 const build = {
-  ...design, version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
+  ...design,
+  ...(release && { gameVersion: release.scope.gameVersion, releaseScopeSha256: release.releaseScopeSha256,
+    modes: release.scope.modes, catalog }),
+  buildProfile: internal ? 'internal' : 'formal',
+  version: `develop-${sourceRevision.slice(0, 12)}`, sourceRevision, toolRevision, fixtureHash, lua: versions,
   node: process.version, sha256: hash, players, controls: controls.length, graphs, listCapacity, ...simulation.evidence,
   officialClient: 'pending',
 };
+if (release) checkFormalBuild(project, build);
 const buildJson = JSON.stringify(build, null, 2) + '\n';
 fs.writeFileSync(path.join(output, 'BUILD.json'), buildJson);
 fs.writeFileSync(path.join(output, 'ACCEPTANCE.json'), JSON.stringify(initialAcceptance(build, buildJson), null, 2) + '\n');

@@ -6,15 +6,17 @@ local request_id, last_view = 0, 0
 local availability, snapshot_age, pending, saw_lobby
 local bindings = {}
 local borrowed_portraits = {}
-local online_modes = {[2] = "好友 1v1", [8] = "八人吃鸡"}
+local online_modes = {[8] = "八人吃鸡"}
+-- @internal begin
+online_modes[2] = "好友 1v1"
+-- @internal end
 local entry_labels = {[2] = "房间", [3] = "匹配"}
 local refusal = {
-    [1] = "等待好友进入关卡，两人到齐后再开局。",
-    [2] = "好友 1v1 需要恰好两名玩家，请调整千星房间人数。",
+
     [3] = "部分玩家仍在加载，可以等待或确认机器人补位。",
     [4] = "关卡已有对局，可从主菜单回到本局。",
     [5] = "当前人数无法开始这场对局。",
-    [6] = "等待关卡内的发起者开始对局，你也可以先练习。",
+    [6] = "等待关卡内的发起者开始对局。",
     [7] = "这次请求已失效，请重新选择。",
 }
 
@@ -58,7 +60,7 @@ end
 local function start_online(choice)
     if pending then return end
     if not availability then
-        feedback("千星关卡状态未同步。可以稍后重试，或先开始 AI 练习。")
+        feedback("千星关卡状态未同步。可以稍后重试。")
         return
     end
     local reason = availability[choice]
@@ -84,7 +86,9 @@ end
 
 local function show_section(next_section)
     if section == next_section then return end
+    -- @internal begin
     if section == "Practice" and practice then practice.disable() end
+    -- @internal end
     if section then set_visible(root:GetChild(section), false) end
     section = next_section
     if not section then return end
@@ -105,7 +109,7 @@ end
 local function online_portraits(duel)
     -- One authored pool serves the mutually exclusive preparation and replay
     -- views. Keep the original parent/transform so practice can mount fresh.
-    local practice_board = root:GetChild("Practice")
+    local portrait_board = root:GetChild(online_portrait_home)
     local replay = root:FindChild(duel and "Duel/ReplayBoard" or "Room/Match/Replay")
     local room_shop = not duel and root:FindChild("Room/Match/Shop")
     local market = duel and root:FindChild("Duel/MarketOffers")
@@ -114,8 +118,8 @@ local function online_portraits(duel)
     for slot = 1, 5 do
         for _, side in ipairs({"Own", "Enemy"}) do
             local own = side == "Own"
-            local source = own and practice_board:GetChild("Team" .. slot)
-                or practice_board:FindChild(shared_portrait_homes[slot])
+            local source = own and portrait_board:GetChild("Team" .. slot)
+                or portrait_board:FindChild(shared_portrait_homes[slot])
             local picture = source:GetChild("Portrait")
             local label = replay:GetChild(side .. slot)
             local px, py = picture:GetAnchoredPosition()
@@ -208,12 +212,14 @@ local function online_portraits(duel)
 end
 
 local function show_online()
-    local duel = mode == 2
-    local board = duel and "Duel" or "Room"
+    local duel, board, view = false, "Room", room_view
+    -- @internal begin
+    if mode == 2 then duel, board, view = true, "Duel", duel_view end
+    -- @internal end
     show_section(board)
     if online then online.refresh(); return end
-    online = (duel and duel_view or room_view)(root:GetChild(board))
-    local badges = root:FindChild("Duel/ReplayBoard/BadgePool")
+    online = view(root:GetChild(board))
+    local badges = root:FindChild(online_badge_home)
     online.start(root:GetChild(board), online_portraits(duel), badges)
 end
 
@@ -255,16 +261,24 @@ local function receive_lobby(_, values)
     if entry_labels[entry] then count = entry_labels[entry] .. " · " .. count end
     lobby:GetChild("Status").text = label and ("当前对局 · " .. label) or count
     lobby:GetChild("Help").text = label and "联机重开请使用千星房间的「重新挑战」。"
-        or duel_reason == 6 and "等待关卡内的发起者开局。你可以先开始 AI 练习。"
-        or "好友 1v1 请先通过千星好友房间邀请好友，两人进入后即可开始。"
+        or room_reason == 6 and "等待关卡内的发起者开局。"
+        or "从千星好友房间邀请好友，空位由机器人补齐。"
+    -- @internal begin
+    if not label then
+        lobby:GetChild("Help").text = duel_reason == 6 and "等待关卡内的发起者开局。你可以先开始 AI 练习。"
+            or "好友 1v1 请先通过千星好友房间邀请好友，两人进入后即可开始。"
+    end
+    -- @internal end
     if label then
         if matched then print("AUTO_PETS_LOBBY mode_accepted " .. selected) end
         feedback("")
     elseif matched and refusal[reason] then
         print("AUTO_PETS_LOBBY mode_rejected " .. reason)
         feedback(refusal[reason])
+    -- @internal begin
     elseif duel_reason == 0 and lobby:GetChild("Feedback").text == refusal[1] then
         feedback("两位玩家已到齐，点好友 1v1 开局。")
+    -- @internal end
     end
     if entering and section == "Lobby" then show_online() end
 end
@@ -283,6 +297,9 @@ function OnStart()
     set_visual_plates(root)
     lobby = root:GetChild("Lobby")
     bind(lobby, "Choices/Room/Hit", function() start_online(8) end)
+    -- @internal begin
+    refusal[1] = "等待好友进入关卡，两人到齐后再开局。"
+    refusal[2] = "好友 1v1 需要恰好两名玩家，请调整千星房间人数。"
     bind(lobby, "Choices/Duel/Hit", function() start_online(2) end)
     bind(lobby, "Choices/Practice/Hit", function()
         clear_pending()
@@ -295,6 +312,8 @@ function OnStart()
         end
         practice.enable()
     end)
+    bind(root, "Duel/Back/Hit", main_menu)
+    -- @internal end
     bind(lobby, "Cancel/Hit", function()
         clear_pending()
         feedback("已停止等待。若关卡已开局，可从主菜单进入。")
@@ -305,7 +324,6 @@ function OnStart()
         feedback("从千星左上角菜单或 Esc 打开试玩控制，选择退出。")
     end)
     bind(lobby, "Continue/Hit", show_online)
-    bind(root, "Duel/Back/Hit", main_menu)
     bind(root, "Room/Back/Hit", main_menu)
     script:RegisterServerSignalHandler("AP_GameLobby", receive_lobby)
     print("AUTO_PETS_LOBBY client_start")
@@ -315,9 +333,13 @@ end
 function OnEnable()
     local resuming = not active
     active = true
+    -- @internal begin
     if section == "Practice" then
         practice.enable()
-    elseif section then
+        return
+    end
+    -- @internal end
+    if section then
         script:EnableUpdate(true)
         if resuming and section == "Lobby" then main_menu() end
     end
@@ -326,7 +348,9 @@ end
 function OnDisable()
     active = false
     if pending then clear_pending() end
+    -- @internal begin
     if section == "Practice" then practice.disable() end
+    -- @internal end
     script:EnableUpdate(false)
 end
 
@@ -354,8 +378,10 @@ function OnUpdate(dt)
             elapsed = 0
             query_lobby()
         end
+    -- @internal begin
     elseif section == "Practice" then
         practice.update(dt)
+    -- @internal end
     elseif section ~= "Lobby" and online then
         online.update(dt)
     end
@@ -377,7 +403,9 @@ function OnDestroy()
         end
     end
     borrowed_portraits = {}
+    -- @internal begin
     if practice then practice.destroy() end
+    -- @internal end
     for _, binding in ipairs(bindings) do
         if binding[1].alive then binding[1]:RemoveCursorEventListener(click, binding[2]) end
     end

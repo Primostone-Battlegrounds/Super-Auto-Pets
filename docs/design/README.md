@@ -20,3 +20,5 @@ node scripts/check-design.mjs select v2.0.0
 SAP_PR_BODY="$(cat /path/to/pr-body.md)" node scripts/check-design.mjs pr <base-sha>
 node scripts/acceptance-gate.mjs <package>
 ```
+
+产品发布范围及 Active 设计的当前适用关系见 [产品路线图](../PRODUCT.md)。
