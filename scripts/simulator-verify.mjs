@@ -363,6 +363,8 @@ for(const {canvasId,playerCount,mode} of configurations) {
     if (!duel) {
       requireText(`${shop}/Team1/Text`, /^芦纹龟 L2$/u);
       assert.equal(visibleText(`${shop}/Team1/Text`).textLayout.visibleLineCount, 1);
+    }
+    if (formal && !duel) {
       requireText(`${shop}/AbilityBody`, /经验 1\/5/u);
       requireText(`${shop}/Freeze5/Text`, /^已冻结 · 解冻$/u);
       click(`${shop}/InspectOffer4/Hit`);
@@ -509,13 +511,15 @@ for(const {canvasId,playerCount,mode} of configurations) {
       await capture('client-2-replay-loss');
       requireText('Room/Match/Replay/RoundText', /本轮落败/u);
       requireText(eventTrail, /对方获胜/u);
-      api.sendPlaySignal(session, 'AP_RoomView', [3, 4, 1, 2, 3, playerCount, 0, true,
-        [5, 4, 5, 5, 5, 5, 5, 5], Array(8).fill(0), [2,1,4,3,6,5,8,7], [1,2,0,0,0,0,0,0], [], 0, 7], 'Player2');
-      await capture('client-2-round-settlement');
-      requireText('Room/Match/Hint', /本轮落败 · 损失 1 命 · 剩余 4 命/su);
+      if (formal) {
+        api.sendPlaySignal(session, 'AP_RoomView', [3, 4, 1, 2, 3, playerCount, 0, true,
+          [5, 4, 5, 5, 5, 5, 5, 5], Array(8).fill(0), [2,1,4,3,6,5,8,7], [1,2,0,0,0,0,0,0], [], 0, 7], 'Player2');
+        await capture('client-2-round-settlement');
+        requireText('Room/Match/Hint', /本轮落败 · 损失 1 命 · 剩余 4 命/su);
+      }
       api.setPlayView(session, 1);
     }
-    if (!duel) {
+    if (formal && !duel) {
       api.sendPlaySignal(session, 'AP_RoomView', [4, 4, 1, 1, 4, playerCount, 0, true,
         [5,4,5,5,5,5,5,5], Array(8).fill(0), [2,1,4,3,6,5,8,7], [1,2,0,0,0,0,0,0], [], 0, 7], 'Player1');
       await capture('client-1-round-settlement');
@@ -579,7 +583,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
         assert.match(measurement.lines[0], expected);
       }
     }
-    if (!duel && ((canvasId === 'pc-16-9' && playerCount === 2) || (canvasId === 'mobile-19.5-9' && playerCount === 1))) {
+    if (formal && !duel && ((canvasId === 'pc-16-9' && playerCount === 2) || (canvasId === 'mobile-19.5-9' && playerCount === 1))) {
       // A separate, later market fixture checks touch dispatch and the authority acknowledgement independently.
       const state = [...market];
       state[0] = 7;
@@ -651,7 +655,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
       assert.equal(visibleText(`${shop}/Team1/Text`)?.text ?? '', '', 'Selling clears the companion name');
       assert.ok(!sold.paint.some(item => item.id === portraits[0]), 'Selling clears the companion portrait');
     }
-    if (!duel) {
+    if (formal && !duel) {
       const result = 'Room/Match/Settlement';
       const resultReplay = 'Room/Match/ResultReplay/Hit';
       const runnerUp = playerCount === 8;

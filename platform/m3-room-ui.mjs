@@ -12,7 +12,7 @@ const browse = [
   ['RewardNext', '下个奖励'],
 ];
 
-function roomLayout(unified) {
+function roomLayout(unified, formal = false) {
   function button(name, x, y, width, height, text, primary = false, fontSize = 17, fill = pigment.chip, art) {
     const size = [width, height];
     const captionSize = [width - 10, height];
@@ -65,7 +65,7 @@ function roomLayout(unified) {
   }
 
   const replayActions = [['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'],
-    ...(unified ? [['Speed', '倍速 · 1x']] : []), ['Follow', '跳过回放']];
+    ...(formal ? [['Speed', '倍速 · 1x']] : []), ['Follow', '追到最新']];
   return {
     name: 'AP_Room',
     script: 'm3_room_ui',
@@ -90,9 +90,9 @@ function roomLayout(unified) {
           ] : []),
           label('Money', [0, unified ? 174 : 160], [810, 36], '', unified ? 25 : 22, pigment.ink, 'left'),
           ...slots.flatMap(slot => [
-            ...(slot <= 3 || unified ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154,
+            ...(slot <= 3 || formal ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154,
               unified ? 96 : 80, slot <= 3 ? clearing.nearTrack : clearing.farTrack, slot <= 3 ? 'offer' : 'food')
-              : [button(`Offer${slot}`, slotX(slot), -7, 154, 80, '', false, 17, clearing.farTrack, 'offer')]),
+              : [button(`Offer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, '', false, 17, clearing.farTrack, 'offer')]),
             button(`Freeze${slot}`, slotX(slot), unified ? -80 : -74, 154, 48, '冻结', false, 19),
             ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), unified ? 103 : 94, 154, unified ? 96 : 76, pigment.rail, 'team'),
           ]),
@@ -104,11 +104,11 @@ function roomLayout(unified) {
               : [button(name, x, y, 154, 52, text, false, unified ? 19 : 17)];
           }),
           label('AbilityTitle', [0, unified ? -124 : -182], [810, unified ? 32 : 28],
-            unified ? '点「技能」或「详情」查看' : '点动物旁的「技能」查看', unified ? 22 : 18,
+            formal ? '点「技能」或「详情」查看' : '点动物旁的「技能」查看', unified ? 22 : 18,
             unified ? '#65441d' : pigment.ink, 'left'),
           label('AbilityBody', [0, unified ? -155 : -215], [810, 38], '', unified ? 20 : 17, pigment.ink, 'left'),
         ], false),
-        ...(unified ? [
+        ...(formal ? [
           group('Settlement', [0, -12], [832, 426], [
             image('Paper', [0, 0], [820, 414], '#f7eed7'),
             label('Placement', [0, 88], [774, 84], '', 55, clearing.ink),
@@ -141,8 +141,8 @@ function roomLayout(unified) {
           ]),
           label('Event', [0, unified ? -107 : -72], [800, unified ? 32 : 50], '', unified ? 19 : 18, unified ? '#65441d' : pigment.ink),
           ...replayActions.map(([name, text], index) => button(name,
-            (index - (replayActions.length - 1) / 2) * (unified ? 162 : 202), unified ? -170 : -133,
-            unified ? 152 : 188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
+            (index - (replayActions.length - 1) / 2) * (formal ? 162 : 202), unified ? -170 : -133,
+            formal ? 152 : 188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
         ], false),
         unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),
         unified ? button('Ready', 310, shopActionsY, 206, 82, '准备 · F', true, 24)
@@ -158,6 +158,7 @@ function roomLayout(unified) {
 
 export const m3RoomLayout = roomLayout(false);
 export const unifiedRoomLayout = roomLayout(true);
+export const formalRoomLayout = roomLayout(true, true);
 
 function catalogLua(items) {
   return Object.entries(items).map(([rawCode, value]) => {
@@ -174,9 +175,10 @@ function catalogLua(items) {
   }).join(',');
 }
 
-export function roomClientSource(template, { pet, food, battle = pet }) {
+export function roomClientSource(template, { pet, food, battle = pet }, formal = false) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
+    `local formal_room_ui = ${formal}`,
     onlineBadgeSource,
     `local standings = (function()\n${shared}\nend)()`,
     `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,
