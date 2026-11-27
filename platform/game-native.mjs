@@ -5,7 +5,7 @@ import { button, group, image, label, nativeRun, pigment, portrait } from './m1-
 import { duelClientSource, duelGraphs, duelLayout, duelSignals, duelVariables } from './m2-duel-native.mjs';
 import { nativeBattle } from './m3-battle-opening.mjs';
 import { nativeRoom, roomSignals } from './m3-room-native.mjs';
-import { roomClientSource, unifiedRoomLayout } from './m3-room-ui.mjs';
+import { formalRoomLayout, roomClientSource, unifiedRoomLayout } from './m3-room-ui.mjs';
 import { onlineBadgePool } from './multiplayer-standings.mjs';
 import { nativeShop } from './versus-shop.mjs';
 
@@ -93,7 +93,7 @@ function layout(duelRules, internal) {
       ...(internal
         ? [view('Practice', practice), view('Duel', [...duelLayout(duelRules).controls, back(221, 278)])]
         : [portraitPool, onlineBadgePool()]),
-      view('Room', [...unifiedRoomLayout.controls, back(-145, 276)]),
+      view('Room', [...(internal ? unifiedRoomLayout : formalRoomLayout).controls, back(-145, 276)]),
     ],
   };
 }
@@ -136,7 +136,7 @@ export function nativeGame(lua53, lua54, parse, ids, release) {
       views.push(wrap('duel_view', duelUi,
         { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'request_snapshot' }, 'view_root'));
     }
-    const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog);
+    const roomUi = roomClientSource(convert('./m3_room_ui.lua'), room.shopCatalog, !internal);
     views.push(wrap('room_view', roomUi, { start: 'OnStart', update: 'OnUpdate', destroy: 'OnDestroy', refresh: 'refresh' }));
     const portraitHome = internal ? 'Practice' : 'PortraitPool';
     const badgeHome = internal ? 'Duel/ReplayBoard/BadgePool' : 'BadgePool';

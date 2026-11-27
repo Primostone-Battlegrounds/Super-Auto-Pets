@@ -1,6 +1,7 @@
 package.path = "src/?.lua;" .. package.path
 
 local battle = require("autopets.battle")
+local animal_ability = require("autopets.animal_ability")
 local compatibility = require("autopets.data")
 local release = require("autopets.release_data")
 local shop = require("autopets.shop")
@@ -85,17 +86,81 @@ for seed = 1, 64 do
         assert(state.round == round and state.tier == release.tier_for_round(round))
         for index, shelf in ipairs({state.pets, state.foods}) do
             local by_id = index == 1 and release.pet_by_id or release.food_by_id
-            for _, offer in ipairs(shelf) do
+            for slot, offer in ipairs(shelf) do
                 assert(by_id[offer.id].tier <= state.tier)
-                observed[offer.id] = true
+                if index == 1 or round > 1 then
+                    observed[offer.id] = observed[offer.id] or {seed = seed, round = round, slot = slot}
+                end
             end
         end
         advance(release_store, release)
         if round < 7 then advance(legacy_store) end
     end
 end
-for _, entry in ipairs(release.pets) do assert(observed[entry.id], entry.id) end
-for _, entry in ipairs(release.foods) do assert(observed[entry.id], entry.id) end
+local function offered(entry, with_team)
+    local witness = assert(observed[entry.id], entry.id)
+    local store = shop.new(witness.seed, release)
+    if with_team then
+        for slot = 1, release.rules.pet_shop_slots do assert(store:buy(slot)) end
+    end
+    for _ = 2, witness.round do advance(store, release) end
+    return store, witness.slot
+end
+
+for _, pet in ipairs(release.pets) do
+    local store, slot = offered(pet)
+    local before = store:snapshot()
+    assert(before.pets[slot].id == pet.id and store:buy(slot), pet.id)
+    local after = store:snapshot()
+    assert(after.gold == before.gold - release.rules.pet_cost and not after.pets[slot], pet.id)
+    local bought = after.team[1]
+    assert(bought.id == pet.id and bought.attack == pet.attack and bought.health == pet.health, pet.id)
+    assert(bought.level == 1 and bought.xp == 0, pet.id)
+    local lineup = assert(store:finish_turn())
+    local opponent = {unit("alder_marmot", 1, 24), unit("alder_marmot", 1, 24)}
+    local result = resolve(lineup, opponent)
+    assert(equal(result, resolve(lineup, opponent)), pet.id)
+    local initial = result.events[1].board.player[1]
+    assert(initial.id == pet.id and initial.attack == bought.attack and initial.health == bought.health, pet.id)
+    assert(store:record_battle(result, "player"), pet.id)
+    local settled = store:snapshot()
+    assert(settled.phase == "settlement" and settled.last_outcome == result.outcome, pet.id)
+    assert(equal(settled.team, after.team), pet.id)
+
+    -- A controlled opponent exercises the skill trigger even when a normal
+    -- match finishes before a hurt, faint or second-slot attack can occur.
+    if pet.ability.trigger == "faint" then opponent[1].attack = bought.health end
+    if pet.ability.trigger == "summon" then
+        table.insert(lineup, 1, unit("cottontail_rabbit", 2, 1))
+    end
+    local uses = events(resolve(lineup, opponent), "skill", nil, pet.id)
+    assert(uses[1] and uses[1].event.side == "player" and uses[1].event.ability == pet.ability.name, pet.id)
+    assert(uses[1].event.trigger == pet.ability.trigger, pet.id)
+    for level = 1, release.rules.max_level do
+        local heading, detail = animal_ability.describe(release, pet, level, true)
+        assert(heading == string.format("%s · L%d · %s", pet.name, level, pet.ability.name) and detail ~= "", pet.id)
+    end
+end
+
+for _, food in ipairs(release.foods) do
+    local store, slot = offered(food, true)
+    local before = store:snapshot()
+    assert(before.foods[slot].id == food.id and store:feed(slot, 2), food.id)
+    local after = store:snapshot()
+    assert(after.gold == before.gold - release.rules.food_cost and not after.foods[slot], food.id)
+    for target, original in ipairs(before.team) do
+        local fed = after.team[target]
+        assert(fed.uid == original.uid and fed.level == original.level and fed.xp == original.xp, food.id)
+        local attack = target == 2 and food.attack or food.adjacent_attack or 0
+        local health = target == 2 and food.health or food.adjacent_health or 0
+        assert(fed.attack == original.attack + attack and fed.health == original.health + health, food.id)
+    end
+    local fed = assert(store:finish_turn())
+    local result = resolve(fed, {unit("reed_turtle", 1, 8)})
+    local target = result.events[1].board.player[2]
+    assert(target.attack == fed[2].attack and target.health == fed[2].health, food.id)
+    assert(store:record_battle(result, "player") and equal(store:snapshot().team, fed), food.id)
+end
 
 -- A frozen first-tier copy can deliver a next-tier reward before that tier opens.
 for round, reward_tier in pairs({[5] = 4, [7] = 5, [9] = 6, [11] = 6}) do
@@ -196,4 +261,4 @@ for level = 1, 3 do
     end
 end
 
-print("release content tests passed (18 pets, 12 foods, 6 tiers, levels, timing and adjacency)")
+print("release content tests passed (18 pets bought and triggered, 12 foods fed, 6 tiers, levels and settlement)")

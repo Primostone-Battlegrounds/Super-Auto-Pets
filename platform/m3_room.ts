@@ -228,6 +228,7 @@ g.server({
     stocks: dict('int', 'int_list', 0),
     fightStarted: list('int', [0n, 0n, 0n, 0n]),
     fightSeeds: list('int', [0n, 0n, 0n, 0n]),
+    replayTeams: dict('int', 'int_list', 0), replayRound: 0n,
     scheduledFrame: -1n, scheduledPair: -1n, acceptedFrame: -1n,
     phase: lobby, round: 0n, revision: 0n, cursor: 0n, presenceCursor: 0n, deadline: -1n, untilEnd: -1n, lastTick: -1n,
     alive: 0n, winner: 0n, readyCount: 0n, fightCount: 0n, place: 0n, forceRank: false, broadcast: false,
@@ -338,6 +339,8 @@ g.server({
       f.set('results', f.assemblyList([0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n], 'int'));
       f.set('fightStarted', f.assemblyList([0n, 0n, 0n, 0n], 'int'));
       f.set('fightSeeds', f.assemblyList([0n, 0n, 0n, 0n], 'int'));
+      f.set('replayTeams', dict('int', 'int_list', 0));
+      f.set('replayRound', round);
       f.set('fightCount', f.getListLength(pairings) / 2n);
       phase = combat;
       cursor = 0n;
@@ -566,6 +569,24 @@ g.server({
     gstsServerRoomPublic(f, table, roomLivesAt), gstsServerRoomPublic(f, table, roomPlacesAt),
     gstsServerRoomPublic(f, table, roomOpponentAt), f.get('results'), market, event.params.token,
     f.takeLargerValue(f.get('deadline') - now, 0n));
+  // A read-only sync can restore a receipt missed while the same owner was absent.
+  if (action === 0n && seat >= 0n && round === f.get('replayRound')) {
+    const pairings = f.get('pairs');
+    const replays = f.get('replayTeams');
+    const count = f.getListLength(pairings) / 2n;
+    for (let pair = 0n; pair < count; pair += 1n) {
+      const index = pair * 2n;
+      const left = f.getCorrespondingValueFromList(pairings, index);
+      const right = f.getCorrespondingValueFromList(pairings, index + 1n);
+      if ((seat === left || seat === right) && f.queryIfDictionaryContainsSpecificKey(replays, index)) {
+        const outcome = f.getCorrespondingValueFromList(f.get('results'), left);
+        const seed = f.getCorrespondingValueFromList(f.get('fightSeeds'), pair);
+        f.sendSignal(roomReplay, player, round, left + 1n, right + 1n, outcome, seed,
+          f.queryDictionaryValueByKey(replays, index), f.queryDictionaryValueByKey(replays, index + 1n));
+        break;
+      }
+    }
+  }
 })
 .onSignal(roomFightDone, (event, f) => {
   const self = f.getSelfEntity();
@@ -603,6 +624,10 @@ g.server({
     const stocks = f.get('stocks');
     first = gstsServerRoomFormation(f, f.queryDictionaryValueByKey(stocks, left));
     second = gstsServerRoomFormation(f, f.queryDictionaryValueByKey(stocks, right));
+    const replays = f.get('replayTeams');
+    f.setOrAddKeyValuePairsToDictionary(replays, pair * 2n, first);
+    f.setOrAddKeyValuePairsToDictionary(replays, pair * 2n + 1n, second);
+    f.set('replayTeams', replays);
   }
   for (let side = 0n; side < 2n; side += 1n) {
     const seat = f.getCorrespondingValueFromList(pairings, pair * 2n + side);

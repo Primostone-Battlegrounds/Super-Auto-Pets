@@ -12,7 +12,7 @@ const browse = [
   ['RewardNext', '下个奖励'],
 ];
 
-function roomLayout(unified) {
+function roomLayout(unified, formal = false) {
   function button(name, x, y, width, height, text, primary = false, fontSize = 17, fill = pigment.chip, art) {
     const size = [width, height];
     const captionSize = [width - 10, height];
@@ -20,7 +20,7 @@ function roomLayout(unified) {
     const visualSize = [...size];
     const inspect = unified && name.startsWith('Inspect');
     const inspectY = name === 'InspectReward' ? 0 : -13;
-    const lake = name.startsWith('Freeze') || ['Previous', 'Forward', 'Auto', 'Follow'].includes(name);
+    const lake = name.startsWith('Freeze') || ['Previous', 'Forward', 'Auto', 'Speed', 'Follow'].includes(name);
     let surface = unified
       ? (inspect ? terrain('Surface', [0, inspectY], [width, 34], clearing.teal)
         : primary || lake ? image('Surface', [0, 0], size, primary ? '#fff5da' : '#719486', { image: primary ? 107015 : 107012 })
@@ -61,9 +61,11 @@ function roomLayout(unified) {
       surface.size[0] = width - inspectWidth - 12;
     }
     return [main, button(inspect, x + (width - inspectWidth) / 2, y, inspectWidth, height,
-      '技能', false, unified ? 16 : 17, '#b8d9c8')];
+      art === 'food' ? '详情' : '技能', false, unified ? 16 : 17, '#b8d9c8')];
   }
 
+  const replayActions = [['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'],
+    ...(formal ? [['Speed', '倍速 · 1x']] : []), ['Follow', '追到最新']];
   return {
     name: 'AP_Room',
     script: 'm3_room_ui',
@@ -88,7 +90,8 @@ function roomLayout(unified) {
           ] : []),
           label('Money', [0, unified ? 174 : 160], [810, 36], '', unified ? 25 : 22, pigment.ink, 'left'),
           ...slots.flatMap(slot => [
-            ...(slot <= 3 ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, clearing.nearTrack, 'offer')
+            ...(slot <= 3 || formal ? inspectable(`Offer${slot}`, `InspectOffer${slot}`, slotX(slot), -7, 154,
+              unified ? 96 : 80, slot <= 3 ? clearing.nearTrack : clearing.farTrack, slot <= 3 ? 'offer' : 'food')
               : [button(`Offer${slot}`, slotX(slot), -7, 154, unified ? 96 : 80, '', false, 17, clearing.farTrack, 'offer')]),
             button(`Freeze${slot}`, slotX(slot), unified ? -80 : -74, 154, 48, '冻结', false, 19),
             ...inspectable(`Team${slot}`, `InspectTeam${slot}`, -slotX(slot), unified ? 103 : 94, 154, unified ? 96 : 76, pigment.rail, 'team'),
@@ -100,10 +103,21 @@ function roomLayout(unified) {
             return name === 'Reward' ? inspectable(name, 'InspectReward', x, y, 154, 52)
               : [button(name, x, y, 154, 52, text, false, unified ? 19 : 17)];
           }),
-          label('AbilityTitle', [0, unified ? -124 : -182], [810, unified ? 32 : 28], '点动物旁的「技能」查看', unified ? 22 : 18,
+          label('AbilityTitle', [0, unified ? -124 : -182], [810, unified ? 32 : 28],
+            formal ? '点「技能」或「详情」查看' : '点动物旁的「技能」查看', unified ? 22 : 18,
             unified ? '#65441d' : pigment.ink, 'left'),
           label('AbilityBody', [0, unified ? -155 : -215], [810, 38], '', unified ? 20 : 17, pigment.ink, 'left'),
         ], false),
+        ...(formal ? [
+          group('Settlement', [0, -12], [832, 426], [
+            image('Paper', [0, 0], [820, 414], '#f7eed7'),
+            label('Placement', [0, 88], [774, 84], '', 55, clearing.ink),
+            label('Summary', [0, 6], [774, 56], '', 26, pigment.ink),
+            label('ReplayGuide', [0, -86], [774, 42], '', 22, pigment.muted),
+            label('RestartGuide', [0, -135], [774, 52], '在千星房间选择「重新挑战」可再开一局', 22, pigment.muted),
+          ], false),
+          { ...button('ResultReplay', 0, shopActionsY, 260, 82, '回看最后一战', true, 24), visible: false, active: false },
+        ] : []),
         group('Replay', [0, 10], [832, unified ? 426 : 370], [
           ...(unified ? [
             image('Meadow', [0, 22], [820, 228], clearing.grass),
@@ -126,9 +140,9 @@ function roomLayout(unified) {
             label(`Enemy${slot}`, [48 + (slot - 1) * 80, unified ? 31 : 24], [unified ? 80 : 78, 112], '', unified ? 19 : 14, pigment.ink),
           ]),
           label('Event', [0, unified ? -107 : -72], [800, unified ? 32 : 50], '', unified ? 19 : 18, unified ? '#65441d' : pigment.ink),
-          ...[['Previous', '上一帧'], ['Forward', '下一帧'], ['Auto', '暂停'], ['Follow', '追到最新']]
-            .map(([name, text], index) => button(name, (index - 1.5) * 202, unified ? -170 : -133,
-              188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
+          ...replayActions.map(([name, text], index) => button(name,
+            (index - (replayActions.length - 1) / 2) * (formal ? 162 : 202), unified ? -170 : -133,
+            formal ? 152 : 188, unified ? 82 : 52, text, false, unified ? 23 : 17)),
         ], false),
         unified ? button('Refresh', 159, 276, 152, 48, '同步 · E') : button('Refresh', -327, -254, 164, 48, '同步 · E'),
         unified ? button('Ready', 310, shopActionsY, 206, 82, '准备 · F', true, 24)
@@ -144,6 +158,7 @@ function roomLayout(unified) {
 
 export const m3RoomLayout = roomLayout(false);
 export const unifiedRoomLayout = roomLayout(true);
+export const formalRoomLayout = roomLayout(true, true);
 
 function catalogLua(items) {
   return Object.entries(items).map(([rawCode, value]) => {
@@ -160,9 +175,10 @@ function catalogLua(items) {
   }).join(',');
 }
 
-export function roomClientSource(template, { pet, food, battle = pet }) {
+export function roomClientSource(template, { pet, food, battle = pet }, formal = false) {
   const shared = fs.readFileSync(new URL('./multiplayer_standings.lua', import.meta.url), 'utf8');
   return [
+    `local formal_room_ui = ${formal}`,
     onlineBadgeSource,
     `local standings = (function()\n${shared}\nend)()`,
     `local pets = {${catalogLua(pet)}}`, `local foods = {${catalogLua(food)}}`,

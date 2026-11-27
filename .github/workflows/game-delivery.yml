@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/game-delivery.yml
       - scripts/verify-delivery.mjs
+      - scripts/simulator-verify.mjs
       - platform/product-release.json
       - scripts/product-release.mjs
   workflow_dispatch:
