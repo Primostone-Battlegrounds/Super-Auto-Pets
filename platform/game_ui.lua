@@ -110,10 +110,16 @@ local function online_portraits(duel)
     -- One authored pool serves the mutually exclusive preparation and replay
     -- views. Keep the original parent/transform so practice can mount fresh.
     local portrait_board = root:GetChild(online_portrait_home)
-    local replay = root:FindChild(duel and "Duel/ReplayBoard" or "Room/Match/Replay")
-    local room_shop = not duel and root:FindChild("Room/Match/Shop")
-    local market = duel and root:FindChild("Duel/MarketOffers")
-    local duel_board = duel and root:GetChild("Duel")
+    local replay = root:FindChild("Room/Match/Replay")
+    local room_shop = root:FindChild("Room/Match/Shop")
+    local market, duel_board
+    -- @internal begin
+    if duel then
+        replay = root:FindChild("Duel/ReplayBoard")
+        market = root:FindChild("Duel/MarketOffers")
+        duel_board = root:GetChild("Duel")
+    end
+    -- @internal end
     local pictures, replay_slots = {}, {}
     for slot = 1, 5 do
         for _, side in ipairs({"Own", "Enemy"}) do
