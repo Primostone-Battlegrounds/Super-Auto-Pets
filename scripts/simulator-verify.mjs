@@ -121,7 +121,7 @@ for(const {canvasId,playerCount,mode} of configurations) {
     api.sendPlaySignal(session, 'AP_GameLobby', [0, 1, 0, 0, 0, statusToken(), 1, 1, 0, 0]);
     await capture('lobby-fixture');
     requireText('Lobby/Status', /已进入 1 人/u);
-    assert.equal(visibleText('Lobby/Feedback')?.text, undefined, 'A current room snapshot clears the outdated connection message');
+    assert.equal(visibleText('Lobby/Feedback')?.text ?? '', '', 'A current room snapshot clears the outdated connection message');
     if (!formal) {
       click('Lobby/Choices/Duel/Hit');
       await capture('duel-wait-fixture');
@@ -646,9 +646,10 @@ for(const {canvasId,playerCount,mode} of configurations) {
       state.fill(0, 11, 17);
       version++;
       showMarket(sellAck);
-      await capture('client-1-sell-ack');
+      const sold = await capture('client-1-sell-ack');
       requireText(`${shop}/Money`, /金币 12/u);
-      assert.ok(!visibleText(`${shop}/Team1/Text`), 'Selling removes the companion from the lineup');
+      assert.equal(visibleText(`${shop}/Team1/Text`)?.text ?? '', '', 'Selling clears the companion name');
+      assert.ok(!sold.paint.some(item => item.id === portraits[0]), 'Selling clears the companion portrait');
     }
     if (!duel) {
       const result = 'Room/Match/Settlement';
@@ -666,6 +667,10 @@ for(const {canvasId,playerCount,mode} of configurations) {
       requireText(`${result}/RestartGuide`, /千星房间.*重新挑战/u);
       requireText('Room/Standings/Seat8Detail', /第 8 名/u);
       assert.ok(!visibleText('Room/Match/Forfeit/Text') && !visibleText(`${shop}/Money`));
+      const statusBounds = box('Room/Match/Status');
+      const paperBounds = box(`${result}/Paper`);
+      assert.ok(Math.abs(statusBounds.centerY - paperBounds.centerY) >= (statusBounds.height + paperBounds.height) / 2,
+        'The settlement paper must not cover the round status');
 
       // Latest replay may arrive after the terminal snapshot; opening it is optional and read-only.
       const stronger = [1, 1, 1, 5, 8, 1, 0];

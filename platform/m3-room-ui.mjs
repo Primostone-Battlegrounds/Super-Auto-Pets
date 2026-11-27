@@ -109,7 +109,7 @@ function roomLayout(unified) {
           label('AbilityBody', [0, unified ? -155 : -215], [810, 38], '', unified ? 20 : 17, pigment.ink, 'left'),
         ], false),
         ...(unified ? [
-          group('Settlement', [0, 10], [832, 426], [
+          group('Settlement', [0, -12], [832, 426], [
             image('Paper', [0, 0], [820, 414], '#f7eed7'),
             label('Placement', [0, 88], [774, 84], '', 55, clearing.ink),
             label('Summary', [0, 6], [774, 56], '', 26, pigment.ink),
